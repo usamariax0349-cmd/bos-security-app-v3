@@ -1,3 +1,9 @@
+import subprocess
+import os
+
+if os.environ.get("RAILWAY_ENVIRONMENT"):
+    subprocess.run(["python", "seed_data.py"])
+
 #!/usr/bin/env python3
 """
 Brown Owl Security — Guard Management System
