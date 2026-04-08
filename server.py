@@ -3,7 +3,6 @@ import os
 
 if os.environ.get("RAILWAY_ENVIRONMENT"):
     subprocess.run(["python", "seed_data.py"])
-
 #!/usr/bin/env python3
 """
 Brown Owl Security — Guard Management System
@@ -54,6 +53,10 @@ def verify_password(password, stored_hash, salt):
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 def init_db():
+import os
+import sqlite3
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "data", "security.db")
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.executescript('''
