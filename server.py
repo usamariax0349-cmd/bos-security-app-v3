@@ -6,6 +6,8 @@ Run:  py server.py  →  http://localhost:5000
 """
 
 import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
@@ -35,6 +37,14 @@ COMPANY_NAME = os.environ.get('COMPANY_NAME', 'Brown Owl Security (BOS)')
 DEFAULT_ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL',    'usamariax0349@gmail.com')
 DEFAULT_ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 DEFAULT_ADMIN_NAME     = os.environ.get('ADMIN_NAME',     'Super Admin')
+APP_URL      = os.environ.get('APP_URL', f'http://localhost:{int(os.environ.get("PORT", 5000))}')
+
+# ─── SMTP (optional — set env vars to enable email notifications) ─────────────
+SMTP_HOST = os.environ.get('SMTP_HOST', '')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '')
+SMTP_PASS = os.environ.get('SMTP_PASS', '')
+SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER)
 
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOADS_PATH, exist_ok=True)
@@ -52,6 +62,28 @@ def verify_password(password, stored_hash, salt):
     h, _ = hash_password(password, salt)
     return h == stored_hash
 
+# ─── Email ────────────────────────────────────────────────────────────────────
+def send_email(to_email, subject, body_text):
+    """Send a plain-text email via SMTP. Silently skips if SMTP is not configured."""
+    if not SMTP_HOST or not SMTP_USER:
+        print(f"  EMAIL: SMTP not configured — skipping notification to {to_email}")
+        return False
+    try:
+        msg = MIMEText(body_text, 'plain')
+        msg['Subject'] = subject
+        msg['From']    = SMTP_FROM
+        msg['To']      = to_email
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+        print(f"  EMAIL: Sent '{subject}' to {to_email}")
+        return True
+    except Exception as e:
+        print(f"  EMAIL: Failed to send to {to_email}: {e}")
+        return False
+
 # ─── Database ─────────────────────────────────────────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -63,10 +95,11 @@ def init_db():
             email        TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             salt         TEXT NOT NULL,
-            role         TEXT DEFAULT 'manager',
-            active       INTEGER DEFAULT 1,
-            last_login   TEXT,
-            created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+            role                 TEXT DEFAULT 'manager',
+            active               INTEGER DEFAULT 1,
+            must_change_password INTEGER DEFAULT 0,
+            last_login           TEXT,
+            created_at           TEXT DEFAULT CURRENT_TIMESTAMP
         );
         CREATE UNIQUE INDEX IF NOT EXISTS admins_email ON admins(email);
 
@@ -150,7 +183,8 @@ def init_db():
         ("submissions", "admin_note",    "ALTER TABLE submissions ADD COLUMN admin_note TEXT DEFAULT ''"),
         ("submissions", "reviewed_by",   "ALTER TABLE submissions ADD COLUMN reviewed_by TEXT DEFAULT ''"),
         # admins table
-        ("admins",      "last_login",    "ALTER TABLE admins ADD COLUMN last_login TEXT"),
+        ("admins", "last_login",           "ALTER TABLE admins ADD COLUMN last_login TEXT"),
+        ("admins", "must_change_password", "ALTER TABLE admins ADD COLUMN must_change_password INTEGER DEFAULT 0"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -484,7 +518,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if s is None: return
 
         if path == '/api/me':
-            self.send_json({'id':s['admin_id'],'name':s['name'],'email':s['email'],'role':s['role']}); return
+            self.send_json({'id':s['admin_id'],'name':s['name'],'email':s['email'],'role':s['role'],
+                            'must_change_password': s.get('must_change_password', False)}); return
+
+        # Block must_change_password sessions from all other admin GET endpoints
+        if s.get('must_change_password'):
+            self.err('Please set your password before continuing', 403); return
 
         if path == '/api/dashboard':
             db = get_db()
@@ -637,8 +676,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 print(f"  LOGIN: admins in DB = {all_emails}")
                 self.err('Invalid email or password', 401); return
             token = str(uuid.uuid4())
+            must_change = bool(row.get('must_change_password', 0))
             sessions[token] = {'admin_id':row['id'],'name':row['name'],
-                                'email':row['email'],'role':row['role']}
+                                'email':row['email'],'role':row['role'],
+                                'must_change_password': must_change}
+            # First-time login: force password change before granting full access
+            if must_change:
+                self.send_json({'force_password_change': True, 'token': token,
+                                'name': row['name']}); return
             db = get_db()
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), row['id']))
@@ -683,6 +728,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── Admin-only below ──
         s = self.require_admin()
         if s is None: return
+
+        # ── First-login password setup ─────────────────────────────────────────
+        if path == '/api/setup-password':
+            if not s.get('must_change_password'):
+                self.err('No password change required for this session', 400); return
+            new_pw  = data.get('new_password', '')
+            conf_pw = data.get('confirm_password', '')
+            if len(new_pw) < 6:
+                self.err('Password must be at least 6 characters', 400); return
+            if new_pw != conf_pw:
+                self.err('Passwords do not match', 400); return
+            h, salt = hash_password(new_pw)
+            db = get_db()
+            db.execute('UPDATE admins SET password_hash=?, salt=?, must_change_password=0 WHERE id=?',
+                       (h, salt, s['admin_id']))
+            audit(db, s, 'PASSWORD_SETUP_COMPLETE'); db.commit(); db.close()
+            # Upgrade session to full access
+            s['must_change_password'] = False
+            db = get_db()
+            db.execute('UPDATE admins SET last_login=? WHERE id=?',
+                       (datetime.now().isoformat(), s['admin_id']))
+            audit(db, s, 'LOGIN'); db.commit(); db.close()
+            self.send_json({'token': self.headers.get('X-Auth-Token',''),
+                            'id': s['admin_id'], 'name': s['name'],
+                            'role': s['role'], 'company': COMPANY_NAME}); return
+
+        # Block must_change_password sessions from all other admin POST endpoints
+        if s.get('must_change_password'):
+            self.err('Please set your password before continuing', 403); return
 
         m_rot = re.match(r'^/api/submissions/([^/]+)/rotate$', path)
         if m_rot:
@@ -806,13 +880,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             h, salt = hash_password(data['password'])
             aid = str(uuid.uuid4()); db = get_db()
             try:
-                db.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role)
-                              VALUES (?,?,?,?,?,?)''',
+                db.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role,must_change_password)
+                              VALUES (?,?,?,?,?,?,1)''',
                            (aid,data['name'],data['email'].lower(),h,salt,requested_role))
                 audit(db, s, 'ADMIN_CREATE', data['email']); db.commit()
                 admin = R(db.execute(
                     'SELECT id,name,email,role,active,created_at FROM admins WHERE id=?',(aid,)).fetchone())
-                db.close(); self.send_json(admin, 201)
+                db.close()
+                # Send welcome email with temp credentials (optional — requires SMTP env vars)
+                role_label = {'superadmin':'Super Admin','administrator':'Administrator',
+                              'manager':'Manager','viewer':'Viewer'}.get(requested_role, requested_role)
+                send_email(
+                    data['email'].lower(),
+                    f"Your {COMPANY_NAME} Account — Action Required",
+                    f"Hi {data['name']},\n\n"
+                    f"An admin account ({role_label}) has been created for you on the "
+                    f"{COMPANY_NAME} Guard Management System.\n\n"
+                    f"Login URL:          {APP_URL}\n"
+                    f"Email:              {data['email']}\n"
+                    f"Temporary password: {data['password']}\n\n"
+                    f"IMPORTANT: You will be prompted to set your own password the first time you log in. "
+                    f"Your temporary password will no longer work after that.\n\n"
+                    f"— {COMPANY_NAME}"
+                )
+                self.send_json(admin, 201)
             except Exception as e:
                 db.close(); self.err('Email already exists', 409)
             return
@@ -848,6 +939,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         s = self.require_admin()
         if s is None: return
+        if s.get('must_change_password'):
+            self.err('Please set your password before continuing', 403); return
 
         m = re.match(r'^/api/submissions/([^/]+)$', path)
         if m:

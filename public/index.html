@@ -801,6 +801,37 @@ tr:hover td{background:#f8fafc}
   </div>
 </div>
 
+<!-- First-login: forced password setup modal (no close button — user MUST complete) -->
+<div id="firstpw-modal" class="modal-overlay hidden" style="z-index:9999">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header" style="background:var(--navy);color:#fff;border-radius:12px 12px 0 0">
+      <span class="modal-title" style="color:#fff">🔐 Set Your Password</span>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:18px">
+        Welcome! For your security, you must create a personal password before continuing.
+        Your temporary password will no longer work after this step.
+      </p>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:var(--red)">*</span></label>
+        <input type="password" id="fp-new" class="form-control" placeholder="Min 6 characters"
+               onkeydown="if(event.key==='Enter')submitFirstPassword()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span style="color:var(--red)">*</span></label>
+        <input type="password" id="fp-confirm" class="form-control" placeholder="Repeat your password"
+               onkeydown="if(event.key==='Enter')submitFirstPassword()">
+      </div>
+      <div id="fp-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="width:100%" onclick="submitFirstPassword()">
+        Set Password &amp; Continue →
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Change password modal -->
 <div id="changepw-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -906,6 +937,14 @@ async function init(){
   if(authToken){
     try{
       const me = await apiFetch('/api/me');
+      // If this is a must_change_password session, show the password setup modal
+      if(me.must_change_password){
+        document.getElementById('fp-err').style.display='none';
+        ['fp-new','fp-confirm'].forEach(id=>document.getElementById(id).value='');
+        showGuard(); // stay on guard view (not logged in yet)
+        openModal('firstpw-modal');
+        return;
+      }
       currentRole = me.role; window._myAdminId = me.id||'';
       const roleLabel2={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[me.role]||me.role;
       document.getElementById('topbar-user-info').textContent = `${me.name} · ${roleLabel2}`;
@@ -1116,17 +1155,47 @@ async function doLogin(){
   try{
     const d = await apiFetch('/api/login',{method:'POST',body:JSON.stringify({email,password:pass})});
     authToken=d.token; localStorage.setItem('sg_token',authToken);
+    document.getElementById('login-pass').value='';
+    // First-time login — force password setup before granting access
+    if(d.force_password_change){
+      document.getElementById('fp-err').style.display='none';
+      ['fp-new','fp-confirm'].forEach(id=>document.getElementById(id).value='');
+      openModal('firstpw-modal');
+      return;
+    }
     currentRole=d.role; window._myAdminId=d.id||'';
     const roleLabel={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role]||d.role;
     document.getElementById('topbar-user-info').textContent=`${d.name} · ${roleLabel}`;
     applyRoleRestrictions(d.role);
-    document.getElementById('login-pass').value='';
     document.getElementById('login-email').value='';
     toast(`Welcome back, ${d.name}!`,'success');
     showAdmin();
   }catch(e){
     errEl.textContent='Invalid email or password.'; errEl.style.display='block';
     document.getElementById('login-pass').value='';
+  }
+}
+async function submitFirstPassword(){
+  const nw  = document.getElementById('fp-new').value;
+  const cf  = document.getElementById('fp-confirm').value;
+  const err = document.getElementById('fp-err');
+  err.style.display='none';
+  if(nw.length < 6){ err.textContent='Password must be at least 6 characters.'; err.style.display='block'; return; }
+  if(nw !== cf)    { err.textContent='Passwords do not match.';                  err.style.display='block'; return; }
+  try{
+    const d = await apiFetch('/api/setup-password',{method:'POST',
+      body:JSON.stringify({new_password:nw, confirm_password:cf})});
+    closeModal('firstpw-modal');
+    ['fp-new','fp-confirm'].forEach(id=>document.getElementById(id).value='');
+    currentRole=d.role; window._myAdminId=d.id||'';
+    const roleLabel={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role]||d.role;
+    document.getElementById('topbar-user-info').textContent=`${d.name} · ${roleLabel}`;
+    applyRoleRestrictions(d.role);
+    toast(`Password set! Welcome, ${d.name}.`,'success');
+    showAdmin();
+  }catch(e){
+    err.textContent=e.message||'Something went wrong. Please try again.';
+    err.style.display='block';
   }
 }
 function applyRoleRestrictions(role){
