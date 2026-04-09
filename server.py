@@ -384,7 +384,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def require_admin(self, min_role=None):
         s = self.get_session()
         if not s: self.err('Unauthorized', 401); return None
-        role_rank = {'viewer':0,'manager':1,'superadmin':2}
+        role_rank = {'viewer':0,'manager':1,'administrator':2,'superadmin':3}
         if min_role and role_rank.get(s.get('role',''),0) < role_rank.get(min_role,0):
             self.err('Insufficient permissions', 403); return None
         return s
@@ -524,9 +524,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if qs.get('client_name'): where.append('s.client_name LIKE ?'); params.append(f"%{qs['client_name'][0]}%")
             if qs.get('date_from'):   where.append('sub.shift_date>=?');     params.append(qs['date_from'][0])
             if qs.get('date_to'):     where.append('sub.shift_date<=?');     params.append(qs['date_to'][0])
-            # Manager role: auto-restrict to Prime client sites only
-            if s.get('role') == 'manager':
-                where.append("s.client_name LIKE 'Prime%'")
             wc = ('WHERE '+' AND '.join(where)) if where else ''
             rows = RL(db.execute(f'''
                 SELECT sub.*, g.name as guard_name, g.license_number,
@@ -596,11 +593,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.close(); return
 
         if path == '/api/admins':
-            if not self.require_admin('superadmin'): return
+            s2 = self.require_admin('administrator')
+            if not s2: return
             db = get_db()
-            self.send_json(RL(db.execute(
-                'SELECT id,name,email,role,active,last_login,created_at FROM admins ORDER BY created_at').fetchall()))
-            db.close(); return
+            rows = RL(db.execute(
+                'SELECT id,name,email,role,active,last_login,created_at FROM admins ORDER BY created_at').fetchall())
+            # Administrator cannot see superadmin accounts
+            if s2.get('role') == 'administrator':
+                rows = [r for r in rows if r.get('role') != 'superadmin']
+            db.close()
+            self.send_json(rows); return
 
         if path == '/api/audit':
             db = get_db()
@@ -642,7 +644,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (datetime.now().isoformat(), row['id']))
             audit(db, sessions[token], 'LOGIN')
             db.commit(); db.close()
-            self.send_json({'token':token,'name':row['name'],'role':row['role'],'company':COMPANY_NAME}); return
+            self.send_json({'token':token,'id':row['id'],'name':row['name'],'role':row['role'],'company':COMPANY_NAME}); return
 
         if path == '/api/logout':
             s = sessions.pop(self.headers.get('X-Auth-Token',''), None)
@@ -793,8 +795,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok':True}); return
 
         if path == '/api/admins':
-            s2 = self.require_admin('superadmin')
+            s2 = self.require_admin('administrator')
             if not s2: return
+            requested_role = data.get('role','manager')
+            # Administrator cannot create superadmin accounts
+            if s2.get('role') == 'administrator' and requested_role == 'superadmin':
+                self.err('Insufficient permissions to create superadmin', 403); return
             if not data.get('name') or not data.get('email') or not data.get('password'):
                 self.err('name, email and password required'); return
             h, salt = hash_password(data['password'])
@@ -802,8 +808,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 db.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role)
                               VALUES (?,?,?,?,?,?)''',
-                           (aid,data['name'],data['email'].lower(),h,salt,
-                            data.get('role','manager')))
+                           (aid,data['name'],data['email'].lower(),h,salt,requested_role))
                 audit(db, s, 'ADMIN_CREATE', data['email']); db.commit()
                 admin = R(db.execute(
                     'SELECT id,name,email,role,active,created_at FROM admins WHERE id=?',(aid,)).fetchone())
@@ -908,9 +913,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         m = re.match(r'^/api/admins/([^/]+)$', path)
         if m:
-            s2 = self.require_admin('superadmin')
+            s2 = self.require_admin('administrator')
             if not s2: return
             db = get_db()
+            target = R(db.execute('SELECT role FROM admins WHERE id=?',(m.group(1),)).fetchone())
+            # Administrator cannot modify superadmin accounts or assign superadmin role
+            if s2.get('role') == 'administrator':
+                if target and target.get('role') == 'superadmin':
+                    db.close(); self.err('Insufficient permissions to modify superadmin', 403); return
+                if data.get('role') == 'superadmin':
+                    db.close(); self.err('Insufficient permissions to assign superadmin role', 403); return
             updates = []
             params  = []
             if 'role'   in data: updates.append('role=?');   params.append(data['role'])
@@ -933,6 +945,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # ── DELETE ─────────────────────────────────────────────────────────────────
     def do_DELETE(self):
         path = urlparse(self.path).path
+
+        # Admin delete — superadmin only, cannot delete self
+        m = re.match(r'^/api/admins/([^/]+)$', path)
+        if m:
+            s = self.require_admin('superadmin')
+            if s is None: return
+            if m.group(1) == s.get('admin_id'):
+                self.err('Cannot delete your own account', 400); return
+            db = get_db()
+            target = R(db.execute('SELECT id,name FROM admins WHERE id=?',(m.group(1),)).fetchone())
+            if not target:
+                db.close(); self.err('Admin not found', 404); return
+            db.execute('DELETE FROM admins WHERE id=?', (m.group(1),))
+            audit(db, s, 'ADMIN_DELETE', target.get('name',m.group(1))); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
         s = self.require_admin('manager')
         if s is None: return
         m = re.match(r'^/api/rates/([^/]+)/([^/]+)$', path)
@@ -963,3 +991,4 @@ if __name__ == '__main__':
     with http.server.HTTPServer(('', PORT), Handler) as srv:
         try: srv.serve_forever()
         except KeyboardInterrupt: print('\nStopped.')
+      

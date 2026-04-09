@@ -60,6 +60,7 @@ a{color:var(--navy);text-decoration:none}
 .badge-approved{background:var(--green-bg);color:#16a34a}
 .badge-rejected{background:var(--red-bg);color:var(--red)}
 .badge-role-superadmin{background:#ede9fe;color:#7c3aed}
+.badge-role-administrator{background:#fef3c7;color:#d97706}
 .badge-role-manager{background:var(--blue-bg);color:var(--blue)}
 .badge-role-viewer{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 
@@ -651,9 +652,10 @@ tr:hover td{background:#f8fafc}
       <div class="section">
         <div class="section-head"><span class="section-title">Roles Explained</span></div>
         <div class="section-body" style="font-size:13px;line-height:1.8;color:var(--muted)">
-          <strong style="color:var(--navy)">Super Admin</strong> — Full access. Can manage other admins, change roles, view audit log.<br>
-          <strong style="color:var(--navy)">Manager</strong> — Can approve/reject submissions, manage guards/sites/rates, send reminders, generate invoices.<br>
-          <strong style="color:var(--navy)">Viewer</strong> — Read-only access. Can view submissions, guards, sites and invoices. Cannot make changes.
+          <strong style="color:#7c3aed">Super Admin</strong> — Full access. Can manage all users including other admins, change any role, view audit log, and delete accounts.<br>
+          <strong style="color:#d97706">Administrator</strong> — Like Super Admin but cannot view, create, modify or delete Superadmin accounts. Can manage all other users.<br>
+          <strong style="color:var(--blue)">Manager</strong> — Can view and filter submissions and edit hours. No access to guards, sites, rates, invoices or admin management.<br>
+          <strong style="color:var(--muted)">Viewer</strong> — Read-only access to submissions only. Cannot approve, reject or edit anything.
         </div>
       </div>
     </div>
@@ -776,8 +778,9 @@ tr:hover td{background:#f8fafc}
         <div class="form-group"><label class="form-label">Full Name *</label><input id="am-name" class="form-control" placeholder="Admin name"></div>
         <div class="form-group"><label class="form-label">Role</label>
           <select id="am-role" class="form-control">
-            <option value="manager">Manager</option>
             <option value="viewer">Viewer</option>
+            <option value="manager">Manager</option>
+            <option value="administrator">Administrator</option>
             <option value="superadmin">Super Admin</option>
           </select>
         </div>
@@ -903,8 +906,9 @@ async function init(){
   if(authToken){
     try{
       const me = await apiFetch('/api/me');
-      currentRole = me.role;
-      document.getElementById('topbar-user-info').textContent = `${me.name} · ${me.role}`;
+      currentRole = me.role; window._myAdminId = me.id||'';
+      const roleLabel2={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[me.role]||me.role;
+      document.getElementById('topbar-user-info').textContent = `${me.name} · ${roleLabel2}`;
       applyRoleRestrictions(me.role);
       showAdmin(); return;
     }catch(e){ authToken=null; localStorage.removeItem('sg_token'); }
@@ -1112,8 +1116,9 @@ async function doLogin(){
   try{
     const d = await apiFetch('/api/login',{method:'POST',body:JSON.stringify({email,password:pass})});
     authToken=d.token; localStorage.setItem('sg_token',authToken);
-    currentRole=d.role;
-    document.getElementById('topbar-user-info').textContent=`${d.name} · ${d.role}`;
+    currentRole=d.role; window._myAdminId=d.id||'';
+    const roleLabel={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role]||d.role;
+    document.getElementById('topbar-user-info').textContent=`${d.name} · ${roleLabel}`;
     applyRoleRestrictions(d.role);
     document.getElementById('login-pass').value='';
     document.getElementById('login-email').value='';
@@ -1128,15 +1133,20 @@ function applyRoleRestrictions(role){
   const tab = name => document.querySelector(`.tab-btn[data-tab="${name}"]`);
   const show = name => { const el=tab(name); if(el) el.style.display=''; };
   const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
-  // Reset all to visible first
+  // Reset all tabs to visible first
   ['dashboard','submissions','guards','sites','rates','invoices','reminders','admins','audit']
     .forEach(show);
-  if(role==='superadmin') return; // full access, nothing hidden
+  if(role==='superadmin') return; // full access — nothing hidden
+  if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
   if(role==='manager'){
-    hide('admins'); hide('audit'); return;
+    // Manager: dashboard + submissions only
+    hide('guards'); hide('sites'); hide('rates'); hide('invoices');
+    hide('reminders'); hide('admins'); hide('audit'); return;
   }
   if(role==='viewer'){
-    hide('admins'); hide('guards'); hide('sites'); hide('rates'); hide('audit'); return;
+    // Viewer: submissions only (read-only)
+    hide('dashboard'); hide('guards'); hide('sites'); hide('rates');
+    hide('invoices'); hide('reminders'); hide('admins'); hide('audit'); return;
   }
 }
 async function doLogout(){
@@ -1219,8 +1229,8 @@ function renderSubsTable(){
       <td><span class="badge badge-${r.status}">${r.status}</span></td>
       <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.submitted_at)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-xs btn-primary" onclick="openReview('${r.id}')">Review</button>
-        ${r.status==='pending'?`<button class="btn btn-xs btn-green" onclick="quickAction('${r.id}','approved')">✓</button><button class="btn btn-xs btn-red" onclick="quickAction('${r.id}','rejected')">✗</button>`:''}
+        <button class="btn btn-xs btn-primary" onclick="openReview('${r.id}')">${currentRole==='viewer'?'View':'Review'}</button>
+        ${(currentRole!=='viewer'&&r.status==='pending')?`<button class="btn btn-xs btn-green" onclick="quickAction('${r.id}','approved')">✓</button><button class="btn btn-xs btn-red" onclick="quickAction('${r.id}','rejected')">✗</button>`:''}
       </td>
     </tr>`).join('');
 }
@@ -1263,7 +1273,7 @@ async function quickAction(id, status){
 }
 function openReview(id){
   const r = subsData.find(x=>x.id===id); if(!r) return;
-  const canEdit = currentRole==='superadmin'||currentRole==='manager';
+  const canEdit = ['superadmin','administrator','manager'].includes(currentRole);
   document.getElementById('review-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div><div class="form-label">Guard</div><strong>${r.guard_name}</strong></div>
@@ -1306,10 +1316,11 @@ function openReview(id){
     <div class="form-group"><label class="form-label">Admin Note</label>
       <textarea id="rev-note" class="form-control" rows="2" placeholder="Optional note...">${r.admin_note||''}</textarea>
     </div>`;
-  document.getElementById('review-footer').innerHTML=
-    `<button class="btn btn-ghost" onclick="closeModal('review-modal')">Close</button>
-     <button class="btn btn-red" onclick="reviewAction('${id}','rejected')">✗ Reject</button>
-     <button class="btn btn-green" onclick="reviewAction('${id}','approved')">✓ Approve</button>`;
+  document.getElementById('review-footer').innerHTML= canEdit
+    ? `<button class="btn btn-ghost" onclick="closeModal('review-modal')">Close</button>
+       <button class="btn btn-red" onclick="reviewAction('${id}','rejected')">✗ Reject</button>
+       <button class="btn btn-green" onclick="reviewAction('${id}','approved')">✓ Approve</button>`
+    : `<button class="btn btn-ghost" onclick="closeModal('review-modal')">Close</button>`;
   openModal('review-modal');
 }
 async function reviewAction(id, status){
@@ -1614,23 +1625,41 @@ async function loadAdmins(){
   try{ adminsData=await apiFetch('/api/admins'); renderAdminsTable(); }
   catch(e){ toast(e.message,'error'); }
 }
+function populateRoleOptions(selectedRole){
+  const sel = document.getElementById('am-role');
+  // Administrators cannot create/assign superadmin
+  const allowSuperadmin = currentRole === 'superadmin';
+  const roles = [
+    {val:'viewer',label:'Viewer'},
+    {val:'manager',label:'Manager'},
+    {val:'administrator',label:'Administrator'},
+    {val:'superadmin',label:'Super Admin'},
+  ].filter(r => allowSuperadmin || r.val !== 'superadmin');
+  sel.innerHTML = roles.map(r=>`<option value="${r.val}"${r.val===selectedRole?' selected':''}>${r.label}</option>`).join('');
+}
 function renderAdminsTable(){
-  document.getElementById('admins-tbody').innerHTML=adminsData.map(a=>`<tr>
-    <td><strong>${a.name}</strong></td>
-    <td style="font-size:13px">${a.email}</td>
-    <td><span class="badge badge-role-${a.role}">${a.role}</span></td>
-    <td style="font-size:12px;color:var(--muted)">${a.last_login?fmtDateTime(a.last_login):'Never'}</td>
-    <td><span class="badge ${a.active?'badge-approved':'badge-rejected'}">${a.active?'Active':'Inactive'}</span></td>
-    <td style="white-space:nowrap">
-      <button class="btn btn-xs btn-primary" onclick='editAdmin(${JSON.stringify(a)})'>Edit</button>
-      <button class="btn btn-xs btn-ghost" onclick="toggleAdminActive('${a.id}',${a.active})">${a.active?'Deactivate':'Activate'}</button>
-    </td>
-  </tr>`).join('');
+  document.getElementById('admins-tbody').innerHTML=adminsData.map(a=>{
+    const isSuperadmin = a.role==='superadmin';
+    const canModify = currentRole==='superadmin' || !isSuperadmin;
+    const canDelete = currentRole==='superadmin' && a.id !== (window._myAdminId||'');
+    return `<tr>
+      <td><strong>${a.name}</strong></td>
+      <td style="font-size:13px">${a.email}</td>
+      <td><span class="badge badge-role-${a.role}">${a.role}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${a.last_login?fmtDateTime(a.last_login):'Never'}</td>
+      <td><span class="badge ${a.active?'badge-approved':'badge-rejected'}">${a.active?'Active':'Inactive'}</span></td>
+      <td style="white-space:nowrap">
+        ${canModify?`<button class="btn btn-xs btn-primary" onclick='editAdmin(${JSON.stringify(a)})'>Edit</button>
+        <button class="btn btn-xs btn-ghost" onclick="toggleAdminActive('${a.id}',${a.active})">${a.active?'Deactivate':'Activate'}</button>`:'<span style="font-size:12px;color:var(--muted)">Protected</span>'}
+        ${canDelete?`<button class="btn btn-xs btn-red" onclick="deleteAdmin('${a.id}','${a.name.replace(/'/g,"\\'")}')">Delete</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
 }
 function openAdminModal(){
   document.getElementById('admin-modal-title').textContent='Add Admin';
   ['am-id','am-name','am-email','am-password','am-new-password'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('am-role').value='manager';
+  populateRoleOptions('manager');
   document.getElementById('am-pw-wrap').style.display='block';
   document.getElementById('am-newpw-wrap').style.display='none';
   document.getElementById('am-active-wrap').style.display='none';
@@ -1641,12 +1670,19 @@ function editAdmin(a){
   document.getElementById('am-id').value=a.id;
   document.getElementById('am-name').value=a.name;
   document.getElementById('am-email').value=a.email;
-  document.getElementById('am-role').value=a.role;
+  populateRoleOptions(a.role);
   document.getElementById('am-pw-wrap').style.display='none';
   document.getElementById('am-newpw-wrap').style.display='block';
   document.getElementById('am-active-wrap').style.display='block';
   document.getElementById('am-active').checked=!!a.active;
   openModal('admin-modal');
+}
+async function deleteAdmin(id, name){
+  if(!confirm(`Delete admin "${name}"? This cannot be undone.`)) return;
+  try{
+    await apiFetch(`/api/admins/${id}`,{method:'DELETE'});
+    toast('Admin deleted','success'); loadAdmins();
+  }catch(e){ toast(e.message,'error'); }
 }
 async function saveAdmin(){
   const id=document.getElementById('am-id').value;
