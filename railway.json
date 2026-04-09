@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "python server.py",
+    "startCommand": "python seed_data.py && python server.py",
     "healthcheckPath": "/api/config",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
