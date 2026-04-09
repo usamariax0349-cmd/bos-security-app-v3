@@ -991,4 +991,3 @@ if __name__ == '__main__':
     with http.server.HTTPServer(('', PORT), Handler) as srv:
         try: srv.serve_forever()
         except KeyboardInterrupt: print('\nStopped.')
-      
