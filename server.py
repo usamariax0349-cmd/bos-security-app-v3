@@ -32,7 +32,7 @@ UPLOADS_PATH = os.path.join(DATA_DIR, 'uploads')
 PUBLIC_PATH  = os.path.join(BASE_DIR, 'public')
 COMPANY_NAME = os.environ.get('COMPANY_NAME', 'Brown Owl Security (BOS)')
 # Default superadmin — used only on first run when no admins exist
-DEFAULT_ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL',    'admin@brownowlsecurity.com.au')
+DEFAULT_ADMIN_EMAIL    = os.environ.get('ADMIN_EMAIL',    'usamariax0349@gmail.com')
 DEFAULT_ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin123')
 DEFAULT_ADMIN_NAME     = os.environ.get('ADMIN_NAME',     'Super Admin')
 
