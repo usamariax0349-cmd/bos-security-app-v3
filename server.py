@@ -617,10 +617,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/api/login':
             db  = get_db()
+            email_in = data.get('email','').strip().lower()
             row = R(db.execute('SELECT * FROM admins WHERE email=? AND active=1',
-                               (data.get('email','').strip().lower(),)).fetchone())
+                               (email_in,)).fetchone())
             db.close()
-            if not row or not verify_password(data.get('password',''), row['password_hash'], row['salt']):
+            print(f"  LOGIN: email={email_in!r} found={'YES' if row else 'NO'}")
+            if row:
+                pw_ok = verify_password(data.get('password',''), row['password_hash'], row['salt'])
+                print(f"  LOGIN: password_check={'PASS' if pw_ok else 'FAIL'} role={row.get('role')}")
+                if not pw_ok:
+                    self.err('Invalid email or password', 401); return
+            else:
+                # Show all admin emails in DB for diagnosis
+                db2 = get_db()
+                all_emails = [r['email'] for r in db2.execute('SELECT email FROM admins').fetchall()]
+                db2.close()
+                print(f"  LOGIN: admins in DB = {all_emails}")
                 self.err('Invalid email or password', 401); return
             token = str(uuid.uuid4())
             sessions[token] = {'admin_id':row['id'],'name':row['name'],
