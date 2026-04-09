@@ -17,6 +17,12 @@ try:
 except ImportError:
     OPENPYXL_OK = False
 
+try:
+    from PIL import Image as PILImage
+    PIL_OK = True
+except ImportError:
+    PIL_OK = False
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 PORT         = int(os.environ.get('PORT', 5000))
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
@@ -510,11 +516,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/api/submissions':
             db = get_db(); where=[]; params=[]
-            if qs.get('status'):    where.append('sub.status=?');      params.append(qs['status'][0])
-            if qs.get('guard_id'):  where.append('sub.guard_id=?');    params.append(qs['guard_id'][0])
-            if qs.get('site_id'):   where.append('sub.site_id=?');     params.append(qs['site_id'][0])
-            if qs.get('date_from'): where.append('sub.shift_date>=?'); params.append(qs['date_from'][0])
-            if qs.get('date_to'):   where.append('sub.shift_date<=?'); params.append(qs['date_to'][0])
+            s = sessions.get(self.headers.get('X-Auth-Token',''), {})
+            if qs.get('status'):      where.append('sub.status=?');          params.append(qs['status'][0])
+            if qs.get('guard_id'):    where.append('sub.guard_id=?');        params.append(qs['guard_id'][0])
+            if qs.get('site_id'):     where.append('sub.site_id=?');         params.append(qs['site_id'][0])
+            if qs.get('site_name'):   where.append('s.name LIKE ?');         params.append(f"%{qs['site_name'][0]}%")
+            if qs.get('client_name'): where.append('s.client_name LIKE ?'); params.append(f"%{qs['client_name'][0]}%")
+            if qs.get('date_from'):   where.append('sub.shift_date>=?');     params.append(qs['date_from'][0])
+            if qs.get('date_to'):     where.append('sub.shift_date<=?');     params.append(qs['date_to'][0])
+            # Manager role: auto-restrict to Prime client sites only
+            if s.get('role') == 'manager':
+                where.append("s.client_name LIKE 'Prime%'")
             wc = ('WHERE '+' AND '.join(where)) if where else ''
             rows = RL(db.execute(f'''
                 SELECT sub.*, g.name as guard_name, g.license_number,
@@ -658,6 +670,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
         s = self.require_admin()
         if s is None: return
 
+        m_rot = re.match(r'^/api/submissions/([^/]+)/rotate$', path)
+        if m_rot:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            if not PIL_OK: self.err('Image rotation requires Pillow. Run: pip install Pillow', 500); return
+            degrees = int(data.get('degrees', 90))
+            if degrees not in (90, 180, 270): self.err('degrees must be 90, 180 or 270'); return
+            db = get_db()
+            row = R(db.execute('SELECT photo_filename FROM submissions WHERE id=?',
+                               (m_rot.group(1),)).fetchone())
+            if not row or not row['photo_filename']:
+                db.close(); self.err('No photo for this submission'); return
+            fpath = os.path.join(UPLOADS_PATH, row['photo_filename'])
+            if not os.path.exists(fpath):
+                db.close(); self.err('Photo file not found on server'); return
+            try:
+                img = PILImage.open(fpath)
+                rotated = img.rotate(-degrees, expand=True)
+                rotated.save(fpath)
+                audit(db, s, 'PHOTO_ROTATED', f"sub={m_rot.group(1)} {degrees}deg")
+                db.commit()
+            except Exception as e:
+                db.close(); self.err(f'Rotation failed: {e}', 500); return
+            db.close()
+            self.send_json({'ok': True, 'filename': row['photo_filename']}); return
+
         if path == '/api/guards':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -799,12 +837,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s2 = self.require_admin('manager')
             if not s2: return
             db = get_db()
-            db.execute('''UPDATE submissions SET status=?,admin_note=?,reviewed_by=?,reviewed_at=?
-                          WHERE id=?''',
-                       (data.get('status'), data.get('admin_note',''),
-                        s['name'], datetime.now().isoformat(), m.group(1)))
-            audit(db, s, f"SUB_{data.get('status','').upper()}", m.group(1))
-            db.commit()
+            updates = []; params = []
+            # Status change fields
+            if 'status' in data:
+                updates += ['status=?','reviewed_by=?','reviewed_at=?']
+                params  += [data['status'], s['name'], datetime.now().isoformat()]
+            if 'admin_note' in data:
+                updates.append('admin_note=?'); params.append(data['admin_note'])
+            # Editable hours fields (manager only)
+            if 'total_hours' in data:
+                updates.append('total_hours=?'); params.append(float(data['total_hours']))
+            if 'start_time' in data:
+                updates.append('start_time=?'); params.append(data['start_time'])
+            if 'end_time' in data:
+                updates.append('end_time=?'); params.append(data['end_time'])
+            if 'shift_date' in data:
+                updates.append('shift_date=?'); params.append(data['shift_date'])
+            if 'notes' in data:
+                updates.append('notes=?'); params.append(data['notes'])
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE submissions SET {','.join(updates)} WHERE id=?", params)
+                is_edit = any(k in data for k in ('total_hours','start_time','end_time','shift_date'))
+                audit(db, s, 'SUB_EDITED' if is_edit else f"SUB_{data.get('status','UPDATED').upper()}", m.group(1))
+                db.commit()
             row = R(db.execute('''SELECT sub.*,g.name as guard_name,s.name as site_name,s.client_name
                 FROM submissions sub JOIN guards g ON g.id=sub.guard_id
                 JOIN sites s ON s.id=sub.site_id WHERE sub.id=?''', (m.group(1),)).fetchone())

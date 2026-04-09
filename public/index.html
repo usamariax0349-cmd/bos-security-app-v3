@@ -471,6 +471,7 @@ tr:hover td{background:#f8fafc}
             <option value="rejected">Rejected</option>
           </select>
           <input type="text" id="f-guard" placeholder="Guard name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
+          <input type="text" id="f-site" placeholder="Site name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
           <input type="date" id="f-from" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
           <input type="date" id="f-to" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
           <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
@@ -904,7 +905,7 @@ async function init(){
       const me = await apiFetch('/api/me');
       currentRole = me.role;
       document.getElementById('topbar-user-info').textContent = `${me.name} · ${me.role}`;
-      if(me.role==='superadmin') document.getElementById('tab-admins-btn').style.display='';
+      applyRoleRestrictions(me.role);
       showAdmin(); return;
     }catch(e){ authToken=null; localStorage.removeItem('sg_token'); }
   }
@@ -1113,7 +1114,7 @@ async function doLogin(){
     authToken=d.token; localStorage.setItem('sg_token',authToken);
     currentRole=d.role;
     document.getElementById('topbar-user-info').textContent=`${d.name} · ${d.role}`;
-    if(d.role==='superadmin') document.getElementById('tab-admins-btn').style.display='';
+    applyRoleRestrictions(d.role);
     document.getElementById('login-pass').value='';
     document.getElementById('login-email').value='';
     toast(`Welcome back, ${d.name}!`,'success');
@@ -1121,6 +1122,33 @@ async function doLogin(){
   }catch(e){
     errEl.textContent='Invalid email or password.'; errEl.style.display='block';
     document.getElementById('login-pass').value='';
+  }
+}
+function applyRoleRestrictions(role){
+  // Superadmin: full access
+  if(role==='superadmin'){
+    document.getElementById('tab-admins-btn').style.display='';
+    document.getElementById('tab-guards-btn').style.display='';
+    document.getElementById('tab-sites-btn').style.display='';
+    document.getElementById('tab-rates-btn').style.display='';
+    document.getElementById('tab-invoice-btn').style.display='';
+    document.getElementById('tab-audit-btn').style.display='';
+    return;
+  }
+  // Manager: Prime-only view, no guards/sites/rates/admins/audit management
+  if(role==='manager'){
+    document.getElementById('tab-admins-btn').style.display='none';
+    document.getElementById('tab-audit-btn').style.display='none';
+    return;
+  }
+  // Viewer: read-only, hide management tabs
+  if(role==='viewer'){
+    document.getElementById('tab-admins-btn').style.display='none';
+    document.getElementById('tab-guards-btn').style.display='none';
+    document.getElementById('tab-sites-btn').style.display='none';
+    document.getElementById('tab-rates-btn').style.display='none';
+    document.getElementById('tab-audit-btn').style.display='none';
+    return;
   }
 }
 async function doLogout(){
@@ -1169,6 +1197,7 @@ let subsData = [];
 async function loadSubmissions(){
   const status = document.getElementById('f-status').value;
   const guard  = document.getElementById('f-guard').value;
+  const site   = document.getElementById('f-site').value;
   const from   = document.getElementById('f-from').value;
   const to     = document.getElementById('f-to').value;
   const p = new URLSearchParams();
@@ -1178,12 +1207,14 @@ async function loadSubmissions(){
   try{
     subsData = await apiFetch('/api/submissions?'+p);
     if(guard){ const gl=guard.toLowerCase(); subsData=subsData.filter(r=>r.guard_name.toLowerCase().includes(gl)); }
+    if(site){  const sl=site.toLowerCase();  subsData=subsData.filter(r=>r.site_name.toLowerCase().includes(sl)||r.client_name.toLowerCase().includes(sl)); }
     renderSubsTable();
   }catch(e){ toast(e.message,'error'); }
 }
 function clearFilters(){
   ['f-status','f-from','f-to'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-guard').value='';
+  document.getElementById('f-site').value='';
   loadSubmissions();
 }
 function renderSubsTable(){
@@ -1244,18 +1275,46 @@ async function quickAction(id, status){
 }
 function openReview(id){
   const r = subsData.find(x=>x.id===id); if(!r) return;
+  const canEdit = currentRole==='superadmin'||currentRole==='manager';
   document.getElementById('review-body').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div><div class="form-label">Guard</div><strong>${r.guard_name}</strong></div>
-      <div><div class="form-label">Site</div><strong>${r.site_name}</strong></div>
+      <div><div class="form-label">Site</div><strong>${r.site_name}</strong> <small style="color:var(--muted)">${r.client_name}</small></div>
+      <div><div class="form-label">Status</div><span class="badge badge-${r.status}">${r.status}</span></div>
+      ${r.reviewed_by?`<div><div class="form-label">Reviewed by</div><small>${r.reviewed_by}</small></div>`:'<div></div>'}
+    </div>
+    ${canEdit?`
+    <div style="background:var(--blue-bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div class="form-label" style="margin-bottom:8px;color:var(--blue);font-weight:700">✏️ Edit Submission Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label class="form-label" style="font-size:11px">Date</label>
+          <input id="edit-date" class="form-control" style="font-size:12px;padding:5px 8px" type="date" value="${r.shift_date}"></div>
+        <div><label class="form-label" style="font-size:11px">Start</label>
+          <input id="edit-start" class="form-control" style="font-size:12px;padding:5px 8px" type="time" value="${r.start_time}"></div>
+        <div><label class="form-label" style="font-size:11px">End</label>
+          <input id="edit-end" class="form-control" style="font-size:12px;padding:5px 8px" type="time" value="${r.end_time}"></div>
+        <div><label class="form-label" style="font-size:11px">Hours</label>
+          <input id="edit-hours" class="form-control" style="font-size:12px;padding:5px 8px" type="number" step="0.25" min="0" max="24" value="${r.total_hours}"></div>
+      </div>
+      <div><label class="form-label" style="font-size:11px">Guard Notes</label>
+        <textarea id="edit-notes" class="form-control" rows="2" style="font-size:12px">${r.notes||''}</textarea></div>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveHoursEdit('${id}')">💾 Save Changes</button>
+    </div>`:`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div><div class="form-label">Date</div>${r.shift_date}</div>
       <div><div class="form-label">Hours</div>${r.start_time} – ${r.end_time} (${r.total_hours}h)</div>
-      <div><div class="form-label">Client</div>${r.client_name}</div>
-      <div><div class="form-label">Status</div><span class="badge badge-${r.status}">${r.status}</span></div>
-    </div>
-    ${r.notes?`<div style="margin-bottom:12px"><div class="form-label">Guard Notes</div><p style="font-size:13px;color:var(--muted)">${r.notes}</p></div>`:''}
-    ${r.photo_filename?`<div style="margin-bottom:16px"><div class="form-label">Photo</div><img src="/uploads/${r.photo_filename}" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="viewPhoto('/uploads/${r.photo_filename}')"></div>`:''}
-    ${r.admin_note?`<div style="margin-bottom:12px"><div class="form-label">Previous Note</div><p style="font-size:13px;color:var(--muted)">${r.admin_note}</p></div>`:''}
+      ${r.notes?`<div style="grid-column:span 2"><div class="form-label">Notes</div><small style="color:var(--muted)">${r.notes}</small></div>`:''}
+    </div>`}
+    ${r.photo_filename?`
+    <div style="margin-bottom:16px">
+      <div class="form-label">Photo</div>
+      <img id="review-photo-${id}" src="/uploads/${r.photo_filename}?t=${Date.now()}" style="max-width:100%;border-radius:8px;cursor:pointer;display:block;margin-bottom:8px" onclick="viewPhoto('/uploads/${r.photo_filename}')">
+      ${canEdit?`<div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="rotatePhoto('${id}',90)">↻ 90°</button>
+        <button class="btn btn-ghost btn-sm" onclick="rotatePhoto('${id}',180)">↻ 180°</button>
+        <button class="btn btn-ghost btn-sm" onclick="rotatePhoto('${id}',270)">↺ 270°</button>
+      </div>`:''}
+    </div>`:''}
     <div class="form-group"><label class="form-label">Admin Note</label>
       <textarea id="rev-note" class="form-control" rows="2" placeholder="Optional note...">${r.admin_note||''}</textarea>
     </div>`;
@@ -1271,6 +1330,33 @@ async function reviewAction(id, status){
     await apiFetch(`/api/submissions/${id}`,{method:'PUT',body:JSON.stringify({status,admin_note:note})});
     toast(`Submission ${status}`,'success');
     closeModal('review-modal'); loadSubmissions(); loadDashboard();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function saveHoursEdit(id){
+  const date  = document.getElementById('edit-date').value;
+  const start = document.getElementById('edit-start').value;
+  const end   = document.getElementById('edit-end').value;
+  const hours = parseFloat(document.getElementById('edit-hours').value);
+  const notes = document.getElementById('edit-notes').value;
+  if(!date||!start||!end||isNaN(hours)){ toast('Please fill all fields','error'); return; }
+  try{
+    const updated = await apiFetch(`/api/submissions/${id}`,{method:'PUT',
+      body:JSON.stringify({shift_date:date,start_time:start,end_time:end,total_hours:hours,notes})});
+    // Update local cache
+    const idx = subsData.findIndex(x=>x.id===id);
+    if(idx>=0) subsData[idx]={...subsData[idx],...updated};
+    toast('Submission updated successfully','success');
+    openReview(id);
+    renderSubsTable();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function rotatePhoto(id, degrees){
+  try{
+    await apiFetch(`/api/submissions/${id}/rotate`,{method:'POST',
+      body:JSON.stringify({degrees})});
+    const img = document.getElementById(`review-photo-${id}`);
+    if(img) img.src = `/uploads/${img.src.split('/uploads/')[1].split('?')[0]}?t=${Date.now()}`;
+    toast(`Photo rotated ${degrees}°`,'success');
   }catch(e){ toast(e.message,'error'); }
 }
 
