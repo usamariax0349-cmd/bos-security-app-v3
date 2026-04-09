@@ -156,14 +156,20 @@ def init_db():
             print(f'  Migrated: added {table}.{col}')
     conn.commit()
 
-    # Create default superadmin on first run
-    if conn.execute('SELECT COUNT(*) FROM admins').fetchone()[0] == 0:
-        h, salt = hash_password(DEFAULT_ADMIN_PASSWORD)
+    # Always ensure the superadmin from env vars exists with correct password
+    h, salt = hash_password(DEFAULT_ADMIN_PASSWORD)
+    existing = conn.execute('SELECT id FROM admins WHERE email=?',
+                            (DEFAULT_ADMIN_EMAIL.lower(),)).fetchone()
+    if existing:
+        conn.execute('''UPDATE admins SET password_hash=?, salt=?, role='superadmin', active=1
+                        WHERE email=?''', (h, salt, DEFAULT_ADMIN_EMAIL.lower()))
+        print(f'  Superadmin password synced: {DEFAULT_ADMIN_EMAIL}')
+    else:
         conn.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role)
                         VALUES (?,?,?,?,?,'superadmin')''',
-                     (str(uuid.uuid4()), DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL, h, salt))
-        conn.commit()
-        print(f'  Default superadmin created: {DEFAULT_ADMIN_EMAIL}')
+                     (str(uuid.uuid4()), DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL.lower(), h, salt))
+        print(f'  Superadmin created: {DEFAULT_ADMIN_EMAIL}')
+    conn.commit()
     conn.close()
 
 def get_db():
