@@ -1125,30 +1125,18 @@ async function doLogin(){
   }
 }
 function applyRoleRestrictions(role){
-  // Superadmin: full access
-  if(role==='superadmin'){
-    document.getElementById('tab-admins-btn').style.display='';
-    document.getElementById('tab-guards-btn').style.display='';
-    document.getElementById('tab-sites-btn').style.display='';
-    document.getElementById('tab-rates-btn').style.display='';
-    document.getElementById('tab-invoice-btn').style.display='';
-    document.getElementById('tab-audit-btn').style.display='';
-    return;
-  }
-  // Manager: Prime-only view, no guards/sites/rates/admins/audit management
+  const tab = name => document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  const show = name => { const el=tab(name); if(el) el.style.display=''; };
+  const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
+  // Reset all to visible first
+  ['dashboard','submissions','guards','sites','rates','invoices','reminders','admins','audit']
+    .forEach(show);
+  if(role==='superadmin') return; // full access, nothing hidden
   if(role==='manager'){
-    document.getElementById('tab-admins-btn').style.display='none';
-    document.getElementById('tab-audit-btn').style.display='none';
-    return;
+    hide('admins'); hide('audit'); return;
   }
-  // Viewer: read-only, hide management tabs
   if(role==='viewer'){
-    document.getElementById('tab-admins-btn').style.display='none';
-    document.getElementById('tab-guards-btn').style.display='none';
-    document.getElementById('tab-sites-btn').style.display='none';
-    document.getElementById('tab-rates-btn').style.display='none';
-    document.getElementById('tab-audit-btn').style.display='none';
-    return;
+    hide('admins'); hide('guards'); hide('sites'); hide('rates'); hide('audit'); return;
   }
 }
 async function doLogout(){
