@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BOS">
 <link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -63,6 +65,7 @@ a{color:var(--navy);text-decoration:none}
 .badge-role-administrator{background:#fef3c7;color:#d97706}
 .badge-role-manager{background:var(--blue-bg);color:var(--blue)}
 .badge-role-viewer{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.badge-role-client{background:#e0f2fe;color:#0369a1}
 
 /* Toast */
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
@@ -231,6 +234,43 @@ tr:hover td{background:#f8fafc}
 .role-badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
 .change-pw-link{font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline}
 
+/* ════════════════════════════════════════
+   GEOFENCE / MAPS / PATROL / INCIDENTS
+════════════════════════════════════════ */
+.map-box{width:100%;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.15);background:#1a2744}
+.map-box.light{border:1.5px solid var(--border)}
+.geo-status{border-radius:10px;padding:12px 14px;margin:12px 0;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.geo-status.ok{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+.geo-status.bad{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.geo-status.wait{background:rgba(201,168,76,.12);color:var(--gold-l);border:1px solid rgba(201,168,76,.3)}
+.mode-grid{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+.mode-btn{display:flex;align-items:center;gap:14px;padding:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;color:#fff;text-align:left;transition:all .15s}
+.mode-btn:hover{background:rgba(255,255,255,.1);border-color:var(--gold)}
+.mode-btn .mi{font-size:26px}
+.mode-btn .mt{font-weight:700;font-size:15px}
+.mode-btn .ms{font-size:12px;color:rgba(255,255,255,.5);margin-top:2px}
+.cp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.cp-row.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08)}
+.cp-name{font-weight:700;color:#fff;font-size:14px}
+.cp-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+.activity-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.activity-row:last-child{border-bottom:none}
+.activity-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.activity-main{font-size:13px;font-weight:600;color:var(--text)}
+.activity-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.activity-time{font-size:11px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.site-picker-hint{font-size:12px;color:var(--muted);margin:6px 0 12px}
+.radio-pill-row{display:flex;flex-wrap:wrap;gap:8px}
+.radio-pill{padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);background:#fff;font-size:13px;font-weight:600;cursor:pointer;color:var(--text)}
+.radio-pill.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.chk-list{max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:8px;padding:8px}
+.chk-list label{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer}
+
+/* ════════════════════════════════════════
+   CLIENT PORTAL
+════════════════════════════════════════ */
+#client-page{min-height:100vh;background:var(--bg)}
+
 @media(max-width:640px){
   .form-row,.form-row-3{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:1fr 1fr}
@@ -295,7 +335,27 @@ tr:hover td{background:#f8fafc}
         </div>
         <span style="font-size:12px;color:rgba(255,255,255,.4);margin-left:10px">Not you? Click ✕</span>
       </div>
-      <button class="nav-btn nav-next" onclick="goStep(1)" style="width:100%;margin-top:8px">Next →</button>
+      <button class="nav-btn nav-next" onclick="showModeMenu()" style="width:100%;margin-top:8px">Next →</button>
+    </div>
+
+    <!-- Mode menu -->
+    <div class="guard-card hidden" id="step-menu">
+      <div class="step-title">What would you like to do?</div>
+      <div class="mode-grid">
+        <button class="mode-btn" onclick="startShiftFlow()">
+          <span class="mi">📝</span>
+          <span><div class="mt">Submit Shift Report</div><div class="ms">Log your hours &amp; upload a timesheet photo</div></span>
+        </button>
+        <button class="mode-btn" onclick="startPatrolFlow()">
+          <span class="mi">🚶</span>
+          <span><div class="mt">Patrol Checkpoints</div><div class="ms">Check in at site checkpoints during your shift</div></span>
+        </button>
+        <button class="mode-btn" onclick="startIncidentFlow()">
+          <span class="mi">🚨</span>
+          <span><div class="mt">Report Incident</div><div class="ms">Log an incident with photo &amp; location</div></span>
+        </button>
+      </div>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="backToGuardSelect()">← Back</button>
     </div>
 
     <!-- Step 1: Shift Details -->
@@ -315,6 +375,8 @@ tr:hover td{background:#f8fafc}
           </div>
         </div>
       </div>
+      <div id="geo-status" class="geo-status hidden"></div>
+      <div id="geo-map" class="map-box hidden" style="height:150px"></div>
       <div class="form-group">
         <label class="form-label">Date</label>
         <input type="date" id="shift-date" class="form-control">
@@ -335,7 +397,7 @@ tr:hover td{background:#f8fafc}
         <textarea id="notes" class="form-control" rows="2" placeholder="Any incidents or additional info..."></textarea>
       </div>
       <div class="nav-btns">
-        <button class="nav-btn nav-back" onclick="goStep(0)">← Back</button>
+        <button class="nav-btn nav-back" onclick="showModeMenu()">← Back</button>
         <button class="nav-btn nav-next" onclick="goStep(2)">Next →</button>
       </div>
     </div>
@@ -372,6 +434,83 @@ tr:hover td{background:#f8fafc}
         <div class="success-sub">Your shift has been recorded and is pending review.</div>
         <button class="nav-btn nav-next" onclick="resetForm()" style="width:100%;margin-top:4px">+ Submit Another Shift</button>
         <div class="shifts-mini" id="recent-shifts"></div>
+      </div>
+    </div>
+
+    <!-- Patrol Checkpoints -->
+    <div class="guard-card hidden" id="step-patrol">
+      <div class="step-title">🚶 Patrol Checkpoints</div>
+      <div class="form-group">
+        <label class="form-label">Site</label>
+        <div class="search-wrap">
+          <input type="text" id="patrol-site-input" class="form-control" placeholder="Search site name..." autocomplete="off"
+                 oninput="filterPatrolSites(this.value)" onfocus="filterPatrolSites(this.value)" onblur="setTimeout(()=>closePatrolSiteDD(),200)">
+          <div id="patrol-site-dropdown" class="search-dropdown hidden"></div>
+        </div>
+        <div id="patrol-site-pill" class="hidden" style="margin-top:8px">
+          <div class="selected-pill"><span id="patrol-site-pill-name"></span><button onclick="clearPatrolSite()">✕</button></div>
+        </div>
+      </div>
+      <div id="patrol-map" class="map-box hidden" style="height:170px"></div>
+      <div id="patrol-list" style="margin-top:12px"></div>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
+    </div>
+
+    <!-- Report Incident -->
+    <div class="guard-card hidden" id="step-incident">
+      <div class="step-title">🚨 Report Incident</div>
+      <div class="form-group">
+        <label class="form-label">Site</label>
+        <div class="search-wrap">
+          <input type="text" id="incident-site-input" class="form-control" placeholder="Search site name..." autocomplete="off"
+                 oninput="filterIncidentSites(this.value)" onfocus="filterIncidentSites(this.value)" onblur="setTimeout(()=>closeIncidentSiteDD(),200)">
+          <div id="incident-site-dropdown" class="search-dropdown hidden"></div>
+        </div>
+        <div id="incident-site-pill" class="hidden" style="margin-top:8px">
+          <div class="selected-pill"><span id="incident-site-pill-name"></span><button onclick="clearIncidentSite()">✕</button></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Incident Type</label>
+        <select id="incident-type" class="form-control">
+          <option value="Suspicious Activity">Suspicious Activity</option>
+          <option value="Theft">Theft</option>
+          <option value="Vandalism">Vandalism</option>
+          <option value="Medical">Medical</option>
+          <option value="Trespassing">Trespassing</option>
+          <option value="Alarm Activation">Alarm Activation</option>
+          <option value="Equipment Fault">Equipment Fault</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea id="incident-desc" class="form-control" rows="3" placeholder="What happened? Include as much detail as possible..."></textarea>
+      </div>
+      <div id="incident-geo-status" class="geo-status hidden"></div>
+      <div class="photo-btns">
+        <label class="photo-btn" id="inc-cam-btn">
+          <span class="icon">📷</span><span>Take Photo</span>
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="handleIncidentPhoto(this,'cam')">
+        </label>
+        <label class="photo-btn" id="inc-gal-btn">
+          <span class="icon">🖼️</span><span>From Gallery</span>
+          <input type="file" accept="image/*" style="display:none" onchange="handleIncidentPhoto(this,'gal')">
+        </label>
+      </div>
+      <img id="incident-photo-preview" class="photo-preview hidden" src="" alt="">
+      <button class="submit-btn" id="incident-submit-btn" onclick="submitIncident()">🚨 Report Incident</button>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
+    </div>
+
+    <!-- Incident success -->
+    <div class="guard-card hidden" id="step-incident-success">
+      <div class="success-card">
+        <div class="success-icon">✅</div>
+        <div class="success-title">Incident Reported</div>
+        <div class="success-sub">Your incident report has been logged and sent to the office.</div>
+        <button class="nav-btn nav-next" onclick="resetIncidentForm()" style="width:100%;margin-top:4px">+ Report Another</button>
+        <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
       </div>
     </div>
 
@@ -429,6 +568,8 @@ tr:hover td{background:#f8fafc}
     <button class="tab-btn" onclick="showTab('rates')" data-tab="rates">💲 Rates</button>
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
+    <button class="tab-btn" onclick="showTab('activity')" data-tab="activity">📡 Live Activity</button>
+    <button class="tab-btn" onclick="showTab('incidents')" data-tab="incidents">🚨 Incidents</button>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
     <button class="tab-btn" onclick="showTab('audit')" data-tab="audit">📜 Audit Log</button>
   </div>
@@ -636,6 +777,46 @@ tr:hover td{background:#f8fafc}
       </div>
     </div>
 
+    <!-- LIVE ACTIVITY -->
+    <div id="tab-activity" class="tab-content">
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head"><span class="section-title">🗺️ Sites — Victoria, AU</span></div>
+        <div class="section-body">
+          <div id="activity-map" class="map-box light" style="height:320px"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-head"><span class="section-title">Live Feed</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadActivity()">↻ Refresh</button>
+        </div>
+        <div id="activity-feed"></div>
+      </div>
+    </div>
+
+    <!-- INCIDENTS -->
+    <div id="tab-incidents" class="tab-content">
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">Incident Reports</span>
+          <button class="btn btn-primary btn-sm" onclick="loadIncidents()">↻ Refresh</button>
+        </div>
+        <div class="filter-bar">
+          <select id="inc-f-status" onchange="loadIncidents()">
+            <option value="">All Status</option>
+            <option value="open">Open</option>
+            <option value="reviewing">Reviewing</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Guard</th><th>Site</th><th>Type</th><th>Photo</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="incidents-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ADMINS -->
     <div id="tab-admins" class="tab-content">
       <div class="section" style="margin-bottom:20px">
@@ -678,6 +859,66 @@ tr:hover td{background:#f8fafc}
   </div><!-- /admin-content -->
 </div><!-- /admin-page -->
 
+<!-- ══════════════════════════════════════════ CLIENT PORTAL -->
+<div id="client-page" class="hidden">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <img id="client-logo" class="topbar-logo hidden" src="/logo" alt="" onerror="this.classList.add('hidden')">
+      <span style="font-size:24px">🦉</span>
+      <div><div class="brand-name" id="client-topbar-company">Brown Owl Security</div><div class="brand-sub">Client Portal</div></div>
+    </div>
+    <div class="topbar-actions">
+      <span class="topbar-user" id="client-topbar-user"></span>
+      <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="tabs" id="client-tabs">
+    <button class="tab-btn active" onclick="showClientTab('overview')" data-ctab="overview">📊 Overview</button>
+    <button class="tab-btn" onclick="showClientTab('patrol')" data-ctab="patrol">🚶 Patrol Log</button>
+    <button class="tab-btn" onclick="showClientTab('cincidents')" data-ctab="cincidents">🚨 Incidents</button>
+    <button class="tab-btn" onclick="showClientTab('coverage')" data-ctab="coverage">🗓️ Shift Coverage</button>
+  </div>
+  <div class="admin-content" style="padding:0 20px">
+    <div id="ctab-overview" class="tab-content active">
+      <div class="stats-grid" id="client-stats"></div>
+      <div class="section">
+        <div class="section-head"><span class="section-title">🗺️ Your Sites</span></div>
+        <div class="section-body"><div id="client-map" class="map-box light" style="height:320px"></div></div>
+      </div>
+    </div>
+    <div id="ctab-patrol" class="tab-content">
+      <div class="section">
+        <div class="section-head"><span class="section-title">Patrol &amp; Checkpoint Log</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadClientActivity()">↻ Refresh</button>
+        </div>
+        <div id="client-activity-feed"></div>
+      </div>
+    </div>
+    <div id="ctab-cincidents" class="tab-content">
+      <div class="section">
+        <div class="section-head"><span class="section-title">Incident Reports</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>When</th><th>Guard</th><th>Site</th><th>Type</th><th>Status</th></tr></thead>
+            <tbody id="client-incidents-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="ctab-coverage" class="tab-content">
+      <div class="section">
+        <div class="section-head"><span class="section-title">Approved Shift Coverage</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Start</th><th>End</th><th>Hours</th><th>Location</th></tr></thead>
+            <tbody id="client-coverage-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /client-page -->
+
 <!-- ══════ MODALS ══════ -->
 <!-- Review submission -->
 <div id="review-modal" class="modal-overlay hidden">
@@ -685,6 +926,15 @@ tr:hover td{background:#f8fafc}
     <div class="modal-header"><span class="modal-title">Review Submission</span><button class="modal-close" onclick="closeModal('review-modal')">✕</button></div>
     <div class="modal-body" id="review-body"></div>
     <div class="modal-footer" id="review-footer"></div>
+  </div>
+</div>
+
+<!-- Incident review modal -->
+<div id="incident-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Incident Report</span><button class="modal-close" onclick="closeModal('incident-modal')">✕</button></div>
+    <div class="modal-body" id="incident-body"></div>
+    <div class="modal-footer" id="incident-footer"></div>
   </div>
 </div>
 
@@ -719,7 +969,7 @@ tr:hover td{background:#f8fafc}
 
 <!-- Site modal -->
 <div id="site-modal" class="modal-overlay hidden">
-  <div class="modal">
+  <div class="modal" style="max-width:600px">
     <div class="modal-header"><span class="modal-title" id="site-modal-title">Add Site</span><button class="modal-close" onclick="closeModal('site-modal')">✕</button></div>
     <div class="modal-body">
       <input type="hidden" id="sm-id">
@@ -738,10 +988,46 @@ tr:hover td{background:#f8fafc}
           <input type="checkbox" id="sm-active"><span class="form-label" style="margin:0">Active</span>
         </label>
       </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <div class="form-label" style="margin-bottom:8px">📍 GPS Sign-In Geofence (Victoria, AU)</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Click the map to set the site's exact location. Guards must be physically within the radius to sign in. Leave unset to allow sign-in from anywhere.</p>
+      <div id="sm-map" class="map-box light" style="height:220px;margin-bottom:10px"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Latitude</label><input type="number" id="sm-lat" class="form-control" step="0.000001" placeholder="e.g. -37.8136" oninput="onSiteLatLngInput()"></div>
+        <div class="form-group"><label class="form-label">Longitude</label><input type="number" id="sm-lng" class="form-control" step="0.000001" placeholder="e.g. 144.9631" oninput="onSiteLatLngInput()"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Geofence Radius (m)</label><input type="number" id="sm-radius" class="form-control" step="10" value="200" oninput="onSiteLatLngInput()"></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;gap:8px">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="useMyLocationForSite()">📍 Use My Location</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="clearSiteLocation()">Clear</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('site-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveSite()">Save Site</button>
+    </div>
+  </div>
+</div>
+
+<!-- Checkpoints modal -->
+<div id="checkpoints-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><span class="modal-title">Patrol Checkpoints — <span id="cpm-site-name"></span></span><button class="modal-close" onclick="closeModal('checkpoints-modal')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Click the map to add a checkpoint. Guards must be within its radius to check in during a patrol.</p>
+      <div id="cpm-map" class="map-box light" style="height:240px;margin-bottom:12px"></div>
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group"><label class="form-label">Checkpoint Name</label><input id="cpm-name" class="form-control" placeholder="e.g. Front Gate"></div>
+        <div class="form-group"><label class="form-label">Radius (m)</label><input type="number" id="cpm-radius" class="form-control" value="40" step="5"></div>
+      </div>
+      <p id="cpm-hint" style="font-size:12px;color:var(--muted);margin-bottom:10px">Click the map to place this checkpoint, then click "Add Checkpoint".</p>
+      <button class="btn btn-primary btn-sm" onclick="addCheckpointFromPin()">+ Add Checkpoint</button>
+      <div id="cpm-list" style="margin-top:16px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('checkpoints-modal')">Close</button>
     </div>
   </div>
 </div>
@@ -777,7 +1063,8 @@ tr:hover td{background:#f8fafc}
       <div class="form-row">
         <div class="form-group"><label class="form-label">Full Name *</label><input id="am-name" class="form-control" placeholder="Admin name"></div>
         <div class="form-group"><label class="form-label">Role</label>
-          <select id="am-role" class="form-control">
+          <select id="am-role" class="form-control" onchange="toggleClientSitesField()">
+            <option value="client">Client (Read-only Portal)</option>
             <option value="viewer">Viewer</option>
             <option value="manager">Manager</option>
             <option value="administrator">Administrator</option>
@@ -788,6 +1075,10 @@ tr:hover td{background:#f8fafc}
       <div class="form-group"><label class="form-label">Email Address *</label><input type="email" id="am-email" class="form-control" placeholder="admin@email.com"></div>
       <div class="form-group" id="am-pw-wrap"><label class="form-label">Password *</label><input type="password" id="am-password" class="form-control" placeholder="Min 6 characters"></div>
       <div class="form-group" id="am-newpw-wrap" style="display:none"><label class="form-label">New Password (leave blank to keep)</label><input type="password" id="am-new-password" class="form-control" placeholder="Leave blank to keep current"></div>
+      <div class="form-group" id="am-sites-wrap" style="display:none">
+        <label class="form-label">Sites this client can view</label>
+        <div id="am-sites-list" class="chk-list"></div>
+      </div>
       <div class="form-group" id="am-active-wrap" style="display:none">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="am-active"><span class="form-label" style="margin:0">Active</span>
@@ -886,21 +1177,95 @@ async function apiFetch(url, opts={}) {
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
+function hideAllPages(){
+  ['guard-page','login-page','admin-page','client-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+}
 function showGuard(){
+  hideAllPages();
   document.getElementById('guard-page').classList.remove('hidden');
-  document.getElementById('login-page').classList.add('hidden');
-  document.getElementById('admin-page').classList.add('hidden');
 }
 function showLogin(){
+  hideAllPages();
   document.getElementById('login-page').classList.remove('hidden');
-  document.getElementById('guard-page').classList.add('hidden');
-  document.getElementById('admin-page').classList.add('hidden');
 }
 function showAdmin(){
+  hideAllPages();
   document.getElementById('admin-page').classList.remove('hidden');
-  document.getElementById('guard-page').classList.add('hidden');
-  document.getElementById('login-page').classList.add('hidden');
   loadDashboard();
+}
+function showClientPortal(){
+  hideAllPages();
+  document.getElementById('client-page').classList.remove('hidden');
+  loadClientPortal();
+}
+function showClientTab(name){
+  document.querySelectorAll('#client-page .tab-content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('#client-tabs .tab-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById(`ctab-${name}`)?.classList.add('active');
+  document.querySelector(`[data-ctab="${name}"]`)?.classList.add('active');
+  if(name==='patrol') loadClientActivity();
+  else if(name==='cincidents') loadClientIncidents();
+  else if(name==='coverage') loadClientCoverage();
+}
+let clientData = null;
+async function loadClientPortal(){
+  try{
+    clientData = await apiFetch('/api/client/me');
+    document.getElementById('client-topbar-user').textContent = clientData.name;
+    const stats = document.getElementById('client-stats');
+    stats.innerHTML = `
+      <div class="stat-card"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val">${clientData.sites.length}</div><div class="stat-lbl">Your Sites</div></div></div>`;
+    const withLoc = clientData.sites.filter(s=>s.lat!=null);
+    const map = getMap('client-map', VIC_CENTER, 7);
+    if(withLoc.length){
+      withLoc.forEach(s=>{
+        L.circle([s.lat,s.lng], {radius:s.geofence_radius||200, color:'#1a2744', fillOpacity:.1}).addTo(map._group);
+        L.marker([s.lat,s.lng]).addTo(map._group).bindTooltip(s.name);
+      });
+      map.fitBounds(L.latLngBounds(withLoc.map(s=>[s.lat,s.lng])).pad(0.5));
+    }
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientActivity(){
+  try{
+    const feed = await apiFetch('/api/client/activity');
+    const wrap = document.getElementById('client-activity-feed');
+    if(!feed.length){ wrap.innerHTML = `<div class="empty-state"><div class="ei">🚶</div><p>No patrol activity yet</p></div>`; return; }
+    wrap.innerHTML = feed.map(r=>{
+      const ic = ACTIVITY_ICONS[r.kind] || {i:'•',bg:'#eee'};
+      const main = r.kind==='checkpoint' ? `${r.guard_name} checked in at <strong>${r.label}</strong>` : `${r.guard_name} reported <strong>${r.label}</strong>`;
+      const sub  = r.kind==='checkpoint' ? `${r.site_name}${r.distance_m!=null?' · '+Math.round(r.distance_m)+'m':''}` : `${r.site_name} · ${r.status||''}`;
+      return `<div class="activity-row">
+        <div class="activity-icon" style="background:${ic.bg}">${ic.i}</div>
+        <div style="flex:1"><div class="activity-main">${main}</div><div class="activity-sub">${sub}</div></div>
+        <div class="activity-time">${fmtDateTime(r.at)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientIncidents(){
+  try{
+    const rows = await apiFetch('/api/client/incidents');
+    document.getElementById('client-incidents-tbody').innerHTML = rows.length===0
+      ? `<tr><td colspan="5" class="empty-state"><div class="ei">🚨</div><p>No incidents reported</p></td></tr>`
+      : rows.map(r=>`<tr>
+        <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.occurred_at)}</td>
+        <td>${r.guard_name}</td><td>${r.site_name}</td><td>${r.type}</td>
+        <td><span class="badge badge-${r.status==='resolved'?'approved':r.status==='reviewing'?'pending':'rejected'}">${r.status}</span></td>
+      </tr>`).join('');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientCoverage(){
+  try{
+    const rows = await apiFetch('/api/client/submissions');
+    document.getElementById('client-coverage-tbody').innerHTML = rows.length===0
+      ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No approved shifts yet</p></td></tr>`
+      : rows.map(r=>`<tr>
+        <td>${r.shift_date}</td><td>${r.guard_name}</td><td>${r.site_name}</td>
+        <td>${r.start_time}</td><td>${r.end_time}</td><td>${r.total_hours}h</td>
+        <td>${r.location_verified?'✅ Verified':'—'}</td>
+      </tr>`).join('');
+  }catch(e){ toast(e.message,'error'); }
 }
 function showTab(name){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
@@ -913,6 +1278,8 @@ function showTab(name){
   else if(name==='rates')   loadRates();
   else if(name==='invoices')loadInvoicesTab();
   else if(name==='reminders')loadRemindersTab();
+  else if(name==='activity') loadActivity();
+  else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
   else if(name==='audit')   loadAudit();
 }
@@ -946,6 +1313,7 @@ async function init(){
         return;
       }
       currentRole = me.role; window._myAdminId = me.id||'';
+      if(me.role==='client'){ showClientPortal(); return; }
       const roleLabel2={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[me.role]||me.role;
       document.getElementById('topbar-user-info').textContent = `${me.name} · ${roleLabel2}`;
       applyRoleRestrictions(me.role);
@@ -972,24 +1340,113 @@ async function loadGuardsAndSites(){
   }catch(e){ return; }
 }
 
-function goStep(n){
-  if(n===1){
-    if(!selectedGuard){ toast('Please select your name','error'); return; }
-    document.getElementById('shift-date').valueAsDate = new Date();
+const GUARD_CARDS = ['step-0','step-menu','step-1','step-2','step-success','step-patrol','step-incident','step-incident-success'];
+function showGuardCard(id){
+  GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  const dotsWrap = document.getElementById('steps');
+  const dotIdx = {'step-0':0,'step-1':1,'step-2':2}[id];
+  if(dotIdx!==undefined){
+    dotsWrap.style.display='flex';
+    document.querySelectorAll('.step-dot').forEach((d,i)=>{ d.classList.toggle('active', i===dotIdx); d.classList.toggle('done', i<dotIdx); });
+  } else {
+    dotsWrap.style.display='none';
   }
+}
+function showModeMenu(){
+  if(!selectedGuard){ toast('Please select your name','error'); return; }
+  showGuardCard('step-menu');
+}
+function backToGuardSelect(){ showGuardCard('step-0'); }
+function startShiftFlow(){
+  currentStep = 1;
+  document.getElementById('shift-date').valueAsDate = new Date();
+  showGuardCard('step-1');
+}
+function startPatrolFlow(){ showGuardCard('step-patrol'); }
+function startIncidentFlow(){ showGuardCard('step-incident'); }
+
+function goStep(n){
   if(n===2){
     if(!selectedSite){ toast('Please select a site','error'); return; }
     if(!document.getElementById('shift-date').value){ toast('Please enter date','error'); return; }
     if(!document.getElementById('start-time').value){ toast('Please enter start time','error'); return; }
     if(!document.getElementById('end-time').value){ toast('Please enter end time','error'); return; }
     if(parseFloat(document.getElementById('hours-display').textContent)<0){ toast('End time must be after start time','error'); return; }
+    if(currentSiteGeofenced && !geoVerified){ toast('You must be at the site to continue. Verify your location above.','error'); return; }
   }
   currentStep = n;
-  ['step-0','step-1','step-2','step-success'].forEach(id=>document.getElementById(id).classList.add('hidden'));
-  document.getElementById(`step-${n}`).classList.remove('hidden');
-  document.querySelectorAll('.step-dot').forEach((d,i)=>{
-    d.classList.toggle('active', i===n); d.classList.toggle('done', i<n);
-  });
+  showGuardCard(n===1?'step-1':'step-2');
+}
+
+// ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
+const VIC_CENTER = [-37.4713, 144.7852];
+const _maps = {};
+function haversineM(lat1,lng1,lat2,lng2){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dp=toRad(lat2-lat1), dl=toRad(lng2-lng1);
+  const a=Math.sin(dp/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dl/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function getMap(elId, center, zoom){
+  document.getElementById(elId).classList.remove('hidden');
+  if(!_maps[elId]){
+    _maps[elId] = L.map(elId, {attributionControl:false, zoomControl:true});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_maps[elId]);
+    _maps[elId]._group = L.layerGroup().addTo(_maps[elId]);
+  }
+  _maps[elId].setView(center, zoom||16);
+  _maps[elId]._group.clearLayers();
+  setTimeout(()=>_maps[elId].invalidateSize(), 60);
+  return _maps[elId];
+}
+function renderGeoMap(elId, site, guardLat, guardLng, radius){
+  const map = getMap(elId, [site.lat, site.lng]);
+  L.circle([site.lat,site.lng], {radius, color:'#c9a84c', fillColor:'#c9a84c', fillOpacity:.15}).addTo(map._group);
+  L.marker([site.lat,site.lng]).addTo(map._group).bindTooltip(site.name);
+  if(guardLat!=null){
+    L.circleMarker([guardLat,guardLng], {radius:8, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:.9, weight:2}).addTo(map._group).bindTooltip('You');
+    map.fitBounds(L.latLngBounds([[site.lat,site.lng],[guardLat,guardLng]]).pad(0.4));
+  }
+}
+
+// ── Geofenced sign-in ─────────────────────────────────────────────────────────
+let currentGeo = null, currentSiteGeofenced = false, geoVerified = false;
+function checkSiteGeofence(){
+  const site = sitesData.find(s=>s.id===selectedSite.id);
+  const statusEl = document.getElementById('geo-status');
+  const mapEl = document.getElementById('geo-map');
+  geoVerified = false; currentGeo = null;
+  if(!site || site.lat==null || site.lng==null){
+    currentSiteGeofenced = false;
+    statusEl.classList.add('hidden');
+    mapEl.classList.add('hidden');
+    return;
+  }
+  currentSiteGeofenced = true;
+  statusEl.classList.remove('hidden');
+  statusEl.className = 'geo-status wait';
+  statusEl.innerHTML = '📍 Checking your location…';
+  if(!navigator.geolocation){
+    statusEl.className = 'geo-status bad';
+    statusEl.innerHTML = '⚠️ Your device does not support location. Cannot sign in at this site.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    currentGeo = {lat,lng};
+    const dist = haversineM(site.lat, site.lng, lat, lng);
+    const radius = site.geofence_radius || 200;
+    geoVerified = dist <= radius;
+    statusEl.className = 'geo-status ' + (geoVerified?'ok':'bad');
+    statusEl.innerHTML = geoVerified
+      ? `✅ You're at ${site.name} (${Math.round(dist)}m away)`
+      : `❌ You are ${Math.round(dist)}m from ${site.name} — move within ${radius}m to sign in. <a href="#" onclick="checkSiteGeofence();return false" style="color:inherit">Retry</a>`;
+    renderGeoMap('geo-map', site, lat, lng, radius);
+  }, err=>{
+    statusEl.className = 'geo-status bad';
+    statusEl.innerHTML = `⚠️ Could not get your location (${err.message}). Location access is required to sign in at this site. <a href="#" onclick="checkSiteGeofence();return false" style="color:inherit">Retry</a>`;
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
 }
 
 // Guard search
@@ -1043,9 +1500,13 @@ function selectSite(id, name){
   document.getElementById('site-pill-name').textContent = name;
   document.getElementById('site-input').style.display='none';
   document.getElementById('site-dropdown').classList.add('hidden');
+  checkSiteGeofence();
 }
 function clearSite(){
   selectedSite = null;
+  currentSiteGeofenced = false; geoVerified = false; currentGeo = null;
+  document.getElementById('geo-status').classList.add('hidden');
+  document.getElementById('geo-map').classList.add('hidden');
   document.getElementById('site-pill').classList.add('hidden');
   document.getElementById('site-input').style.display=''; document.getElementById('site-input').value='';
 }
@@ -1077,6 +1538,9 @@ function handlePhoto(input, src){
 }
 
 async function submitShift(){
+  if(currentSiteGeofenced && !geoVerified){
+    toast('You must be at the site to sign in. Verify your location above and try again.','error'); return;
+  }
   const btn = document.getElementById('submit-btn');
   btn.disabled=true; btn.textContent='Submitting…';
   const s = document.getElementById('start-time').value;
@@ -1091,11 +1555,10 @@ async function submitShift(){
     notes:document.getElementById('notes').value,
   };
   if(photoB64){ body.photo_b64=photoB64; body.photo_ext=photoExt; }
+  if(currentGeo){ body.lat=currentGeo.lat; body.lng=currentGeo.lng; }
   try{
     await apiFetch('/api/submissions',{method:'POST',body:JSON.stringify(body)});
-    document.getElementById('steps').style.display='none';
-    ['step-0','step-1','step-2'].forEach(id=>document.getElementById(id).classList.add('hidden'));
-    document.getElementById('step-success').classList.remove('hidden');
+    showGuardCard('step-success');
     loadRecentShifts(selectedGuard.id);
   }catch(e){ toast(e.message,'error'); btn.disabled=false; btn.textContent='✓ Submit Shift'; }
 }
@@ -1121,10 +1584,162 @@ function resetForm(){
   ['cam-btn','gal-btn'].forEach(id=>document.getElementById(id).classList.remove('has-photo'));
   document.getElementById('notes').value='';
   document.getElementById('hours-display').textContent='0.00 hrs';
+  document.getElementById('submit-btn').disabled=false;
+  document.getElementById('submit-btn').textContent='✓ Submit Shift';
   clearSite();
-  document.getElementById('steps').style.display='flex';
-  document.getElementById('step-success').classList.add('hidden');
-  goStep(0);
+  startShiftFlow();
+}
+
+// ── Patrol Checkpoints ────────────────────────────────────────────────────────
+let patrolSite = null, patrolCheckpoints = [], patrolScanned = new Set();
+function filterPatrolSites(q){
+  const dd = document.getElementById('patrol-site-dropdown');
+  if(!q){ dd.classList.add('hidden'); return; }
+  const ql = q.toLowerCase();
+  const matches = sitesData.filter(s=>s.name.toLowerCase().includes(ql)||s.client_name.toLowerCase().includes(ql)).slice(0,20);
+  if(!matches.length){ dd.classList.add('hidden'); return; }
+  dd.innerHTML = matches.map(s=>`<div class="search-option" onmousedown="selectPatrolSite('${s.id}','${s.name.replace(/'/g,"\\'")}')">
+    <div>${s.name}</div><div style="font-size:11px;color:var(--muted)">${s.client_name}</div></div>`).join('');
+  dd.classList.remove('hidden');
+}
+function closePatrolSiteDD(){ document.getElementById('patrol-site-dropdown').classList.add('hidden'); }
+async function selectPatrolSite(id, name){
+  patrolSite = sitesData.find(s=>s.id===id);
+  document.getElementById('patrol-site-pill').classList.remove('hidden');
+  document.getElementById('patrol-site-pill-name').textContent = name;
+  document.getElementById('patrol-site-input').style.display='none';
+  document.getElementById('patrol-site-dropdown').classList.add('hidden');
+  patrolScanned = new Set();
+  try{ patrolCheckpoints = await apiFetch(`/api/checkpoints?site_id=${id}`); }
+  catch(e){ patrolCheckpoints = []; }
+  renderPatrolList();
+}
+function clearPatrolSite(){
+  patrolSite=null; patrolCheckpoints=[]; patrolScanned=new Set();
+  document.getElementById('patrol-site-pill').classList.add('hidden');
+  document.getElementById('patrol-site-input').style.display=''; document.getElementById('patrol-site-input').value='';
+  document.getElementById('patrol-list').innerHTML='';
+  document.getElementById('patrol-map').classList.add('hidden');
+}
+function renderPatrolList(){
+  const wrap = document.getElementById('patrol-list');
+  if(!patrolCheckpoints.length){
+    wrap.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">No checkpoints have been set up for this site yet.</p>`;
+    document.getElementById('patrol-map').classList.add('hidden');
+    return;
+  }
+  wrap.innerHTML = patrolCheckpoints.map(cp=>{
+    const done = patrolScanned.has(cp.id);
+    return `<div class="cp-row ${done?'done':''}" id="cp-row-${cp.id}">
+      <div><div class="cp-name">${done?'✅ ':''}${cp.name}</div><div class="cp-sub">Check-in radius ${cp.radius_m}m</div></div>
+      <button class="btn btn-sm ${done?'btn-ghost':'btn-gold'}" ${done?'disabled':''} onclick="scanCheckpoint('${cp.id}')">${done?'Checked In':'Check In'}</button>
+    </div>`;
+  }).join('');
+  if(patrolSite && patrolSite.lat!=null){
+    const map = getMap('patrol-map', [patrolSite.lat, patrolSite.lng]);
+    patrolCheckpoints.forEach(cp=>{
+      L.circle([cp.lat,cp.lng], {radius:cp.radius_m, color: patrolScanned.has(cp.id)?'#22c55e':'#c9a84c', fillOpacity:.15}).addTo(map._group);
+      L.marker([cp.lat,cp.lng]).addTo(map._group).bindTooltip(cp.name);
+    });
+    map.fitBounds(L.latLngBounds(patrolCheckpoints.map(cp=>[cp.lat,cp.lng])).pad(0.3));
+  } else {
+    document.getElementById('patrol-map').classList.add('hidden');
+  }
+}
+function scanCheckpoint(cpId){
+  if(!selectedGuard){ toast('Please select your name first','error'); return; }
+  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    try{
+      const d = await apiFetch('/api/checkpoints/scan',{method:'POST',body:JSON.stringify({
+        checkpoint_id:cpId, guard_id:selectedGuard.id,
+        lat:pos.coords.latitude, lng:pos.coords.longitude
+      })});
+      patrolScanned.add(cpId);
+      renderPatrolList();
+      toast(`Checked in ✓ (${d.distance_m}m from checkpoint)`,'success');
+    }catch(e){ toast(e.message,'error'); }
+  }, err=>{ toast('Could not get your location: '+err.message,'error'); }, {enableHighAccuracy:true, timeout:12000});
+}
+
+// ── Incident Reporting ────────────────────────────────────────────────────────
+let incidentSite = null, incidentPhotoB64 = null, incidentPhotoExt = null, incidentGeo = null;
+function filterIncidentSites(q){
+  const dd = document.getElementById('incident-site-dropdown');
+  if(!q){ dd.classList.add('hidden'); return; }
+  const ql = q.toLowerCase();
+  const matches = sitesData.filter(s=>s.name.toLowerCase().includes(ql)||s.client_name.toLowerCase().includes(ql)).slice(0,20);
+  if(!matches.length){ dd.classList.add('hidden'); return; }
+  dd.innerHTML = matches.map(s=>`<div class="search-option" onmousedown="selectIncidentSite('${s.id}','${s.name.replace(/'/g,"\\'")}')">
+    <div>${s.name}</div><div style="font-size:11px;color:var(--muted)">${s.client_name}</div></div>`).join('');
+  dd.classList.remove('hidden');
+}
+function closeIncidentSiteDD(){ document.getElementById('incident-site-dropdown').classList.add('hidden'); }
+function selectIncidentSite(id, name){
+  incidentSite = {id, name};
+  document.getElementById('incident-site-pill').classList.remove('hidden');
+  document.getElementById('incident-site-pill-name').textContent = name;
+  document.getElementById('incident-site-input').style.display='none';
+  document.getElementById('incident-site-dropdown').classList.add('hidden');
+  captureIncidentLocation();
+}
+function clearIncidentSite(){
+  incidentSite = null;
+  document.getElementById('incident-site-pill').classList.add('hidden');
+  document.getElementById('incident-site-input').style.display=''; document.getElementById('incident-site-input').value='';
+}
+function captureIncidentLocation(){
+  const el = document.getElementById('incident-geo-status');
+  incidentGeo = null;
+  if(!navigator.geolocation){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden'); el.className='geo-status wait'; el.innerHTML='📍 Capturing your location…';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    incidentGeo = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+    el.className='geo-status ok'; el.innerHTML='✅ Location captured';
+  }, err=>{
+    el.className='geo-status bad'; el.innerHTML='⚠️ Location unavailable — incident will be logged without GPS coordinates';
+  }, {enableHighAccuracy:true, timeout:10000});
+}
+function handleIncidentPhoto(input, src){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    incidentPhotoB64 = e.target.result.split(',')[1];
+    incidentPhotoExt = file.name.split('.').pop()||'jpg';
+    document.getElementById('incident-photo-preview').src = e.target.result;
+    document.getElementById('incident-photo-preview').classList.remove('hidden');
+    document.getElementById(src==='cam'?'inc-cam-btn':'inc-gal-btn').classList.add('has-photo');
+    toast('Photo attached ✓','success');
+  };
+  reader.readAsDataURL(file);
+}
+async function submitIncident(){
+  if(!selectedGuard){ toast('Please select your name first','error'); return; }
+  if(!incidentSite){ toast('Please select a site','error'); return; }
+  const btn = document.getElementById('incident-submit-btn');
+  btn.disabled=true; btn.textContent='Submitting…';
+  const body = {
+    guard_id:selectedGuard.id, site_id:incidentSite.id,
+    type:document.getElementById('incident-type').value,
+    description:document.getElementById('incident-desc').value,
+  };
+  if(incidentGeo){ body.lat=incidentGeo.lat; body.lng=incidentGeo.lng; }
+  if(incidentPhotoB64){ body.photo_b64=incidentPhotoB64; body.photo_ext=incidentPhotoExt; }
+  try{
+    await apiFetch('/api/incidents',{method:'POST',body:JSON.stringify(body)});
+    showGuardCard('step-incident-success');
+  }catch(e){ toast(e.message,'error'); }
+  btn.disabled=false; btn.textContent='🚨 Report Incident';
+}
+function resetIncidentForm(){
+  incidentPhotoB64=null; incidentPhotoExt=null; incidentGeo=null;
+  document.getElementById('incident-photo-preview').classList.add('hidden');
+  document.getElementById('incident-photo-preview').src='';
+  ['inc-cam-btn','inc-gal-btn'].forEach(id=>document.getElementById(id).classList.remove('has-photo'));
+  document.getElementById('incident-desc').value='';
+  document.getElementById('incident-geo-status').classList.add('hidden');
+  clearIncidentSite();
+  showGuardCard('step-incident');
 }
 
 // Reminders
@@ -1164,11 +1779,12 @@ async function doLogin(){
       return;
     }
     currentRole=d.role; window._myAdminId=d.id||'';
+    document.getElementById('login-email').value='';
+    toast(`Welcome back, ${d.name}!`,'success');
+    if(d.role==='client'){ showClientPortal(); return; }
     const roleLabel={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role]||d.role;
     document.getElementById('topbar-user-info').textContent=`${d.name} · ${roleLabel}`;
     applyRoleRestrictions(d.role);
-    document.getElementById('login-email').value='';
-    toast(`Welcome back, ${d.name}!`,'success');
     showAdmin();
   }catch(e){
     errEl.textContent='Invalid email or password.'; errEl.style.display='block';
@@ -1188,10 +1804,11 @@ async function submitFirstPassword(){
     closeModal('firstpw-modal');
     ['fp-new','fp-confirm'].forEach(id=>document.getElementById(id).value='');
     currentRole=d.role; window._myAdminId=d.id||'';
+    toast(`Password set! Welcome, ${d.name}.`,'success');
+    if(d.role==='client'){ showClientPortal(); return; }
     const roleLabel={'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role]||d.role;
     document.getElementById('topbar-user-info').textContent=`${d.name} · ${roleLabel}`;
     applyRoleRestrictions(d.role);
-    toast(`Password set! Welcome, ${d.name}.`,'success');
     showAdmin();
   }catch(e){
     err.textContent=e.message||'Something went wrong. Please try again.';
@@ -1203,7 +1820,7 @@ function applyRoleRestrictions(role){
   const show = name => { const el=tab(name); if(el) el.style.display=''; };
   const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
   // Reset all tabs to visible first
-  ['dashboard','submissions','guards','sites','rates','invoices','reminders','admins','audit']
+  ['dashboard','submissions','guards','sites','rates','invoices','reminders','activity','incidents','admins','audit']
     .forEach(show);
   if(role==='superadmin') return; // full access — nothing hidden
   if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
@@ -1521,16 +2138,19 @@ function renderSitesTable(){
       <td><span class="badge ${s.active?'badge-approved':'badge-rejected'}">${s.active?'Active':'Inactive'}</span></td>
       <td style="white-space:nowrap">
         <button class="btn btn-xs btn-primary" onclick='editSite(${JSON.stringify(s)})'>Edit</button>
+        <button class="btn btn-xs btn-ghost" onclick="openCheckpointsModal('${s.id}','${s.name.replace(/'/g,"\\'")}')">📍 Checkpoints</button>
         <button class="btn btn-xs btn-ghost" onclick="toggleSiteActive('${s.id}',${s.active})">${s.active?'Deactivate':'Activate'}</button>
       </td>
     </tr>`).join('');
 }
 function openSiteModal(){
   document.getElementById('site-modal-title').textContent='Add Site';
-  ['sm-id','sm-name','sm-client','sm-addr','sm-cname','sm-cphone'].forEach(id=>document.getElementById(id).value='');
+  ['sm-id','sm-name','sm-client','sm-addr','sm-cname','sm-cphone','sm-lat','sm-lng'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('sm-rate').value='0';
+  document.getElementById('sm-radius').value='200';
   document.getElementById('sm-active-wrap').style.display='none';
   openModal('site-modal');
+  setTimeout(()=>initSiteMap(null,null,200), 50);
 }
 function editSite(s){
   document.getElementById('site-modal-title').textContent='Edit Site';
@@ -1541,19 +2161,27 @@ function editSite(s){
   document.getElementById('sm-rate').value=s.default_rate||0;
   document.getElementById('sm-cname').value=s.contact_name||'';
   document.getElementById('sm-cphone').value=s.contact_phone||'';
+  document.getElementById('sm-lat').value=s.lat??'';
+  document.getElementById('sm-lng').value=s.lng??'';
+  document.getElementById('sm-radius').value=s.geofence_radius||200;
   document.getElementById('sm-active-wrap').style.display='block';
   document.getElementById('sm-active').checked=!!s.active;
   openModal('site-modal');
+  setTimeout(()=>initSiteMap(s.lat, s.lng, s.geofence_radius||200), 50);
 }
 async function saveSite(){
   const id=document.getElementById('sm-id').value;
+  const latV=document.getElementById('sm-lat').value, lngV=document.getElementById('sm-lng').value;
   const body={name:document.getElementById('sm-name').value,
     client_name:document.getElementById('sm-client').value,
     address:document.getElementById('sm-addr').value,
     default_rate:parseFloat(document.getElementById('sm-rate').value)||0,
     contact_name:document.getElementById('sm-cname').value,
     contact_phone:document.getElementById('sm-cphone').value,
-    active:document.getElementById('sm-active').checked?1:0};
+    active:document.getElementById('sm-active').checked?1:0,
+    lat: latV!==''?parseFloat(latV):null,
+    lng: lngV!==''?parseFloat(lngV):null,
+    geofence_radius: parseInt(document.getElementById('sm-radius').value)||200};
   if(!body.name||!body.client_name){ toast('Name and client required','error'); return; }
   try{
     if(id) await apiFetch(`/api/sites/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -1567,6 +2195,127 @@ async function toggleSiteActive(id, current){
   try{
     await apiFetch(`/api/sites/${id}`,{method:'PUT',body:JSON.stringify({...s,active:current?0:1})});
     toast('Updated','success'); loadSitesAdmin();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Site location map picker ──────────────────────────────────────────────────
+function initSiteMap(lat, lng, radius){
+  const hasLoc = lat!=null && lng!=null && lat!=='' && lng!=='';
+  const center = hasLoc ? [lat,lng] : VIC_CENTER;
+  const map = getMap('sm-map', center, hasLoc?15:7);
+  map.off('click');
+  map.on('click', e=>{
+    document.getElementById('sm-lat').value = e.latlng.lat.toFixed(6);
+    document.getElementById('sm-lng').value = e.latlng.lng.toFixed(6);
+    onSiteLatLngInput();
+  });
+  drawSitePin(hasLoc?lat:null, hasLoc?lng:null, radius);
+}
+function drawSitePin(lat, lng, radius){
+  const map = _maps['sm-map']; if(!map) return;
+  map._group.clearLayers();
+  if(lat==null||lng==null) return;
+  L.circle([lat,lng], {radius: radius||200, color:'#1a2744', fillColor:'#1a2744', fillOpacity:.12}).addTo(map._group);
+  L.marker([lat,lng], {draggable:true}).addTo(map._group).on('dragend', function(e){
+    const p = e.target.getLatLng();
+    document.getElementById('sm-lat').value = p.lat.toFixed(6);
+    document.getElementById('sm-lng').value = p.lng.toFixed(6);
+    onSiteLatLngInput();
+  });
+}
+function onSiteLatLngInput(){
+  const lat = parseFloat(document.getElementById('sm-lat').value);
+  const lng = parseFloat(document.getElementById('sm-lng').value);
+  const radius = parseFloat(document.getElementById('sm-radius').value)||200;
+  if(!isNaN(lat) && !isNaN(lng)){
+    drawSitePin(lat, lng, radius);
+    const map = _maps['sm-map']; if(map) map.setView([lat,lng], Math.max(map.getZoom(),14));
+  }
+}
+function useMyLocationForSite(){
+  if(!navigator.geolocation){ toast('Location not supported on this device','error'); return; }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    document.getElementById('sm-lat').value = pos.coords.latitude.toFixed(6);
+    document.getElementById('sm-lng').value = pos.coords.longitude.toFixed(6);
+    onSiteLatLngInput();
+  }, err=>toast('Could not get location: '+err.message,'error'));
+}
+function clearSiteLocation(){
+  document.getElementById('sm-lat').value='';
+  document.getElementById('sm-lng').value='';
+  const map = _maps['sm-map']; if(map) map._group.clearLayers();
+}
+
+// ── Checkpoints management ──────────────────────────────────────────────────────
+let cpmSiteId=null, cpmPin=null, cpmList=[];
+function openCheckpointsModal(siteId, siteName){
+  cpmSiteId = siteId; cpmPin = null;
+  document.getElementById('cpm-site-name').textContent = siteName;
+  document.getElementById('cpm-name').value=''; document.getElementById('cpm-radius').value=40;
+  document.getElementById('cpm-hint').textContent='Click the map to place this checkpoint, then click "Add Checkpoint".';
+  openModal('checkpoints-modal');
+  setTimeout(()=>loadCheckpointsForSite(siteId), 50);
+}
+async function loadCheckpointsForSite(siteId){
+  try{ cpmList = await apiFetch(`/api/checkpoints?site_id=${siteId}`); }
+  catch(e){ cpmList = []; }
+  const site = allSitesAdmin.find(s=>s.id===siteId);
+  const hasLoc = site && site.lat!=null;
+  const map = getMap('cpm-map', hasLoc?[site.lat,site.lng]:VIC_CENTER, hasLoc?15:7);
+  map.off('click');
+  map.on('click', e=>{
+    cpmPin = {lat:e.latlng.lat, lng:e.latlng.lng};
+    renderCpmMap();
+    document.getElementById('cpm-hint').textContent = `Pin placed at ${cpmPin.lat.toFixed(5)}, ${cpmPin.lng.toFixed(5)}. Enter a name and click "Add Checkpoint".`;
+  });
+  renderCpmMap();
+  renderCpmList();
+}
+function renderCpmMap(){
+  const map = _maps['cpm-map']; if(!map) return;
+  map._group.clearLayers();
+  const site = allSitesAdmin.find(s=>s.id===cpmSiteId);
+  if(site && site.lat!=null){
+    L.circle([site.lat,site.lng], {radius:site.geofence_radius||200, color:'#c9a84c', fillOpacity:.06}).addTo(map._group);
+  }
+  cpmList.forEach(cp=>{
+    L.circle([cp.lat,cp.lng], {radius:cp.radius_m, color:'#3b82f6', fillOpacity:.15}).addTo(map._group);
+    L.marker([cp.lat,cp.lng]).addTo(map._group).bindTooltip(cp.name);
+  });
+  if(cpmPin){
+    L.marker([cpmPin.lat,cpmPin.lng], {opacity:.8}).addTo(map._group).bindTooltip('New checkpoint').openTooltip();
+  }
+}
+function renderCpmList(){
+  const wrap = document.getElementById('cpm-list');
+  wrap.innerHTML = cpmList.length===0
+    ? `<p style="font-size:13px;color:var(--muted);text-align:center;padding:10px 0">No checkpoints yet.</p>`
+    : cpmList.map(cp=>`<div class="cp-row" style="background:var(--bg);border-color:var(--border)">
+        <div><div class="cp-name" style="color:var(--navy)">${cp.name}</div><div class="cp-sub" style="color:var(--muted)">radius ${cp.radius_m}m</div></div>
+        <button class="btn btn-xs btn-red" onclick="deleteCheckpoint('${cp.id}')">Remove</button>
+      </div>`).join('');
+}
+async function addCheckpointFromPin(){
+  const name = document.getElementById('cpm-name').value.trim();
+  const radius = parseInt(document.getElementById('cpm-radius').value)||40;
+  if(!name){ toast('Enter a checkpoint name','error'); return; }
+  if(!cpmPin){ toast('Click the map to place the checkpoint first','error'); return; }
+  try{
+    await apiFetch('/api/checkpoints',{method:'POST',body:JSON.stringify({
+      site_id:cpmSiteId, name, lat:cpmPin.lat, lng:cpmPin.lng, radius_m:radius
+    })});
+    toast('Checkpoint added','success');
+    document.getElementById('cpm-name').value=''; cpmPin=null;
+    document.getElementById('cpm-hint').textContent='Click the map to place this checkpoint, then click "Add Checkpoint".';
+    loadCheckpointsForSite(cpmSiteId);
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteCheckpoint(id){
+  if(!confirm('Remove this checkpoint?')) return;
+  try{
+    await apiFetch(`/api/checkpoints/${id}`,{method:'DELETE'});
+    toast('Checkpoint removed','success');
+    loadCheckpointsForSite(cpmSiteId);
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -1688,6 +2437,121 @@ async function sendReminders(){
   }catch(e){ toast(e.message,'error'); }
 }
 
+// ── Live Activity ─────────────────────────────────────────────────────────────
+const ACTIVITY_ICONS = {checkpoint:{i:'🚶',bg:'#dbeafe'}, incident:{i:'🚨',bg:'#fee2e2'}, signin:{i:'📝',bg:'#dcfce7'}};
+async function loadActivity(){
+  try{
+    const [feed] = await Promise.all([apiFetch('/api/activity')]);
+    renderActivityFeed(feed);
+    renderActivityMap();
+  }catch(e){ toast(e.message,'error'); }
+}
+function renderActivityFeed(feed){
+  const wrap = document.getElementById('activity-feed');
+  if(!feed.length){ wrap.innerHTML = `<div class="empty-state"><div class="ei">📡</div><p>No activity yet</p></div>`; return; }
+  wrap.innerHTML = feed.map(r=>{
+    const ic = ACTIVITY_ICONS[r.kind] || {i:'•',bg:'#eee'};
+    let main, sub;
+    if(r.kind==='checkpoint'){
+      main = `${r.guard_name} checked in at <strong>${r.label}</strong>`;
+      sub  = `${r.site_name} · ${r.distance_m!=null?Math.round(r.distance_m)+'m from checkpoint':''}`;
+    } else if(r.kind==='incident'){
+      main = `${r.guard_name} reported <strong>${r.label}</strong>`;
+      sub  = `${r.site_name} · <span class="badge badge-${r.status==='resolved'?'approved':r.status==='reviewing'?'pending':'rejected'}">${r.status}</span>`;
+    } else {
+      main = `${r.guard_name} signed in at <strong>${r.site_name}</strong>`;
+      sub  = r.location_verified ? `✅ Location verified${r.distance_m!=null?' ('+Math.round(r.distance_m)+'m)':''}` : 'No geofence configured for this site';
+    }
+    return `<div class="activity-row">
+      <div class="activity-icon" style="background:${ic.bg}">${ic.i}</div>
+      <div style="flex:1"><div class="activity-main">${main}</div><div class="activity-sub">${sub}</div></div>
+      <div class="activity-time">${fmtDateTime(r.at)}</div>
+    </div>`;
+  }).join('');
+}
+function renderActivityMap(){
+  const sites = allSitesAdmin.length ? allSitesAdmin : sitesData;
+  const withLoc = sites.filter(s=>s.lat!=null);
+  const map = getMap('activity-map', VIC_CENTER, 7);
+  if(withLoc.length){
+    withLoc.forEach(s=>{
+      L.circle([s.lat,s.lng], {radius:s.geofence_radius||200, color:'#1a2744', fillOpacity:.08}).addTo(map._group);
+      L.marker([s.lat,s.lng]).addTo(map._group).bindTooltip(`${s.name} (${s.client_name})`);
+    });
+    map.fitBounds(L.latLngBounds(withLoc.map(s=>[s.lat,s.lng])).pad(0.5));
+  }
+}
+let _activityTimer = setInterval(()=>{
+  if(document.getElementById('tab-activity')?.classList.contains('active')) loadActivity();
+}, 20000);
+
+// ── Incidents ─────────────────────────────────────────────────────────────────
+let incidentsData = [];
+async function loadIncidents(){
+  const status = document.getElementById('inc-f-status').value;
+  const p = new URLSearchParams(); if(status) p.set('status',status);
+  try{ incidentsData = await apiFetch('/api/incidents?'+p); renderIncidentsTable(); }
+  catch(e){ toast(e.message,'error'); }
+}
+function renderIncidentsTable(){
+  document.getElementById('incidents-tbody').innerHTML = incidentsData.length===0
+    ? `<tr><td colspan="7" class="empty-state"><div class="ei">🚨</div><p>No incidents reported</p></td></tr>`
+    : incidentsData.map(r=>`<tr>
+      <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.occurred_at)}</td>
+      <td><strong>${r.guard_name}</strong></td>
+      <td>${r.site_name}</td>
+      <td>${r.type}</td>
+      <td>${r.photo_filename?`<img class="thumb" src="/uploads/${r.photo_filename}" onclick="viewPhoto('/uploads/${r.photo_filename}')">`:'<span style="color:var(--muted);font-size:12px">—</span>'}</td>
+      <td><span class="badge badge-${r.status==='resolved'?'approved':r.status==='reviewing'?'pending':'rejected'}">${r.status}</span></td>
+      <td><button class="btn btn-xs btn-primary" onclick="openIncidentReview('${r.id}')">Review</button></td>
+    </tr>`).join('');
+}
+function openIncidentReview(id){
+  const r = incidentsData.find(x=>x.id===id); if(!r) return;
+  document.getElementById('incident-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div><div class="form-label">Guard</div><strong>${r.guard_name}</strong></div>
+      <div><div class="form-label">Site</div><strong>${r.site_name}</strong></div>
+      <div><div class="form-label">Type</div>${r.type}</div>
+      <div><div class="form-label">When</div>${fmtDateTime(r.occurred_at)}</div>
+    </div>
+    ${r.description?`<div class="form-group"><div class="form-label">Description</div><p style="font-size:13px">${r.description}</p></div>`:''}
+    ${r.lat!=null?`<div id="incident-review-map" class="map-box light" style="height:180px;margin-bottom:14px"></div>`:''}
+    ${r.photo_filename?`<div style="margin-bottom:16px"><div class="form-label">Photo</div>
+      <img src="/uploads/${r.photo_filename}?t=${Date.now()}" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="viewPhoto('/uploads/${r.photo_filename}')"></div>`:''}
+    <div class="form-group"><label class="form-label">Status</label>
+      <select id="inc-status" class="form-control">
+        <option value="open"${r.status==='open'?' selected':''}>Open</option>
+        <option value="reviewing"${r.status==='reviewing'?' selected':''}>Reviewing</option>
+        <option value="resolved"${r.status==='resolved'?' selected':''}>Resolved</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Admin Note</label>
+      <textarea id="inc-note" class="form-control" rows="2">${r.admin_note||''}</textarea>
+    </div>`;
+  const canEdit = ['superadmin','administrator','manager'].includes(currentRole);
+  document.getElementById('incident-footer').innerHTML = canEdit
+    ? `<button class="btn btn-ghost" onclick="closeModal('incident-modal')">Close</button>
+       <button class="btn btn-primary" onclick="saveIncidentReview('${id}')">Save</button>`
+    : `<button class="btn btn-ghost" onclick="closeModal('incident-modal')">Close</button>`;
+  openModal('incident-modal');
+  if(r.lat!=null){
+    setTimeout(()=>{
+      const map = getMap('incident-review-map', [r.lat,r.lng], 16);
+      L.marker([r.lat,r.lng]).addTo(map._group).bindTooltip('Reported here');
+    }, 50);
+  }
+}
+async function saveIncidentReview(id){
+  try{
+    await apiFetch(`/api/incidents/${id}`,{method:'PUT',body:JSON.stringify({
+      status:document.getElementById('inc-status').value,
+      admin_note:document.getElementById('inc-note').value
+    })});
+    toast('Incident updated','success'); closeModal('incident-modal'); loadIncidents();
+  }catch(e){ toast(e.message,'error'); }
+}
+
 // ── Admins ────────────────────────────────────────────────────────────────────
 let adminsData=[];
 async function loadAdmins(){
@@ -1699,12 +2563,26 @@ function populateRoleOptions(selectedRole){
   // Administrators cannot create/assign superadmin
   const allowSuperadmin = currentRole === 'superadmin';
   const roles = [
+    {val:'client',label:'Client (Read-only Portal)'},
     {val:'viewer',label:'Viewer'},
     {val:'manager',label:'Manager'},
     {val:'administrator',label:'Administrator'},
     {val:'superadmin',label:'Super Admin'},
   ].filter(r => allowSuperadmin || r.val !== 'superadmin');
   sel.innerHTML = roles.map(r=>`<option value="${r.val}"${r.val===selectedRole?' selected':''}>${r.label}</option>`).join('');
+  toggleClientSitesField();
+}
+function toggleClientSitesField(selectedSiteIds){
+  const isClient = document.getElementById('am-role').value === 'client';
+  document.getElementById('am-sites-wrap').style.display = isClient ? 'block' : 'none';
+  if(!isClient) return;
+  const chosen = new Set(selectedSiteIds||[]);
+  const list = document.getElementById('am-sites-list');
+  list.innerHTML = allSitesAdmin.length===0
+    ? '<p style="font-size:13px;color:var(--muted)">No sites yet — add a site first.</p>'
+    : allSitesAdmin.map(s=>`<label>
+        <input type="checkbox" class="am-site-chk" value="${s.id}" ${chosen.has(s.id)?'checked':''}> ${s.name} <span style="color:var(--muted)">(${s.client_name})</span>
+      </label>`).join('');
 }
 function renderAdminsTable(){
   document.getElementById('admins-tbody').innerHTML=adminsData.map(a=>{
@@ -1740,6 +2618,7 @@ function editAdmin(a){
   document.getElementById('am-name').value=a.name;
   document.getElementById('am-email').value=a.email;
   populateRoleOptions(a.role);
+  toggleClientSitesField(a.site_ids);
   document.getElementById('am-pw-wrap').style.display='none';
   document.getElementById('am-newpw-wrap').style.display='block';
   document.getElementById('am-active-wrap').style.display='block';
@@ -1758,6 +2637,9 @@ async function saveAdmin(){
   const body={name:document.getElementById('am-name').value,
     email:document.getElementById('am-email').value,
     role:document.getElementById('am-role').value};
+  if(body.role==='client'){
+    body.site_ids = [...document.querySelectorAll('.am-site-chk:checked')].map(c=>c.value);
+  }
   if(!id){
     body.password=document.getElementById('am-password').value;
     if(!body.name||!body.email||!body.password){ toast('All fields required','error'); return; }

@@ -5,7 +5,7 @@ Production | Multi-Admin | Roles | Audit Log | v3.0
 Run:  py server.py  →  http://localhost:5000
 """
 
-import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets
+import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
@@ -61,6 +61,16 @@ def hash_password(password, salt=None):
 def verify_password(password, stored_hash, salt):
     h, _ = hash_password(password, salt)
     return h == stored_hash
+
+# ─── Geolocation ──────────────────────────────────────────────────────────────
+def haversine_m(lat1, lng1, lat2, lng2):
+    """Great-circle distance between two points in metres."""
+    R = 6371000
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
 
 # ─── Email ────────────────────────────────────────────────────────────────────
 def send_email(to_email, subject, body_text):
@@ -167,6 +177,52 @@ def init_db():
             details    TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS checkpoints (
+            id         TEXT PRIMARY KEY,
+            site_id    TEXT NOT NULL,
+            name       TEXT NOT NULL,
+            lat        REAL NOT NULL,
+            lng        REAL NOT NULL,
+            radius_m   INTEGER DEFAULT 40,
+            sort_order INTEGER DEFAULT 0,
+            active     INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS checkpoint_scans (
+            id              TEXT PRIMARY KEY,
+            checkpoint_id   TEXT NOT NULL,
+            checkpoint_name TEXT,
+            guard_id        TEXT NOT NULL,
+            site_id         TEXT NOT NULL,
+            lat             REAL,
+            lng             REAL,
+            distance_m      REAL,
+            scanned_at      TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS incidents (
+            id             TEXT PRIMARY KEY,
+            guard_id       TEXT NOT NULL,
+            site_id        TEXT NOT NULL,
+            type           TEXT NOT NULL,
+            description    TEXT,
+            photo_filename TEXT,
+            lat            REAL,
+            lng            REAL,
+            status         TEXT DEFAULT 'open',
+            admin_note     TEXT,
+            reviewed_by    TEXT,
+            occurred_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at    TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS client_sites (
+            admin_id TEXT NOT NULL,
+            site_id  TEXT NOT NULL,
+            PRIMARY KEY (admin_id, site_id)
+        );
     ''')
     conn.commit()
 
@@ -185,6 +241,15 @@ def init_db():
         # admins table
         ("admins", "last_login",           "ALTER TABLE admins ADD COLUMN last_login TEXT"),
         ("admins", "must_change_password", "ALTER TABLE admins ADD COLUMN must_change_password INTEGER DEFAULT 0"),
+        # sites table — geofence for GPS sign-in verification
+        ("sites", "lat",             "ALTER TABLE sites ADD COLUMN lat REAL"),
+        ("sites", "lng",             "ALTER TABLE sites ADD COLUMN lng REAL"),
+        ("sites", "geofence_radius", "ALTER TABLE sites ADD COLUMN geofence_radius INTEGER DEFAULT 200"),
+        # submissions table — captured sign-in location
+        ("submissions", "lat",               "ALTER TABLE submissions ADD COLUMN lat REAL"),
+        ("submissions", "lng",               "ALTER TABLE submissions ADD COLUMN lng REAL"),
+        ("submissions", "distance_m",        "ALTER TABLE submissions ADD COLUMN distance_m REAL"),
+        ("submissions", "location_verified", "ALTER TABLE submissions ADD COLUMN location_verified INTEGER DEFAULT 0"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -418,10 +483,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def require_admin(self, min_role=None):
         s = self.get_session()
         if not s: self.err('Unauthorized', 401); return None
+        # Client accounts are read-only, site-scoped, and never fall through to admin routes
+        if s.get('role') == 'client':
+            self.err('Insufficient permissions', 403); return None
         role_rank = {'viewer':0,'manager':1,'administrator':2,'superadmin':3}
         if min_role and role_rank.get(s.get('role',''),0) < role_rank.get(min_role,0):
             self.err('Insufficient permissions', 403); return None
         return s
+
+    def require_client(self):
+        s = self.get_session()
+        if not s: self.err('Unauthorized', 401); return None
+        if s.get('role') != 'client':
+            self.err('Insufficient permissions', 403); return None
+        if s.get('must_change_password'):
+            self.err('Please set your password before continuing', 403); return None
+        return s
+
+    def client_site_ids(self, admin_id):
+        db = get_db()
+        ids = [r['site_id'] for r in db.execute(
+            'SELECT site_id FROM client_sites WHERE admin_id=?', (admin_id,)).fetchall()]
+        db.close(); return ids
 
     def serve_file(self, path, ct):
         if not os.path.exists(path):
@@ -499,6 +582,77 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 (gid,)).fetchall()))
             db.close(); return
 
+        if path == '/api/checkpoints':
+            site_id = qs.get('site_id',[None])[0]
+            if not site_id: self.err('site_id required'); return
+            db = get_db()
+            self.send_json(RL(db.execute(
+                'SELECT * FROM checkpoints WHERE site_id=? AND active=1 ORDER BY sort_order, name',
+                (site_id,)).fetchall()))
+            db.close(); return
+
+        # ── Client portal (read-only, site-scoped) ──
+        if path == '/api/client/me':
+            s3 = self.require_client()
+            if s3 is None: return
+            sites = RL(get_db().execute('''
+                SELECT s.* FROM sites s JOIN client_sites cs ON cs.site_id=s.id
+                WHERE cs.admin_id=? ORDER BY s.name''', (s3['admin_id'],)).fetchall())
+            self.send_json({'id':s3['admin_id'],'name':s3['name'],'email':s3['email'],'sites':sites}); return
+
+        if path == '/api/client/activity':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_ids = self.client_site_ids(s3['admin_id'])
+            if not site_ids: self.send_json([]); return
+            ph = ','.join('?'*len(site_ids))
+            db = get_db()
+            scans = RL(db.execute(f'''
+                SELECT 'checkpoint' as kind, cs.scanned_at as at, cs.checkpoint_name as label,
+                       g.name as guard_name, s.name as site_name, cs.distance_m
+                FROM checkpoint_scans cs
+                JOIN guards g ON g.id=cs.guard_id
+                JOIN sites s ON s.id=cs.site_id
+                WHERE cs.site_id IN ({ph}) ORDER BY cs.scanned_at DESC LIMIT 100''', site_ids).fetchall())
+            incidents = RL(db.execute(f'''
+                SELECT 'incident' as kind, i.occurred_at as at, i.type as label,
+                       g.name as guard_name, s.name as site_name, i.status
+                FROM incidents i
+                JOIN guards g ON g.id=i.guard_id
+                JOIN sites s ON s.id=i.site_id
+                WHERE i.site_id IN ({ph}) ORDER BY i.occurred_at DESC LIMIT 100''', site_ids).fetchall())
+            db.close()
+            feed = sorted(scans+incidents, key=lambda r:r['at'], reverse=True)[:100]
+            self.send_json(feed); return
+
+        if path == '/api/client/incidents':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_ids = self.client_site_ids(s3['admin_id'])
+            if not site_ids: self.send_json([]); return
+            ph = ','.join('?'*len(site_ids))
+            db = get_db()
+            rows = RL(db.execute(f'''
+                SELECT i.*, g.name as guard_name, s.name as site_name
+                FROM incidents i JOIN guards g ON g.id=i.guard_id JOIN sites s ON s.id=i.site_id
+                WHERE i.site_id IN ({ph}) ORDER BY i.occurred_at DESC''', site_ids).fetchall())
+            db.close(); self.send_json(rows); return
+
+        if path == '/api/client/submissions':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_ids = self.client_site_ids(s3['admin_id'])
+            if not site_ids: self.send_json([]); return
+            ph = ','.join('?'*len(site_ids))
+            db = get_db()
+            rows = RL(db.execute(f'''
+                SELECT sub.shift_date, sub.start_time, sub.end_time, sub.total_hours, sub.status,
+                       sub.location_verified, g.name as guard_name, s.name as site_name
+                FROM submissions sub JOIN guards g ON g.id=sub.guard_id JOIN sites s ON s.id=sub.site_id
+                WHERE sub.site_id IN ({ph}) AND sub.status='approved'
+                ORDER BY sub.shift_date DESC LIMIT 200''', site_ids).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/submissions/mine':
             gid = qs.get('guard_id',[None])[0]
             if not gid: self.err('guard_id required'); return
@@ -513,13 +667,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ''', (gid,)).fetchall())
             db.close(); self.send_json(rows); return
 
+        # /api/me is available to any authenticated role, including 'client'
+        if path == '/api/me':
+            s0 = self.get_session()
+            if not s0: self.err('Unauthorized', 401); return
+            self.send_json({'id':s0['admin_id'],'name':s0['name'],'email':s0['email'],'role':s0['role'],
+                            'must_change_password': s0.get('must_change_password', False)}); return
+
         # ── Admin-only below ──
         s = self.require_admin()
         if s is None: return
-
-        if path == '/api/me':
-            self.send_json({'id':s['admin_id'],'name':s['name'],'email':s['email'],'role':s['role'],
-                            'must_change_password': s.get('must_change_password', False)}); return
 
         # Block must_change_password sessions from all other admin GET endpoints
         if s.get('must_change_password'):
@@ -640,6 +797,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # Administrator cannot see superadmin accounts
             if s2.get('role') == 'administrator':
                 rows = [r for r in rows if r.get('role') != 'superadmin']
+            for r in rows:
+                if r['role'] == 'client':
+                    r['site_ids'] = self.client_site_ids(r['id'])
             db.close()
             self.send_json(rows); return
 
@@ -648,6 +808,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(RL(db.execute(
                 'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 300').fetchall()))
             db.close(); return
+
+        if path == '/api/incidents':
+            db = get_db(); where=[]; params=[]
+            if qs.get('status'):  where.append('i.status=?');  params.append(qs['status'][0])
+            if qs.get('site_id'): where.append('i.site_id=?'); params.append(qs['site_id'][0])
+            wc = ('WHERE '+' AND '.join(where)) if where else ''
+            rows = RL(db.execute(f'''
+                SELECT i.*, g.name as guard_name, s.name as site_name, s.client_name
+                FROM incidents i
+                JOIN guards g ON g.id=i.guard_id
+                JOIN sites  s ON s.id=i.site_id
+                {wc} ORDER BY i.occurred_at DESC LIMIT 300''', params).fetchall())
+            db.close(); self.send_json(rows); return
+
+        if path == '/api/activity':
+            db = get_db()
+            scans = RL(db.execute('''
+                SELECT 'checkpoint' as kind, cs.scanned_at as at, cs.checkpoint_name as label,
+                       cs.distance_m, g.name as guard_name, s.name as site_name, s.id as site_id
+                FROM checkpoint_scans cs
+                JOIN guards g ON g.id=cs.guard_id
+                JOIN sites  s ON s.id=cs.site_id
+                ORDER BY cs.scanned_at DESC LIMIT 60''').fetchall())
+            incidents = RL(db.execute('''
+                SELECT 'incident' as kind, i.occurred_at as at, i.type as label,
+                       i.status, g.name as guard_name, s.name as site_name, s.id as site_id
+                FROM incidents i
+                JOIN guards g ON g.id=i.guard_id
+                JOIN sites  s ON s.id=i.site_id
+                ORDER BY i.occurred_at DESC LIMIT 60''').fetchall())
+            signins = RL(db.execute('''
+                SELECT 'signin' as kind, sub.submitted_at as at, sub.location_verified,
+                       sub.distance_m, g.name as guard_name, s.name as site_name, s.id as site_id
+                FROM submissions sub
+                JOIN guards g ON g.id=sub.guard_id
+                JOIN sites  s ON s.id=sub.site_id
+                ORDER BY sub.submitted_at DESC LIMIT 60''').fetchall())
+            db.close()
+            feed = sorted(scans+incidents+signins, key=lambda r:r['at'], reverse=True)[:80]
+            self.send_json(feed); return
 
         self.send_response(404); self.end_headers()
 
@@ -701,20 +901,79 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == '/api/submissions':
             for f in ['guard_id','site_id','shift_date','start_time','end_time','total_hours']:
                 if not data.get(f): self.err(f'{f} required'); return
+            db = get_db()
+            site = R(db.execute('SELECT lat,lng,geofence_radius,name FROM sites WHERE id=?',
+                                (data['site_id'],)).fetchone())
+            lat = lng = dist = None
+            location_verified = 0
+            if site and site.get('lat') is not None and site.get('lng') is not None:
+                if data.get('lat') is None or data.get('lng') is None:
+                    db.close()
+                    self.err('Location access is required to sign in at this site. Please enable location and try again.', 403); return
+                lat, lng = float(data['lat']), float(data['lng'])
+                radius = site.get('geofence_radius') or 200
+                dist = haversine_m(site['lat'], site['lng'], lat, lng)
+                if dist > radius:
+                    db.close()
+                    self.err(f"You must be within {radius}m of {site['name']} to sign in. "
+                             f"You are currently {int(dist)}m away — move closer and try again.", 403); return
+                location_verified = 1
             photo = None
             if data.get('photo_b64') and data.get('photo_ext'):
                 photo = f"{uuid.uuid4()}.{data['photo_ext']}"
                 with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
                     f.write(base64.b64decode(data['photo_b64']))
-            sid = str(uuid.uuid4()); db = get_db()
+            sid = str(uuid.uuid4())
             db.execute('''INSERT INTO submissions
-                (id,guard_id,site_id,shift_date,start_time,end_time,total_hours,notes,photo_filename)
-                VALUES (?,?,?,?,?,?,?,?,?)''',
+                (id,guard_id,site_id,shift_date,start_time,end_time,total_hours,notes,photo_filename,
+                 lat,lng,distance_m,location_verified)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (sid,data['guard_id'],data['site_id'],data['shift_date'],
                  data['start_time'],data['end_time'],float(data['total_hours']),
-                 data.get('notes',''), photo))
+                 data.get('notes',''), photo, lat, lng, dist, location_verified))
             db.commit(); db.close()
             self.send_json({'id':sid,'message':'Shift submitted successfully!'}, 201); return
+
+        # Guard checks in at a patrol checkpoint — no auth needed, GPS-gated
+        if path == '/api/checkpoints/scan':
+            for f in ['checkpoint_id','guard_id','lat','lng']:
+                if data.get(f) is None: self.err(f'{f} required'); return
+            db = get_db()
+            cp = R(db.execute('SELECT * FROM checkpoints WHERE id=? AND active=1',
+                              (data['checkpoint_id'],)).fetchone())
+            if not cp:
+                db.close(); self.err('Checkpoint not found', 404); return
+            lat, lng = float(data['lat']), float(data['lng'])
+            dist = haversine_m(cp['lat'], cp['lng'], lat, lng)
+            radius = cp.get('radius_m') or 40
+            if dist > radius:
+                db.close()
+                self.err(f"You must be within {radius}m of '{cp['name']}' to check in. "
+                         f"You are currently {int(dist)}m away.", 403); return
+            scan_id = str(uuid.uuid4())
+            db.execute('''INSERT INTO checkpoint_scans
+                (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m)
+                VALUES (?,?,?,?,?,?,?,?)''',
+                (scan_id, cp['id'], cp['name'], data['guard_id'], cp['site_id'], lat, lng, dist))
+            db.commit(); db.close()
+            self.send_json({'ok':True,'id':scan_id,'distance_m':round(dist,1)}, 201); return
+
+        # Guard reports an incident — no auth needed
+        if path == '/api/incidents':
+            for f in ['guard_id','site_id','type']:
+                if not data.get(f): self.err(f'{f} required'); return
+            photo = None
+            if data.get('photo_b64') and data.get('photo_ext'):
+                photo = f"{uuid.uuid4()}.{data['photo_ext']}"
+                with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
+                    f.write(base64.b64decode(data['photo_b64']))
+            iid = str(uuid.uuid4()); db = get_db()
+            db.execute('''INSERT INTO incidents (id,guard_id,site_id,type,description,photo_filename,lat,lng)
+                          VALUES (?,?,?,?,?,?,?,?)''',
+                       (iid, data['guard_id'], data['site_id'], data['type'],
+                        data.get('description',''), photo, data.get('lat'), data.get('lng')))
+            db.commit(); db.close()
+            self.send_json({'id':iid,'message':'Incident reported.'}, 201); return
 
         # Reminder seen — no auth
         if path == '/api/reminders/seen':
@@ -725,12 +984,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 db.commit(); db.close()
             self.send_json({'ok':True}); return
 
-        # ── Admin-only below ──
-        s = self.require_admin()
-        if s is None: return
-
-        # ── First-login password setup ─────────────────────────────────────────
+        # ── First-login password setup — available to any authenticated role ────
         if path == '/api/setup-password':
+            s = self.get_session()
+            if not s: self.err('Unauthorized', 401); return
             if not s.get('must_change_password'):
                 self.err('No password change required for this session', 400); return
             new_pw  = data.get('new_password', '')
@@ -753,6 +1010,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'token': self.headers.get('X-Auth-Token',''),
                             'id': s['admin_id'], 'name': s['name'],
                             'role': s['role'], 'company': COMPANY_NAME}); return
+
+        # ── Admin-only below ──
+        s = self.require_admin()
+        if s is None: return
 
         # Block must_change_password sessions from all other admin POST endpoints
         if s.get('must_change_password'):
@@ -805,15 +1066,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not data.get('name') or not data.get('client_name'):
                 self.err('name and client_name required'); return
             sid = str(uuid.uuid4()); db = get_db()
-            db.execute('''INSERT INTO sites (id,name,client_name,address,default_rate,contact_name,contact_phone)
-                          VALUES (?,?,?,?,?,?,?)''',
+            db.execute('''INSERT INTO sites
+                (id,name,client_name,address,default_rate,contact_name,contact_phone,lat,lng,geofence_radius)
+                VALUES (?,?,?,?,?,?,?,?,?,?)''',
                        (sid,data['name'],data['client_name'],data.get('address',''),
                         float(data.get('default_rate',0)),
-                        data.get('contact_name',''),data.get('contact_phone','')))
+                        data.get('contact_name',''),data.get('contact_phone',''),
+                        data.get('lat'), data.get('lng'), int(data.get('geofence_radius') or 200)))
             db.commit()
             audit(db, s, 'SITE_CREATE', data['name']); db.commit()
             site = R(db.execute('SELECT * FROM sites WHERE id=?',(sid,)).fetchone()); db.close()
             self.send_json(site, 201); return
+
+        if path == '/api/checkpoints':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            for f in ['site_id','name','lat','lng']:
+                if data.get(f) is None: self.err(f'{f} required'); return
+            cid = str(uuid.uuid4()); db = get_db()
+            db.execute('''INSERT INTO checkpoints (id,site_id,name,lat,lng,radius_m,sort_order)
+                          VALUES (?,?,?,?,?,?,?)''',
+                       (cid, data['site_id'], data['name'], float(data['lat']), float(data['lng']),
+                        int(data.get('radius_m') or 40), int(data.get('sort_order') or 0)))
+            audit(db, s, 'CHECKPOINT_CREATE', f"{data['name']} (site={data['site_id']})"); db.commit()
+            cp = R(db.execute('SELECT * FROM checkpoints WHERE id=?',(cid,)).fetchone()); db.close()
+            self.send_json(cp, 201); return
 
         if path == '/api/rates':
             s2 = self.require_admin('manager')
@@ -883,6 +1160,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 db.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role,must_change_password)
                               VALUES (?,?,?,?,?,?,1)''',
                            (aid,data['name'],data['email'].lower(),h,salt,requested_role))
+                if requested_role == 'client':
+                    for site_id in (data.get('site_ids') or []):
+                        db.execute('INSERT OR IGNORE INTO client_sites (admin_id,site_id) VALUES (?,?)',
+                                   (aid, site_id))
                 audit(db, s, 'ADMIN_CREATE', data['email']); db.commit()
                 admin = R(db.execute(
                     'SELECT id,name,email,role,active,created_at FROM admins WHERE id=?',(aid,)).fetchone())
@@ -996,13 +1277,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not s2: return
             db = get_db()
             db.execute('''UPDATE sites SET name=?,client_name=?,address=?,default_rate=?,
-                          contact_name=?,contact_phone=?,active=? WHERE id=?''',
+                          contact_name=?,contact_phone=?,active=?,lat=?,lng=?,geofence_radius=? WHERE id=?''',
                        (data.get('name'),data.get('client_name'),data.get('address'),
                         float(data.get('default_rate',0)),data.get('contact_name'),
-                        data.get('contact_phone'),int(data.get('active',1)), m.group(1)))
+                        data.get('contact_phone'),int(data.get('active',1)),
+                        data.get('lat'), data.get('lng'), int(data.get('geofence_radius') or 200),
+                        m.group(1)))
             db.commit()
+            audit(db, s, 'SITE_UPDATE', data.get('name','')); db.commit()
             site = R(db.execute('SELECT * FROM sites WHERE id=?',(m.group(1),)).fetchone())
             db.close(); self.send_json(site); return
+
+        m = re.match(r'^/api/checkpoints/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            db.execute('''UPDATE checkpoints SET name=?,lat=?,lng=?,radius_m=?,sort_order=?,active=?
+                          WHERE id=?''',
+                       (data.get('name'), float(data.get('lat',0)), float(data.get('lng',0)),
+                        int(data.get('radius_m') or 40), int(data.get('sort_order') or 0),
+                        int(data.get('active',1)), m.group(1)))
+            db.commit()
+            cp = R(db.execute('SELECT * FROM checkpoints WHERE id=?',(m.group(1),)).fetchone())
+            db.close(); self.send_json(cp); return
+
+        m = re.match(r'^/api/incidents/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            updates=[]; params=[]
+            if 'status' in data:
+                updates += ['status=?','reviewed_by=?','reviewed_at=?']
+                params  += [data['status'], s['name'], datetime.now().isoformat()]
+            if 'admin_note' in data:
+                updates.append('admin_note=?'); params.append(data['admin_note'])
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE incidents SET {','.join(updates)} WHERE id=?", params)
+                audit(db, s, 'INCIDENT_UPDATE', m.group(1)); db.commit()
+            row = R(db.execute('''SELECT i.*,g.name as guard_name,s.name as site_name
+                FROM incidents i JOIN guards g ON g.id=i.guard_id
+                JOIN sites s ON s.id=i.site_id WHERE i.id=?''', (m.group(1),)).fetchone())
+            db.close(); self.send_json(row); return
 
         m = re.match(r'^/api/admins/([^/]+)$', path)
         if m:
@@ -1028,9 +1346,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 params.append(m.group(1))
                 db.execute(f"UPDATE admins SET {','.join(updates)} WHERE id=?", params)
                 audit(db, s, 'ADMIN_UPDATE', m.group(1)); db.commit()
+            if 'site_ids' in data:
+                db.execute('DELETE FROM client_sites WHERE admin_id=?', (m.group(1),))
+                for site_id in (data.get('site_ids') or []):
+                    db.execute('INSERT OR IGNORE INTO client_sites (admin_id,site_id) VALUES (?,?)',
+                               (m.group(1), site_id))
+                db.commit()
             row = R(db.execute(
                 'SELECT id,name,email,role,active,last_login,created_at FROM admins WHERE id=?',
                 (m.group(1),)).fetchone())
+            if row and row['role'] == 'client':
+                row['site_ids'] = self.client_site_ids(m.group(1))
             db.close(); self.send_json(row); return
 
         self.send_response(404); self.end_headers()
@@ -1061,6 +1387,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('DELETE FROM rates WHERE guard_id=? AND site_id=?', (m.group(1),m.group(2)))
             db.commit(); db.close(); self.send_json({'ok':True}); return
+        m = re.match(r'^/api/checkpoints/([^/]+)$', path)
+        if m:
+            db = get_db()
+            db.execute('DELETE FROM checkpoints WHERE id=?', (m.group(1),))
+            audit(db, s, 'CHECKPOINT_DELETE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True}); return
         self.send_response(404); self.end_headers()
 
     def do_OPTIONS(self):
