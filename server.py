@@ -8,7 +8,7 @@ Run:  py server.py  →  http://localhost:5000
 import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math
 import smtplib
 from email.mime.text import MIMEText
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs
 
 try:
@@ -71,6 +71,32 @@ def haversine_m(lat1, lng1, lat2, lng2):
     dl = math.radians(lng2 - lng1)
     a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
     return 2 * R * math.asin(math.sqrt(a))
+
+# ─── Shift scheduling / live status ──────────────────────────────────────────
+CLOCK_IN_GRACE_MINUTES = 30
+
+def shift_status(row, now=None):
+    """Computed live status for a scheduled shift — never stored, always derived."""
+    now = now or datetime.now()
+    if row.get('cancelled'):
+        return 'cancelled'
+    if row.get('clock_out_at'):
+        return 'completed'
+    if row.get('clock_in_at'):
+        return 'in_progress'
+    try:
+        start_dt = datetime.strptime(f"{row['shift_date']} {row['start_time']}", '%Y-%m-%d %H:%M')
+    except ValueError:
+        return 'scheduled'
+    if now > start_dt + timedelta(minutes=CLOCK_IN_GRACE_MINUTES):
+        return 'missed'
+    return 'scheduled'
+
+def with_shift_status(rows):
+    now = datetime.now()
+    for r in rows:
+        r['status'] = shift_status(r, now)
+    return rows
 
 # ─── Email ────────────────────────────────────────────────────────────────────
 def send_email(to_email, subject, body_text):
@@ -222,6 +248,29 @@ def init_db():
             admin_id TEXT NOT NULL,
             site_id  TEXT NOT NULL,
             PRIMARY KEY (admin_id, site_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS shifts (
+            id                  TEXT PRIMARY KEY,
+            guard_id            TEXT NOT NULL,
+            site_id             TEXT NOT NULL,
+            shift_date          TEXT NOT NULL,
+            start_time          TEXT NOT NULL,
+            end_time            TEXT NOT NULL,
+            position            TEXT DEFAULT '',
+            notes               TEXT DEFAULT '',
+            clock_in_at         TEXT,
+            clock_in_lat        REAL,
+            clock_in_lng        REAL,
+            clock_in_verified   INTEGER DEFAULT 0,
+            clock_out_at        TEXT,
+            clock_out_lat       REAL,
+            clock_out_lng       REAL,
+            clock_out_verified  INTEGER DEFAULT 0,
+            submission_id       TEXT,
+            cancelled           INTEGER DEFAULT 0,
+            created_by          TEXT,
+            created_at          TEXT DEFAULT CURRENT_TIMESTAMP
         );
     ''')
     conn.commit()
@@ -667,6 +716,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ''', (gid,)).fetchall())
             db.close(); self.send_json(rows); return
 
+        # Guard's assigned shifts (roster) — no auth needed
+        if path == '/api/shifts/mine':
+            gid = qs.get('guard_id',[None])[0]
+            if not gid: self.err('guard_id required'); return
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT sh.*, s.name as site_name, s.client_name, s.address,
+                       s.lat as site_lat, s.lng as site_lng, s.geofence_radius
+                FROM shifts sh
+                JOIN sites s ON s.id=sh.site_id
+                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day') AND sh.cancelled=0
+                ORDER BY sh.shift_date ASC, sh.start_time ASC LIMIT 30
+            ''', (gid,)).fetchall())
+            db.close(); self.send_json(with_shift_status(rows)); return
+
         # /api/me is available to any authenticated role, including 'client'
         if path == '/api/me':
             s0 = self.get_session()
@@ -849,6 +913,45 @@ class Handler(http.server.BaseHTTPRequestHandler):
             feed = sorted(scans+incidents+signins, key=lambda r:r['at'], reverse=True)[:80]
             self.send_json(feed); return
 
+        if path == '/api/shifts':
+            db = get_db(); where=[]; params=[]
+            if qs.get('date_from'): where.append('sh.shift_date>=?'); params.append(qs['date_from'][0])
+            if qs.get('date_to'):   where.append('sh.shift_date<=?'); params.append(qs['date_to'][0])
+            if qs.get('guard_id'):  where.append('sh.guard_id=?');    params.append(qs['guard_id'][0])
+            if qs.get('site_id'):   where.append('sh.site_id=?');     params.append(qs['site_id'][0])
+            wc = ('WHERE '+' AND '.join(where)) if where else ''
+            rows = RL(db.execute(f'''
+                SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+                FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id
+                JOIN sites  s ON s.id=sh.site_id
+                {wc} ORDER BY sh.shift_date DESC, sh.start_time DESC LIMIT 500
+            ''', params).fetchall())
+            db.close()
+            rows = with_shift_status(rows)
+            status_f = qs.get('status',[None])[0]
+            if status_f: rows = [r for r in rows if r['status']==status_f]
+            self.send_json(rows); return
+
+        if path == '/api/shifts/live':
+            today = datetime.now().strftime('%Y-%m-%d')
+            date_from = qs.get('date_from',[today])[0]
+            date_to   = qs.get('date_to',[today])[0]
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+                FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id
+                JOIN sites  s ON s.id=sh.site_id
+                WHERE sh.shift_date>=? AND sh.shift_date<=? AND sh.cancelled=0
+                ORDER BY sh.shift_date ASC, sh.start_time ASC
+            ''', (date_from, date_to)).fetchall())
+            db.close()
+            rows = with_shift_status(rows)
+            counts = {'scheduled':0,'missed':0,'in_progress':0,'completed':0}
+            for r in rows: counts[r['status']] = counts.get(r['status'],0) + 1
+            self.send_json({'shifts':rows, 'counts':counts, 'total':len(rows)}); return
+
         self.send_response(404); self.end_headers()
 
     # ── POST ───────────────────────────────────────────────────────────────────
@@ -975,6 +1078,89 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.commit(); db.close()
             self.send_json({'id':iid,'message':'Incident reported.'}, 201); return
 
+        # Guard clocks in / out of a scheduled shift — no auth needed, GPS-gated
+        m_ci = re.match(r'^/api/shifts/([^/]+)/clock-in$', path)
+        if m_ci:
+            db = get_db()
+            sh = R(db.execute('''SELECT sh.*, s.lat as site_lat, s.lng as site_lng,
+                                  s.geofence_radius, s.name as site_name
+                                  FROM shifts sh JOIN sites s ON s.id=sh.site_id WHERE sh.id=?''',
+                              (m_ci.group(1),)).fetchone())
+            if not sh: db.close(); self.err('Shift not found', 404); return
+            if sh['cancelled']: db.close(); self.err('This shift has been cancelled', 400); return
+            if data.get('guard_id') != sh['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
+            if sh['clock_in_at']: db.close(); self.err('Already clocked in to this shift', 400); return
+            lat = lng = dist = None
+            verified = 0
+            if sh['site_lat'] is not None and sh['site_lng'] is not None:
+                if data.get('lat') is None or data.get('lng') is None:
+                    db.close(); self.err('Location access is required to clock in at this site.', 403); return
+                lat, lng = float(data['lat']), float(data['lng'])
+                radius = sh['geofence_radius'] or 200
+                dist = haversine_m(sh['site_lat'], sh['site_lng'], lat, lng)
+                if dist > radius:
+                    db.close()
+                    self.err(f"You must be within {radius}m of {sh['site_name']} to clock in. "
+                             f"You are currently {int(dist)}m away.", 403); return
+                verified = 1
+            db.execute('''UPDATE shifts SET clock_in_at=?, clock_in_lat=?, clock_in_lng=?, clock_in_verified=?
+                          WHERE id=?''', (datetime.now().isoformat(), lat, lng, verified, m_ci.group(1)))
+            db.commit()
+            row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.id=?''', (m_ci.group(1),)).fetchone())])[0]
+            db.close(); self.send_json(row); return
+
+        m_co = re.match(r'^/api/shifts/([^/]+)/clock-out$', path)
+        if m_co:
+            db = get_db()
+            sh = R(db.execute('''SELECT sh.*, s.lat as site_lat, s.lng as site_lng,
+                                  s.geofence_radius, s.name as site_name
+                                  FROM shifts sh JOIN sites s ON s.id=sh.site_id WHERE sh.id=?''',
+                              (m_co.group(1),)).fetchone())
+            if not sh: db.close(); self.err('Shift not found', 404); return
+            if data.get('guard_id') != sh['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
+            if not sh['clock_in_at']: db.close(); self.err('You have not clocked in to this shift yet', 400); return
+            if sh['clock_out_at']: db.close(); self.err('Already clocked out of this shift', 400); return
+            lat = lng = dist = None
+            verified = 0
+            if sh['site_lat'] is not None and sh['site_lng'] is not None:
+                if data.get('lat') is None or data.get('lng') is None:
+                    db.close(); self.err('Location access is required to clock out at this site.', 403); return
+                lat, lng = float(data['lat']), float(data['lng'])
+                radius = sh['geofence_radius'] or 200
+                dist = haversine_m(sh['site_lat'], sh['site_lng'], lat, lng)
+                if dist > radius:
+                    db.close()
+                    self.err(f"You must be within {radius}m of {sh['site_name']} to clock out. "
+                             f"You are currently {int(dist)}m away.", 403); return
+                verified = 1
+            now = datetime.now()
+            clock_in_dt = datetime.fromisoformat(sh['clock_in_at'])
+            total_hours = round((now - clock_in_dt).total_seconds() / 3600, 2)
+            photo = None
+            if data.get('photo_b64') and data.get('photo_ext'):
+                photo = f"{uuid.uuid4()}.{data['photo_ext']}"
+                with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
+                    f.write(base64.b64decode(data['photo_b64']))
+            sub_id = str(uuid.uuid4())
+            location_verified = 1 if (sh['clock_in_verified'] and verified) else 0
+            db.execute('''INSERT INTO submissions
+                (id,guard_id,site_id,shift_date,start_time,end_time,total_hours,notes,photo_filename,
+                 lat,lng,distance_m,location_verified)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (sub_id, sh['guard_id'], sh['site_id'], sh['shift_date'],
+                 clock_in_dt.strftime('%H:%M'), now.strftime('%H:%M'), total_hours,
+                 data.get('notes',''), photo, lat, lng, dist, location_verified))
+            db.execute('''UPDATE shifts SET clock_out_at=?, clock_out_lat=?, clock_out_lng=?,
+                          clock_out_verified=?, submission_id=? WHERE id=?''',
+                       (now.isoformat(), lat, lng, verified, sub_id, m_co.group(1)))
+            db.commit()
+            row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.id=?''', (m_co.group(1),)).fetchone())])[0]
+            db.close(); self.send_json({**row, 'submission_id': sub_id, 'total_hours': total_hours}); return
+
         # Reminder seen — no auth
         if path == '/api/reminders/seen':
             rid = data.get('id')
@@ -1091,6 +1277,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s, 'CHECKPOINT_CREATE', f"{data['name']} (site={data['site_id']})"); db.commit()
             cp = R(db.execute('SELECT * FROM checkpoints WHERE id=?',(cid,)).fetchone()); db.close()
             self.send_json(cp, 201); return
+
+        if path == '/api/shifts':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            for f in ['guard_id','site_id','shift_date','start_time','end_time']:
+                if not data.get(f): self.err(f'{f} required'); return
+            shid = str(uuid.uuid4()); db = get_db()
+            db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
+                          position,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)''',
+                       (shid, data['guard_id'], data['site_id'], data['shift_date'],
+                        data['start_time'], data['end_time'], data.get('position',''),
+                        data.get('notes',''), s['name']))
+            audit(db, s, 'SHIFT_CREATE', f"{data['shift_date']} {data['start_time']}-{data['end_time']}"); db.commit()
+            row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.id=?''', (shid,)).fetchone())])[0]
+            db.close(); self.send_json(row, 201); return
 
         if path == '/api/rates':
             s2 = self.require_admin('manager')
@@ -1302,6 +1505,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cp = R(db.execute('SELECT * FROM checkpoints WHERE id=?',(m.group(1),)).fetchone())
             db.close(); self.send_json(cp); return
 
+        m = re.match(r'^/api/shifts/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            updates=[]; params=[]
+            for f in ('guard_id','site_id','shift_date','start_time','end_time','position','notes'):
+                if f in data: updates.append(f'{f}=?'); params.append(data[f])
+            if 'cancelled' in data: updates.append('cancelled=?'); params.append(int(data['cancelled']))
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE shifts SET {','.join(updates)} WHERE id=?", params)
+                audit(db, s, 'SHIFT_UPDATE', m.group(1)); db.commit()
+            row = R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.id=?''', (m.group(1),)).fetchone())
+            db.close()
+            self.send_json(with_shift_status([row])[0] if row else None); return
+
         m = re.match(r'^/api/incidents/([^/]+)$', path)
         if m:
             s2 = self.require_admin('manager')
@@ -1392,6 +1614,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('DELETE FROM checkpoints WHERE id=?', (m.group(1),))
             audit(db, s, 'CHECKPOINT_DELETE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+        m = re.match(r'^/api/shifts/([^/]+)$', path)
+        if m:
+            db = get_db()
+            db.execute('DELETE FROM shifts WHERE id=?', (m.group(1),))
+            audit(db, s, 'SHIFT_DELETE', m.group(1)); db.commit(); db.close()
             self.send_json({'ok':True}); return
         self.send_response(404); self.end_headers()
 

@@ -307,14 +307,7 @@ tr:hover td{background:#f8fafc}
         <span id="guard-logo-emoji" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">🦉</span>
       </div>
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
-      <div class="guard-subtitle">Guard Shift Submission</div>
-    </div>
-
-    <!-- Step indicators -->
-    <div class="steps" id="steps">
-      <div class="step-dot active" id="dot-0"></div>
-      <div class="step-dot" id="dot-1"></div>
-      <div class="step-dot" id="dot-2"></div>
+      <div class="guard-subtitle">Guard Portal</div>
     </div>
 
     <!-- Step 0: Name -->
@@ -343,8 +336,8 @@ tr:hover td{background:#f8fafc}
       <div class="step-title">What would you like to do?</div>
       <div class="mode-grid">
         <button class="mode-btn" onclick="startShiftFlow()">
-          <span class="mi">📝</span>
-          <span><div class="mt">Submit Shift Report</div><div class="ms">Log your hours &amp; upload a timesheet photo</div></span>
+          <span class="mi">🕐</span>
+          <span><div class="mt">My Shifts</div><div class="ms">View your roster &amp; clock in / clock out</div></span>
         </button>
         <button class="mode-btn" onclick="startPatrolFlow()">
           <span class="mi">🚶</span>
@@ -358,82 +351,44 @@ tr:hover td{background:#f8fafc}
       <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="backToGuardSelect()">← Back</button>
     </div>
 
-    <!-- Step 1: Shift Details -->
-    <div class="guard-card hidden" id="step-1">
-      <div class="step-title">Shift Details</div>
-      <div class="form-group">
-        <label class="form-label">Site</label>
-        <div class="search-wrap">
-          <input type="text" id="site-input" class="form-control" placeholder="Search site name..." autocomplete="off"
-                 oninput="filterSites(this.value)" onfocus="filterSites(this.value)" onblur="setTimeout(()=>closeSiteDD(),200)">
-          <div id="site-dropdown" class="search-dropdown hidden"></div>
-        </div>
-        <div id="site-pill" class="hidden" style="margin-top:8px">
-          <div class="selected-pill">
-            <span id="site-pill-name"></span>
-            <button onclick="clearSite()">✕</button>
-          </div>
-        </div>
-      </div>
-      <div id="geo-status" class="geo-status hidden"></div>
-      <div id="geo-map" class="map-box hidden" style="height:150px"></div>
-      <div class="form-group">
-        <label class="form-label">Date</label>
-        <input type="date" id="shift-date" class="form-control">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Start Time</label>
-          <input type="time" id="start-time" class="form-control" oninput="calcHours()">
-        </div>
-        <div class="form-group">
-          <label class="form-label">End Time</label>
-          <input type="time" id="end-time" class="form-control" oninput="calcHours()">
-        </div>
-      </div>
-      <div class="hours-display" id="hours-display">0.00 hrs</div>
-      <div class="form-group" style="margin-top:16px">
-        <label class="form-label">Notes (optional)</label>
-        <textarea id="notes" class="form-control" rows="2" placeholder="Any incidents or additional info..."></textarea>
-      </div>
-      <div class="nav-btns">
-        <button class="nav-btn nav-back" onclick="showModeMenu()">← Back</button>
-        <button class="nav-btn nav-next" onclick="goStep(2)">Next →</button>
-      </div>
+    <!-- My Shifts (roster + clock in/out) -->
+    <div class="guard-card hidden" id="step-myshifts">
+      <div class="step-title">🕐 My Shifts</div>
+      <div id="myshifts-status" class="geo-status hidden"></div>
+      <div id="myshifts-list"></div>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
-    <!-- Step 2: Photo -->
-    <div class="guard-card hidden" id="step-2">
-      <div class="step-title">Upload Photo</div>
-      <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px">Take a photo of the signed timesheet or upload from your gallery.</p>
+    <!-- Clock Out -->
+    <div class="guard-card hidden" id="step-clockout">
+      <div class="step-title">Clock Out — <span id="co-site-name"></span></div>
+      <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px">Optional: attach a photo and any notes before finishing this shift.</p>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <textarea id="co-notes" class="form-control" rows="2" placeholder="Any incidents or additional info..."></textarea>
+      </div>
       <div class="photo-btns">
-        <label class="photo-btn" id="cam-btn">
-          <span class="icon">📷</span>
-          <span>Take Photo</span>
-          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(this,'cam')">
+        <label class="photo-btn" id="co-cam-btn">
+          <span class="icon">📷</span><span>Take Photo</span>
+          <input type="file" accept="image/*" capture="environment" style="display:none" onchange="handleClockOutPhoto(this,'cam')">
         </label>
-        <label class="photo-btn" id="gal-btn">
-          <span class="icon">🖼️</span>
-          <span>From Gallery</span>
-          <input type="file" accept="image/*" style="display:none" onchange="handlePhoto(this,'gal')">
+        <label class="photo-btn" id="co-gal-btn">
+          <span class="icon">🖼️</span><span>From Gallery</span>
+          <input type="file" accept="image/*" style="display:none" onchange="handleClockOutPhoto(this,'gal')">
         </label>
       </div>
-      <img id="photo-preview" class="photo-preview hidden" src="" alt="">
-      <button class="submit-btn" id="submit-btn" onclick="submitShift()">✓ Submit Shift</button>
-      <div class="nav-btns">
-        <button class="nav-btn nav-back" onclick="goStep(1)">← Back</button>
-        <button class="nav-btn nav-next" onclick="submitShift()" style="background:rgba(255,255,255,.06)">Skip Photo & Submit</button>
-      </div>
+      <img id="co-photo-preview" class="photo-preview hidden" src="" alt="">
+      <button class="submit-btn" id="co-submit-btn" onclick="confirmClockOut()">✓ Confirm Clock Out</button>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showGuardCard('step-myshifts')">← Back</button>
     </div>
 
     <!-- Success -->
     <div class="guard-card hidden" id="step-success">
       <div class="success-card">
         <div class="success-icon">✅</div>
-        <div class="success-title">Shift Submitted!</div>
-        <div class="success-sub">Your shift has been recorded and is pending review.</div>
-        <button class="nav-btn nav-next" onclick="resetForm()" style="width:100%;margin-top:4px">+ Submit Another Shift</button>
-        <div class="shifts-mini" id="recent-shifts"></div>
+        <div class="success-title" id="success-title">Shift Completed!</div>
+        <div class="success-sub" id="success-sub">Your hours have been recorded and are pending review.</div>
+        <button class="nav-btn nav-next" style="width:100%;margin-top:4px" onclick="startShiftFlow()">← Back to My Shifts</button>
       </div>
     </div>
 
@@ -562,6 +517,7 @@ tr:hover td{background:#f8fafc}
 
   <div class="tabs" id="admin-tabs">
     <button class="tab-btn active" onclick="showTab('dashboard')" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab-btn" onclick="showTab('schedule')" data-tab="schedule">🗓️ Schedule</button>
     <button class="tab-btn" onclick="showTab('submissions')" data-tab="submissions">📋 Submissions</button>
     <button class="tab-btn" onclick="showTab('guards')" data-tab="guards">👮 Guards</button>
     <button class="tab-btn" onclick="showTab('sites')" data-tab="sites">📍 Sites</button>
@@ -585,6 +541,19 @@ tr:hover td{background:#f8fafc}
         <div class="stat-card"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></div>
         <div class="stat-card"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></div>
       </div>
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head">
+          <span class="section-title">Live Operations</span>
+          <span id="liveops-counts" style="font-size:12px;color:var(--muted);font-weight:600"></span>
+          <button class="btn btn-ghost btn-sm" onclick="loadLiveOps()">↻ Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Site</th><th>Name</th><th>Position</th><th>Status</th><th>Start Time</th><th>End Time</th><th>Verification</th></tr></thead>
+            <tbody id="liveops-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="section">
         <div class="section-head"><span class="section-title">Recent Submissions</span>
           <button class="btn btn-primary btn-sm" onclick="showTab('submissions')">View All</button>
@@ -593,6 +562,35 @@ tr:hover td{background:#f8fafc}
           <table>
             <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Hours</th><th>Status</th><th>Submitted</th></tr></thead>
             <tbody id="dash-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div id="tab-schedule" class="tab-content">
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">Shift Schedule</span>
+          <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
+        </div>
+        <div class="filter-bar">
+          <input type="date" id="sch-from" class="form-control" style="width:auto" onchange="loadSchedule()">
+          <input type="date" id="sch-to" class="form-control" style="width:auto" onchange="loadSchedule()">
+          <select id="sch-status" onchange="loadSchedule()">
+            <option value="">All Status</option>
+            <option value="scheduled">Awaiting Clock In</option>
+            <option value="missed">Missed Clock In</option>
+            <option value="in_progress">Clocked In</option>
+            <option value="completed">Clocked Out</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadSchedule()">↻ Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Position</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="schedule-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -938,6 +936,33 @@ tr:hover td{background:#f8fafc}
   </div>
 </div>
 
+<!-- Shift (schedule) modal -->
+<div id="shift-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="shift-modal-title">Add Shift</span><button class="modal-close" onclick="closeModal('shift-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="shm-id">
+      <div class="form-group"><label class="form-label">Guard *</label>
+        <select id="shm-guard" class="form-control"></select>
+      </div>
+      <div class="form-group"><label class="form-label">Site *</label>
+        <select id="shm-site" class="form-control"></select>
+      </div>
+      <div class="form-group"><label class="form-label">Position (optional)</label><input id="shm-position" class="form-control" placeholder="e.g. Static Guard, Mobile Patrol"></div>
+      <div class="form-group"><label class="form-label">Date *</label><input type="date" id="shm-date" class="form-control"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Start Time *</label><input type="time" id="shm-start" class="form-control"></div>
+        <div class="form-group"><label class="form-label">End Time *</label><input type="time" id="shm-end" class="form-control"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea id="shm-notes" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveShift()">Save Shift</button>
+    </div>
+  </div>
+</div>
+
 <!-- Guard modal -->
 <div id="guard-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -1150,9 +1175,8 @@ tr:hover td{background:#f8fafc}
 let authToken = localStorage.getItem('sg_token') || null;
 let currentRole = null;
 let guardsData = [], sitesData = [], allGuardsAdmin = [], allSitesAdmin = [];
-let selectedGuard = null, selectedSite = null;
+let selectedGuard = null;
 let photoB64 = null, photoExt = null;
-let currentStep = 0;
 let pendingReminder = null;
 let bulkSelected = new Set();
 let ratesData = [];
@@ -1284,6 +1308,7 @@ function showTab(name){
   else if(name==='rates')   loadRates();
   else if(name==='invoices')loadInvoicesTab();
   else if(name==='reminders')loadRemindersTab();
+  else if(name==='schedule') loadSchedule();
   else if(name==='activity') loadActivity();
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
@@ -1346,18 +1371,10 @@ async function loadGuardsAndSites(){
   }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-menu','step-1','step-2','step-success','step-patrol','step-incident','step-incident-success'];
+const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
-  const dotsWrap = document.getElementById('steps');
-  const dotIdx = {'step-0':0,'step-1':1,'step-2':2}[id];
-  if(dotIdx!==undefined){
-    dotsWrap.style.display='flex';
-    document.querySelectorAll('.step-dot').forEach((d,i)=>{ d.classList.toggle('active', i===dotIdx); d.classList.toggle('done', i<dotIdx); });
-  } else {
-    dotsWrap.style.display='none';
-  }
 }
 function showModeMenu(){
   if(!selectedGuard){ toast('Please select your name','error'); return; }
@@ -1365,25 +1382,11 @@ function showModeMenu(){
 }
 function backToGuardSelect(){ showGuardCard('step-0'); }
 function startShiftFlow(){
-  currentStep = 1;
-  document.getElementById('shift-date').valueAsDate = new Date();
-  showGuardCard('step-1');
+  showGuardCard('step-myshifts');
+  loadMyShifts();
 }
 function startPatrolFlow(){ showGuardCard('step-patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
-
-function goStep(n){
-  if(n===2){
-    if(!selectedSite){ toast('Please select a site','error'); return; }
-    if(!document.getElementById('shift-date').value){ toast('Please enter date','error'); return; }
-    if(!document.getElementById('start-time').value){ toast('Please enter start time','error'); return; }
-    if(!document.getElementById('end-time').value){ toast('Please enter end time','error'); return; }
-    if(parseFloat(document.getElementById('hours-display').textContent)<0){ toast('End time must be after start time','error'); return; }
-    if(currentSiteGeofenced && !geoVerified){ toast('You must be at the site to continue. Verify your location above.','error'); return; }
-  }
-  currentStep = n;
-  showGuardCard(n===1?'step-1':'step-2');
-}
 
 // ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
 const VIC_CENTER = [-37.4713, 144.7852];
@@ -1416,42 +1419,124 @@ function renderGeoMap(elId, site, guardLat, guardLng, radius){
   }
 }
 
-// ── Geofenced sign-in ─────────────────────────────────────────────────────────
-let currentGeo = null, currentSiteGeofenced = false, geoVerified = false;
-function checkSiteGeofence(){
-  const site = sitesData.find(s=>s.id===selectedSite.id);
-  const statusEl = document.getElementById('geo-status');
-  const mapEl = document.getElementById('geo-map');
-  geoVerified = false; currentGeo = null;
-  if(!site || site.lat==null || site.lng==null){
-    currentSiteGeofenced = false;
-    statusEl.classList.add('hidden');
-    mapEl.classList.add('hidden');
+// ── My Shifts (roster + clock in/out) ────────────────────────────────────────
+let myShiftsData = [];
+const SHIFT_STATUS_LABEL = {
+  scheduled:  {label:'Awaiting Clock In', badge:'pending'},
+  missed:     {label:'Missed Clock In',   badge:'rejected'},
+  in_progress:{label:'Clocked In — On Site', badge:'approved'},
+  completed:  {label:'Clocked Out',       badge:'role-viewer'},
+  cancelled:  {label:'Cancelled',         badge:'rejected'},
+};
+async function loadMyShifts(){
+  if(!selectedGuard) return;
+  const listEl = document.getElementById('myshifts-list');
+  listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
+  try{
+    myShiftsData = await apiFetch(`/api/shifts/mine?guard_id=${selectedGuard.id}`);
+    renderMyShiftsList();
+  }catch(e){
+    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Could not load your shifts.</p>`;
+  }
+}
+function renderMyShiftsList(){
+  const listEl = document.getElementById('myshifts-list');
+  if(!myShiftsData.length){
+    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">No shifts scheduled for you right now. Check back later or contact the office.</p>`;
     return;
   }
-  currentSiteGeofenced = true;
-  statusEl.classList.remove('hidden');
-  statusEl.className = 'geo-status wait';
-  statusEl.innerHTML = '📍 Checking your location…';
-  if(!navigator.geolocation){
-    statusEl.className = 'geo-status bad';
-    statusEl.innerHTML = '⚠️ Your device does not support location. Cannot sign in at this site.';
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(pos=>{
-    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    currentGeo = {lat,lng};
-    const dist = haversineM(site.lat, site.lng, lat, lng);
-    const radius = site.geofence_radius || 200;
-    geoVerified = dist <= radius;
-    statusEl.className = 'geo-status ' + (geoVerified?'ok':'bad');
-    statusEl.innerHTML = geoVerified
-      ? `✅ You're at ${site.name} (${Math.round(dist)}m away)`
-      : `❌ You are ${Math.round(dist)}m from ${site.name} — move within ${radius}m to sign in. <a href="#" onclick="checkSiteGeofence();return false" style="color:inherit">Retry</a>`;
-    renderGeoMap('geo-map', site, lat, lng, radius);
+  listEl.innerHTML = myShiftsData.map(sh=>{
+    const st = SHIFT_STATUS_LABEL[sh.status] || {label:sh.status, badge:'pending'};
+    let action = '';
+    if(sh.status==='scheduled' || sh.status==='missed'){
+      action = `<button class="btn btn-sm btn-gold" onclick="clockIn('${sh.id}')">Clock In</button>`;
+    } else if(sh.status==='in_progress'){
+      action = `<button class="btn btn-sm btn-gold" onclick="openClockOut('${sh.id}')">Clock Out</button>`;
+    } else if(sh.status==='completed'){
+      action = `<span style="font-size:11px;color:rgba(255,255,255,.4)">✓ Done</span>`;
+    }
+    return `<div class="cp-row ${sh.status==='completed'?'done':''}">
+      <div>
+        <div class="cp-name">${sh.site_name}${sh.position?' · '+sh.position:''}</div>
+        <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time}
+          <span class="badge badge-${st.badge}" style="margin-left:6px">${st.label}</span>
+        </div>
+      </div>
+      ${action}
+    </div>`;
+  }).join('');
+}
+function clockIn(shiftId){
+  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  const statusEl = document.getElementById('myshifts-status');
+  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    try{
+      await apiFetch(`/api/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify({
+        guard_id:selectedGuard.id, lat:pos.coords.latitude, lng:pos.coords.longitude
+      })});
+      statusEl.classList.add('hidden');
+      toast('Clocked in ✓','success');
+      loadMyShifts();
+    }catch(e){ statusEl.className='geo-status bad'; statusEl.innerHTML=e.message; }
   }, err=>{
-    statusEl.className = 'geo-status bad';
-    statusEl.innerHTML = `⚠️ Could not get your location (${err.message}). Location access is required to sign in at this site. <a href="#" onclick="checkSiteGeofence();return false" style="color:inherit">Retry</a>`;
+    statusEl.className='geo-status bad'; statusEl.innerHTML='⚠️ Could not get your location: '+err.message;
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
+}
+
+let clockOutShiftId = null;
+function openClockOut(shiftId){
+  const sh = myShiftsData.find(s=>s.id===shiftId); if(!sh) return;
+  clockOutShiftId = shiftId;
+  document.getElementById('co-site-name').textContent = sh.site_name;
+  document.getElementById('co-notes').value='';
+  document.getElementById('co-photo-preview').classList.add('hidden');
+  document.getElementById('co-photo-preview').src='';
+  ['co-cam-btn','co-gal-btn'].forEach(id=>document.getElementById(id).classList.remove('has-photo'));
+  photoB64=null; photoExt=null;
+  document.getElementById('co-geo-status').classList.add('hidden');
+  document.getElementById('co-submit-btn').disabled=false;
+  document.getElementById('co-submit-btn').textContent='✓ Confirm Clock Out';
+  showGuardCard('step-clockout');
+}
+function handleClockOutPhoto(input, src){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    photoB64 = e.target.result.split(',')[1];
+    photoExt = file.name.split('.').pop()||'jpg';
+    document.getElementById('co-photo-preview').src = e.target.result;
+    document.getElementById('co-photo-preview').classList.remove('hidden');
+    document.getElementById(src==='cam'?'co-cam-btn':'co-gal-btn').classList.add('has-photo');
+    toast('Photo attached ✓','success');
+  };
+  reader.readAsDataURL(file);
+}
+async function confirmClockOut(){
+  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  const btn = document.getElementById('co-submit-btn');
+  btn.disabled=true; btn.textContent='Clocking out…';
+  const statusEl = document.getElementById('co-geo-status');
+  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const body = {
+      guard_id:selectedGuard.id, lat:pos.coords.latitude, lng:pos.coords.longitude,
+      notes:document.getElementById('co-notes').value
+    };
+    if(photoB64){ body.photo_b64=photoB64; body.photo_ext=photoExt; }
+    try{
+      await apiFetch(`/api/shifts/${clockOutShiftId}/clock-out`,{method:'POST',body:JSON.stringify(body)});
+      document.getElementById('success-title').textContent='Shift Completed!';
+      document.getElementById('success-sub').textContent='Your hours have been recorded and are pending review.';
+      showGuardCard('step-success');
+      loadMyShifts();
+    }catch(e){
+      statusEl.className='geo-status bad'; statusEl.innerHTML=e.message;
+      btn.disabled=false; btn.textContent='✓ Confirm Clock Out';
+    }
+  }, err=>{
+    statusEl.className='geo-status bad'; statusEl.innerHTML='⚠️ Could not get your location: '+err.message;
+    btn.disabled=false; btn.textContent='✓ Confirm Clock Out';
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
 }
 
@@ -1483,117 +1568,6 @@ function clearGuard(){
   document.getElementById('guard-pill').classList.add('hidden');
   document.getElementById('guard-search-wrap').style.display='';
   document.getElementById('guard-input').value='';
-}
-
-// Site search
-function filterSites(q){
-  const dd = document.getElementById('site-dropdown');
-  if(!q){ dd.classList.add('hidden'); return; }
-  const ql = q.toLowerCase();
-  const matches = sitesData.filter(s=>s.name.toLowerCase().includes(ql)||s.client_name.toLowerCase().includes(ql)).slice(0,20);
-  if(!matches.length){ dd.classList.add('hidden'); return; }
-  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
-  dd.innerHTML = matches.map(s=>`<div class="search-option" onmousedown="selectSite('${s.id}','${s.name.replace(/'/g,"\\'")}')" style="line-height:1.3">
-    <div>${s.name.replace(re,m=>`<mark>${m}</mark>`)}</div>
-    <div style="font-size:11px;color:var(--muted)">${s.client_name}</div>
-  </div>`).join('');
-  dd.classList.remove('hidden');
-}
-function closeSiteDD(){ document.getElementById('site-dropdown').classList.add('hidden'); }
-function selectSite(id, name){
-  selectedSite = {id, name};
-  document.getElementById('site-pill').classList.remove('hidden');
-  document.getElementById('site-pill-name').textContent = name;
-  document.getElementById('site-input').style.display='none';
-  document.getElementById('site-dropdown').classList.add('hidden');
-  checkSiteGeofence();
-}
-function clearSite(){
-  selectedSite = null;
-  currentSiteGeofenced = false; geoVerified = false; currentGeo = null;
-  document.getElementById('geo-status').classList.add('hidden');
-  document.getElementById('geo-map').classList.add('hidden');
-  document.getElementById('site-pill').classList.add('hidden');
-  document.getElementById('site-input').style.display=''; document.getElementById('site-input').value='';
-}
-
-function calcHours(){
-  const s = document.getElementById('start-time').value;
-  const e = document.getElementById('end-time').value;
-  const el = document.getElementById('hours-display');
-  if(!s||!e){ el.textContent='0.00 hrs'; return; }
-  let [sh,sm]= s.split(':').map(Number);
-  let [eh,em]= e.split(':').map(Number);
-  let mins = (eh*60+em)-(sh*60+sm);
-  if(mins<0) mins+=24*60;
-  el.textContent = (mins/60).toFixed(2)+' hrs';
-}
-
-function handlePhoto(input, src){
-  const file = input.files[0]; if(!file) return;
-  const reader = new FileReader();
-  reader.onload = e=>{
-    const b64 = e.target.result.split(',')[1];
-    photoB64 = b64; photoExt = file.name.split('.').pop()||'jpg';
-    document.getElementById('photo-preview').src = e.target.result;
-    document.getElementById('photo-preview').classList.remove('hidden');
-    document.getElementById(src==='cam'?'cam-btn':'gal-btn').classList.add('has-photo');
-    toast('Photo attached ✓','success');
-  };
-  reader.readAsDataURL(file);
-}
-
-async function submitShift(){
-  if(currentSiteGeofenced && !geoVerified){
-    toast('You must be at the site to sign in. Verify your location above and try again.','error'); return;
-  }
-  const btn = document.getElementById('submit-btn');
-  btn.disabled=true; btn.textContent='Submitting…';
-  const s = document.getElementById('start-time').value;
-  const e = document.getElementById('end-time').value;
-  let [sh,sm]=s.split(':').map(Number); let [eh,em]=e.split(':').map(Number);
-  let mins=(eh*60+em)-(sh*60+sm); if(mins<0)mins+=24*60;
-  const total_hours = +(mins/60).toFixed(2);
-  const body = {
-    guard_id:selectedGuard.id, site_id:selectedSite.id,
-    shift_date:document.getElementById('shift-date').value,
-    start_time:s, end_time:e, total_hours,
-    notes:document.getElementById('notes').value,
-  };
-  if(photoB64){ body.photo_b64=photoB64; body.photo_ext=photoExt; }
-  if(currentGeo){ body.lat=currentGeo.lat; body.lng=currentGeo.lng; }
-  try{
-    await apiFetch('/api/submissions',{method:'POST',body:JSON.stringify(body)});
-    showGuardCard('step-success');
-    loadRecentShifts(selectedGuard.id);
-  }catch(e){ toast(e.message,'error'); btn.disabled=false; btn.textContent='✓ Submit Shift'; }
-}
-
-async function loadRecentShifts(gid){
-  try{
-    const rows = await apiFetch(`/api/submissions/mine?guard_id=${gid}`);
-    if(!rows.length) return;
-    const wrap = document.getElementById('recent-shifts');
-    wrap.innerHTML = `<div class="shifts-mini-title">Your Recent Shifts</div>`+
-      rows.map(r=>`<div class="shift-mini-row">
-        <div><div class="shift-mini-left">${r.shift_date} &nbsp;${r.start_time}–${r.end_time} (${r.total_hours}h)</div>
-        <div class="shift-mini-site">${r.site_name}</div></div>
-        <span class="badge badge-${r.status}">${r.status}</span>
-      </div>`).join('');
-  }catch(e){}
-}
-
-function resetForm(){
-  photoB64=null; photoExt=null;
-  document.getElementById('photo-preview').classList.add('hidden');
-  document.getElementById('photo-preview').src='';
-  ['cam-btn','gal-btn'].forEach(id=>document.getElementById(id).classList.remove('has-photo'));
-  document.getElementById('notes').value='';
-  document.getElementById('hours-display').textContent='0.00 hrs';
-  document.getElementById('submit-btn').disabled=false;
-  document.getElementById('submit-btn').textContent='✓ Submit Shift';
-  clearSite();
-  startShiftFlow();
 }
 
 // ── Patrol Checkpoints ────────────────────────────────────────────────────────
@@ -1826,7 +1800,7 @@ function applyRoleRestrictions(role){
   const show = name => { const el=tab(name); if(el) el.style.display=''; };
   const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
   // Reset all tabs to visible first
-  ['dashboard','submissions','guards','sites','rates','invoices','reminders','activity','incidents','admins','audit']
+  ['dashboard','schedule','submissions','guards','sites','rates','invoices','reminders','activity','incidents','admins','audit']
     .forEach(show);
   if(role==='superadmin') return; // full access — nothing hidden
   if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
@@ -1837,7 +1811,7 @@ function applyRoleRestrictions(role){
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only)
-    hide('dashboard'); hide('guards'); hide('sites'); hide('rates');
+    hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('rates');
     hide('invoices'); hide('reminders'); hide('admins'); hide('audit'); return;
   }
 }
@@ -1880,6 +1854,134 @@ async function loadDashboard(){
       <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.submitted_at)}</td>
     </tr>`).join('');
   }catch(e){ console.error(e); }
+  loadLiveOps();
+}
+
+// ── Live Operations (today's roster, real-time status) ─────────────────────────
+const LIVEOPS_STATUS = {
+  scheduled:  {label:'Awaiting Clock In', style:'background:#e2e8f0;color:#475569'},
+  missed:     {label:'Missed Clock In',   style:'background:var(--red);color:#fff'},
+  in_progress:{label:'Clocked In — On site', style:'background:var(--green);color:#fff'},
+  completed:  {label:'Clocked Out',       style:'background:var(--navy-l);color:#fff'},
+  cancelled:  {label:'Cancelled',         style:'background:var(--bg);color:var(--muted)'},
+};
+async function loadLiveOps(){
+  try{
+    const d = await apiFetch('/api/shifts/live');
+    document.getElementById('liveops-counts').textContent =
+      `Clocked In - ${d.counts.in_progress} | Clocked Out - ${d.counts.completed} | Awaiting - ${d.counts.scheduled} | Missed - ${d.counts.missed}`;
+    document.getElementById('liveops-tbody').innerHTML = d.shifts.length===0
+      ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No shifts scheduled for today</p></td></tr>`
+      : d.shifts.map(sh=>{
+        const st = LIVEOPS_STATUS[sh.status] || {label:sh.status, style:''};
+        const verif = sh.clock_in_at
+          ? (sh.clock_in_verified ? '✅ Verified' : '⚠️ Unverified')
+          : '—';
+        return `<tr>
+          <td>${sh.site_name}</td>
+          <td><strong>${sh.guard_name}</strong></td>
+          <td>${sh.position||'—'}</td>
+          <td><span class="badge" style="${st.style}">${st.label}</span></td>
+          <td style="font-size:12px">${sh.start_time}${sh.clock_in_at?` <small style="color:var(--muted)">(actual ${sh.clock_in_at.slice(11,16)})</small>`:''}</td>
+          <td style="font-size:12px">${sh.end_time}${sh.clock_out_at?` <small style="color:var(--muted)">(actual ${sh.clock_out_at.slice(11,16)})</small>`:''}</td>
+          <td style="font-size:12px">${verif}</td>
+        </tr>`;
+      }).join('');
+  }catch(e){ console.error(e); }
+}
+
+// ── Schedule (roster management) ────────────────────────────────────────────
+let scheduleData = [];
+function loadSchedule(){
+  const from = document.getElementById('sch-from').value;
+  const to   = document.getElementById('sch-to').value;
+  const status = document.getElementById('sch-status').value;
+  const p = new URLSearchParams();
+  if(from) p.set('date_from',from);
+  if(to)   p.set('date_to',to);
+  if(status) p.set('status',status);
+  apiFetch('/api/shifts?'+p).then(rows=>{ scheduleData=rows; renderScheduleTable(); }).catch(e=>toast(e.message,'error'));
+}
+function renderScheduleTable(){
+  document.getElementById('schedule-tbody').innerHTML = scheduleData.length===0
+    ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No shifts found</p></td></tr>`
+    : scheduleData.map(sh=>{
+      const st = LIVEOPS_STATUS[sh.status] || {label:sh.status, style:''};
+      return `<tr>
+        <td>${sh.shift_date}</td>
+        <td><strong>${sh.guard_name}</strong></td>
+        <td>${sh.site_name}<br><small style="color:var(--muted)">${sh.client_name}</small></td>
+        <td>${sh.position||'—'}</td>
+        <td style="font-size:12px">${sh.start_time}–${sh.end_time}</td>
+        <td><span class="badge" style="${st.style}">${st.label}</span></td>
+        <td style="white-space:nowrap">
+          ${sh.status==='scheduled'?`<button class="btn btn-xs btn-primary" onclick='editShift(${JSON.stringify(sh)})'>Edit</button>
+          <button class="btn btn-xs btn-ghost" onclick="cancelShift('${sh.id}')">Cancel</button>`:''}
+          <button class="btn btn-xs btn-red" onclick="deleteShift('${sh.id}')">Delete</button>
+        </td>
+      </tr>`;
+    }).join('');
+}
+async function openShiftModal(){
+  document.getElementById('shift-modal-title').textContent='Add Shift';
+  ['shm-id','shm-position','shm-notes'].forEach(id=>document.getElementById(id).value='');
+  if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
+  if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
+  const gs=document.getElementById('shm-guard'); gs.innerHTML='';
+  allGuardsAdmin.forEach(g=>{ const o=document.createElement('option'); o.value=g.id; o.textContent=g.name; gs.appendChild(o); });
+  const ss=document.getElementById('shm-site'); ss.innerHTML='';
+  allSitesAdmin.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name} (${s.client_name})`; ss.appendChild(o); });
+  document.getElementById('shm-date').valueAsDate = new Date();
+  document.getElementById('shm-start').value='09:00';
+  document.getElementById('shm-end').value='17:00';
+  openModal('shift-modal');
+}
+async function editShift(sh){
+  await openShiftModal();
+  document.getElementById('shift-modal-title').textContent='Edit Shift';
+  document.getElementById('shm-id').value=sh.id;
+  document.getElementById('shm-guard').value=sh.guard_id;
+  document.getElementById('shm-site').value=sh.site_id;
+  document.getElementById('shm-position').value=sh.position||'';
+  document.getElementById('shm-date').value=sh.shift_date;
+  document.getElementById('shm-start').value=sh.start_time;
+  document.getElementById('shm-end').value=sh.end_time;
+  document.getElementById('shm-notes').value=sh.notes||'';
+}
+async function saveShift(){
+  const id = document.getElementById('shm-id').value;
+  const body = {
+    guard_id: document.getElementById('shm-guard').value,
+    site_id: document.getElementById('shm-site').value,
+    position: document.getElementById('shm-position').value,
+    shift_date: document.getElementById('shm-date').value,
+    start_time: document.getElementById('shm-start').value,
+    end_time: document.getElementById('shm-end').value,
+    notes: document.getElementById('shm-notes').value,
+  };
+  if(!body.guard_id||!body.site_id||!body.shift_date||!body.start_time||!body.end_time){
+    toast('All required fields must be filled','error'); return;
+  }
+  try{
+    if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
+    else   await apiFetch('/api/shifts',{method:'POST',body:JSON.stringify(body)});
+    toast('Shift saved','success'); closeModal('shift-modal');
+    loadSchedule();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function cancelShift(id){
+  if(!confirm('Cancel this shift? The guard will no longer see it on their roster.')) return;
+  try{
+    await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify({cancelled:1})});
+    toast('Shift cancelled','success'); loadSchedule();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteShift(id){
+  if(!confirm('Permanently delete this shift record?')) return;
+  try{
+    await apiFetch(`/api/shifts/${id}`,{method:'DELETE'});
+    toast('Shift deleted','success'); loadSchedule();
+  }catch(e){ toast(e.message,'error'); }
 }
 
 // ── Submissions ───────────────────────────────────────────────────────────────

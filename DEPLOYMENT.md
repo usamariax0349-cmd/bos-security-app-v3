@@ -140,6 +140,20 @@ Railway detects the push and redeploys automatically within ~2 minutes.
 
 ---
 
+## SHIFT SCHEDULING (NEW)
+
+Guards no longer type in their hours after the fact. The flow is now:
+
+1. In the admin portal, go to **Schedule** → **+ Add Shift** and assign a guard to a site, date, and time. This is required — a guard with no assigned shift has nothing to clock in to.
+2. The guard opens the app, picks their name, taps **My Shifts**, and sees that shift on their roster.
+3. At the site, they tap **Clock In** — their phone's GPS is checked against the site's location (if you've set one under Sites → map pin) before it's accepted.
+4. At the end of the shift they tap **Clock Out** (optionally attaching a photo/notes). This automatically creates the same pending submission that used to be typed in by hand, so **Submissions**, **Rates**, and **Invoices** all keep working exactly as before.
+5. The **Dashboard** now shows **Live Operations** — who's clocked in, who missed their clock-in window, and who's finished — for the day, matching the columns Site / Name / Position / Status / Start / End / Verification.
+
+Until you schedule shifts, guards will just see "No shifts scheduled for you" — that's expected, not a bug.
+
+---
+
 ## ADMIN ROLES
 
 | Role        | What they can do                                               |
