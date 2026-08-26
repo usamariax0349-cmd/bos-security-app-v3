@@ -977,7 +977,13 @@ tr:hover td{background:#f8fafc}
         <div class="form-group"><label class="form-label">Site Name *</label><input id="sm-name" class="form-control" placeholder="Site name"></div>
         <div class="form-group"><label class="form-label">Client Name *</label><input id="sm-client" class="form-control" placeholder="Client / company"></div>
       </div>
-      <div class="form-group"><label class="form-label">Address</label><input id="sm-addr" class="form-control" placeholder="Full address"></div>
+      <div class="form-group"><label class="form-label">Address</label>
+        <div style="display:flex;gap:8px">
+          <input id="sm-addr" class="form-control" placeholder="Full address" onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeSiteAddress();}">
+          <button type="button" class="btn btn-ghost btn-sm" style="white-space:nowrap" onclick="geocodeSiteAddress()">🔍 Find on Map</button>
+        </div>
+        <div id="sm-geocode-status" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+      </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Default Rate (AUD/hr)</label><input type="number" id="sm-rate" class="form-control" placeholder="0.00" step="0.01"></div>
         <div class="form-group"><label class="form-label">Contact Name</label><input id="sm-cname" class="form-control" placeholder="Site contact"></div>
@@ -2230,6 +2236,32 @@ function onSiteLatLngInput(){
   if(!isNaN(lat) && !isNaN(lng)){
     drawSitePin(lat, lng, radius);
     const map = _maps['sm-map']; if(map) map.setView([lat,lng], Math.max(map.getZoom(),14));
+  }
+}
+async function geocodeSiteAddress(){
+  const addr = document.getElementById('sm-addr').value.trim();
+  const statusEl = document.getElementById('sm-geocode-status');
+  if(!addr){ statusEl.textContent = 'Enter an address first.'; statusEl.style.color = 'var(--red)'; return; }
+  statusEl.textContent = '🔍 Searching…'; statusEl.style.color = 'var(--muted)';
+  try{
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=au&q=${encodeURIComponent(addr)}`;
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    if(!res.ok) throw new Error('lookup failed');
+    const results = await res.json();
+    if(!results.length){
+      statusEl.textContent = '⚠️ No match found — try a more specific address, or click the map to set the pin manually.';
+      statusEl.style.color = 'var(--red)';
+      return;
+    }
+    const r = results[0];
+    document.getElementById('sm-lat').value = parseFloat(r.lat).toFixed(6);
+    document.getElementById('sm-lng').value = parseFloat(r.lon).toFixed(6);
+    onSiteLatLngInput();
+    statusEl.textContent = `✅ Found: ${r.display_name}`;
+    statusEl.style.color = '#16a34a';
+  }catch(e){
+    statusEl.textContent = '⚠️ Could not look up that address right now. Click the map to set the pin manually.';
+    statusEl.style.color = 'var(--red)';
   }
 }
 function useMyLocationForSite(){
