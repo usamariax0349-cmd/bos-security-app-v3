@@ -1,0 +1,18 @@
+{
+  "name": "omniroute",
+  "description": "Inspect and manage an OmniRoute AI proxy router instance (health, routing combos, providers, cache, cost/usage, budgets) from Claude Code via OmniRoute's built-in MCP server.",
+  "version": "1.0.0",
+  "author": {
+    "name": "OmniRoute",
+    "url": "https://github.com/diegosouzapw/OmniRoute"
+  },
+  "homepage": "https://github.com/diegosouzapw/OmniRoute",
+  "repository": "https://github.com/diegosouzapw/OmniRoute",
+  "license": "MIT",
+  "keywords": [
+    "omniroute",
+    "ai-proxy",
+    "llm-router",
+    "mcp"
+  ]
+}

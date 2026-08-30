@@ -1,0 +1,14 @@
+{
+  "name": "bos-security-app-v3",
+  "owner": {
+    "name": "usamariax0349-cmd"
+  },
+  "plugins": [
+    {
+      "name": "omniroute",
+      "source": "./plugins/omniroute",
+      "description": "Inspect and manage an OmniRoute AI proxy router instance from Claude Code via its built-in MCP server.",
+      "version": "1.0.0"
+    }
+  ]
+}
