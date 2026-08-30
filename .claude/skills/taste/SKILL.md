@@ -8,9 +8,11 @@ description: >-
   Evidence trade-offs explaining WHY the design works). Use whenever the user wants
   to extract a site's design system, study a competitor's visual language, port an
   aesthetic to a new project, or generate design guidance for an AI coding agent.
-  Triggers on '/taste <url>', 'analyze the design of X', 'what makes X's site good',
-  'extract design tokens from X', 'give me X's design DNA', 'build something in the
-  style of X', 'I want my app to feel like X'. Output rejects AI slop ('clean',
+  Triggers on '/taste <url>', 'check taste', 'run taste', 'taste check', 'analyze the
+  design of X', 'what makes X's site good', 'extract design tokens from X', 'give me
+  X's design DNA', 'build something in the style of X', 'I want my app to feel like
+  X'. If the user says just 'check taste' with no URL, ask which site to analyze
+  before starting — never guess a target. Output rejects AI slop ('clean',
   'modern', 'user-friendly') in favor of concrete px/hex values and restraint
   trade-offs. Do NOT use for scraping data, summarizing page content, or tasks
   unrelated to visual design.
@@ -39,6 +41,7 @@ The pipeline rejects generic descriptions like "clean and modern". A finished `t
 Trigger this skill whenever the user wants to study a website's design and capture it as guidance for future design work. Catch all of these:
 
 - Explicit slash form: `/taste <url>`
+- Bare trigger phrase with no URL: "check taste", "run taste", "taste check" — activate the skill and ask which site to analyze (Phase 0, Step 1) rather than skipping the skill
 - Natural-language requests: "analyze the design of vercel.com", "what makes Stripe's site so good", "extract the design tokens from linear.app", "give me the design DNA for are.na"
 - Mimicry intent: "I want my dashboard to feel like Linear", "build me a landing page in the style of <url>", "port this site's design to my project"
 - Competitive research: "compare our look to <competitor>", "what design conventions does <site> use"
