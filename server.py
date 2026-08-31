@@ -299,6 +299,10 @@ def init_db():
         ("submissions", "lng",               "ALTER TABLE submissions ADD COLUMN lng REAL"),
         ("submissions", "distance_m",        "ALTER TABLE submissions ADD COLUMN distance_m REAL"),
         ("submissions", "location_verified", "ALTER TABLE submissions ADD COLUMN location_verified INTEGER DEFAULT 0"),
+        # shifts table — draft/publish workflow for the roster grid.
+        # DEFAULT 1 so shifts that already exist (and were already visible to
+        # guards) stay visible; new shifts are inserted with published=0 explicitly.
+        ("shifts", "published", "ALTER TABLE shifts ADD COLUMN published INTEGER DEFAULT 1"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -945,7 +949,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        s.lat as site_lat, s.lng as site_lng, s.geofence_radius
                 FROM shifts sh
                 JOIN sites s ON s.id=sh.site_id
-                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day') AND sh.cancelled=0
+                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day')
+                      AND sh.cancelled=0 AND sh.published=1
                 ORDER BY sh.shift_date ASC, sh.start_time ASC LIMIT 30
             ''', (gid,)).fetchall())
             db.close(); self.send_json(with_shift_status(rows)); return
@@ -1529,7 +1534,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not data.get(f): self.err(f'{f} required'); return
             shid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
-                          position,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)''',
+                          position,notes,created_by,published) VALUES (?,?,?,?,?,?,?,?,?,0)''',
                        (shid, data['guard_id'], data['site_id'], data['shift_date'],
                         data['start_time'], data['end_time'], data.get('position',''),
                         data.get('notes',''), s['name']))
@@ -1538,6 +1543,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (shid,)).fetchone())])[0]
             db.close(); self.send_json(row, 201); return
+
+        if path == '/api/shifts/publish':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            date_from = data.get('date_from'); date_to = data.get('date_to')
+            if not date_from or not date_to: self.err('date_from and date_to required'); return
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT sh.*, g.name as guard_name, g.email as guard_email, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.shift_date>=? AND sh.shift_date<=? AND sh.published=0 AND sh.cancelled=0
+            ''', (date_from, date_to)).fetchall())
+            if rows:
+                db.execute('''UPDATE shifts SET published=1
+                              WHERE shift_date>=? AND shift_date<=? AND published=0 AND cancelled=0''',
+                           (date_from, date_to))
+                audit(db, s, 'SHIFT_PUBLISH', f'{date_from}~{date_to} ({len(rows)} shifts)')
+                db.commit()
+            db.close()
+            by_guard = {}
+            for r in rows:
+                by_guard.setdefault(r['guard_id'], {'name':r['guard_name'],'email':r['guard_email'],'shifts':[]})
+                by_guard[r['guard_id']]['shifts'].append(r)
+            notified = 0
+            for g in by_guard.values():
+                if not g['email']: continue
+                lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time']} at {sh['site_name']}"
+                         for sh in g['shifts']]
+                body = (f"Hi {g['name']},\n\nYour shifts for {date_from} to {date_to} have been "
+                        f"published:\n\n" + "\n".join(lines) +
+                        f"\n\nView your roster in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
+                if send_email(g['email'], f'{COMPANY_NAME}: New shifts published', body):
+                    notified += 1
+            self.send_json({'published': len(rows), 'notified': notified}); return
 
         if path == '/api/rates':
             s2 = self.require_admin('manager')

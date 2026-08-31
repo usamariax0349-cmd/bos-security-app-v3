@@ -358,6 +358,41 @@ tr:hover td{background:#f8fafc}
 }
 
 /* ════════════════════════════════════════
+   SCHEDULE (week grid)
+════════════════════════════════════════ */
+.sched-layout{display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:start}
+.sched-unpub-count{text-align:center;font-size:12px;color:var(--muted);font-weight:600;margin-top:10px}
+.sched-by-toggle{display:flex;gap:6px;margin-top:8px}
+.sched-by-btn{flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
+.sched-by-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sched-report-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border)}
+.sched-report-row:last-child{border-bottom:none}
+.sched-report-row strong{color:var(--navy);font-size:15px}
+.sched-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.sched-range-label{font-weight:700;color:var(--navy);font-size:14px;padding:0 6px}
+.sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
+.sched-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));background:#fff;min-width:900px}
+.sched-head-cell{background:var(--navy);color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:10px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.12)}
+.sched-head-cell .shd{font-size:10px;font-weight:600;opacity:.6;margin-top:1px}
+.sched-row-label{background:var(--bg);font-weight:700;color:var(--navy);font-size:13px;padding:8px 10px;border-right:1px solid var(--border);border-top:1px solid var(--border);display:flex;align-items:center}
+.sched-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:6px;min-height:60px}
+.sched-add-btn{width:22px;height:22px;border-radius:6px;background:var(--bg);border:1px dashed var(--border);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--dur-fast) var(--ease-out);margin-bottom:4px}
+.sched-add-btn:hover{background:var(--navy);color:#fff;border-color:var(--navy);border-style:solid;transform:scale(1.08)}
+.sched-chip{display:block;width:100%;text-align:left;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:4px 6px;font-size:11px;margin-bottom:4px;cursor:pointer;line-height:1.3;transition:transform var(--dur-fast) var(--ease-spring)}
+.sched-chip:hover{transform:translateY(-1px)}
+.sched-chip .sc-time{font-weight:700}
+.sched-chip .sc-sub{opacity:.85;font-size:10px;margin-top:1px}
+.sched-chip.st-missed{background:var(--red)}
+.sched-chip.st-in_progress{background:var(--green)}
+.sched-chip.st-completed{background:var(--navy-l)}
+.sched-chip.unpub{box-shadow:inset 3px 0 0 var(--gold)}
+.sched-totals-row .sched-row-label{background:var(--navy);color:#fff}
+.sched-totals-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:8px 10px;text-align:center;font-weight:700;color:var(--navy);background:var(--bg);font-size:13px}
+@media(max-width:900px){
+  .sched-layout{grid-template-columns:1fr}
+}
+
+/* ════════════════════════════════════════
    CLIENT PORTAL
 ════════════════════════════════════════ */
 #client-page{min-height:100vh;background:var(--bg)}
@@ -665,29 +700,54 @@ tr:hover td{background:#f8fafc}
 
     <!-- SCHEDULE -->
     <div id="tab-schedule" class="tab-content">
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">Shift Schedule</span>
-          <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
+      <div class="sched-layout">
+        <div class="sched-sidebar">
+          <div class="section">
+            <div class="section-body">
+              <button class="btn btn-gold btn-block" onclick="publishSchedule()">📣 Publish &amp; Notify</button>
+              <div class="sched-unpub-count" id="sched-unpub-count">0 Shifts Unpublished</div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Select Customer</label>
+                <select id="sched-customer" class="form-control" onchange="renderScheduleGrid()">
+                  <option value="">All Customers</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <label class="form-label">Schedule By</label>
+              <div class="sched-by-toggle">
+                <button class="sched-by-btn active" id="sched-by-sites" onclick="setScheduleBy('sites')">Sites</button>
+                <button class="sched-by-btn" id="sched-by-guards" onclick="setScheduleBy('guards')">Guards</button>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <div class="report-opts-title">Weekly Report</div>
+              <div class="sched-report-row"><span>Total Shifts</span><strong id="sr-total">0</strong></div>
+              <div class="sched-report-row"><span>Unpublished</span><strong id="sr-unpub">0</strong></div>
+              <div class="sched-report-row"><span>Filled Hours</span><strong id="sr-hours">0</strong></div>
+            </div>
+          </div>
         </div>
-        <div class="filter-bar">
-          <input type="date" id="sch-from" class="form-control" style="width:auto" onchange="loadSchedule()">
-          <input type="date" id="sch-to" class="form-control" style="width:auto" onchange="loadSchedule()">
-          <select id="sch-status" onchange="loadSchedule()">
-            <option value="">All Status</option>
-            <option value="scheduled">Awaiting Clock In</option>
-            <option value="missed">Missed Clock In</option>
-            <option value="in_progress">Clocked In</option>
-            <option value="completed">Clocked Out</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="loadSchedule()">↻ Refresh</button>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Position</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="schedule-tbody"></tbody>
-          </table>
+        <div class="sched-main">
+          <div class="sched-toolbar">
+            <button class="btn btn-ghost btn-sm" onclick="schedGoToday()">Today</button>
+            <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(-1)">‹</button>
+            <span class="sched-range-label" id="sched-range-label"></span>
+            <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(1)">›</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
+          </div>
+          <div class="sched-grid-wrap">
+            <div class="sched-grid" id="sched-grid"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1076,7 +1136,10 @@ tr:hover td{background:#f8fafc}
       <div class="form-group"><label class="form-label">Notes</label><textarea id="shm-notes" class="form-control" rows="2"></textarea></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Cancel</button>
+      <button class="btn btn-red btn-sm hidden" id="shm-delete-btn" onclick="deleteShift(document.getElementById('shm-id').value)">Delete</button>
+      <button class="btn btn-ghost btn-sm hidden" id="shm-cancelshift-btn" onclick="cancelShift(document.getElementById('shm-id').value)">Cancel Shift</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Close</button>
       <button class="btn btn-primary" onclick="saveShift()">Save Shift</button>
     </div>
   </div>
@@ -1459,7 +1522,7 @@ function showTab(name){
   else if(name==='invoices')loadInvoicesTab();
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
-  else if(name==='schedule') loadSchedule();
+  else if(name==='schedule') loadScheduleGrid();
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
   else if(name==='audit')   loadAudit();
@@ -2044,51 +2107,133 @@ async function loadLiveOps(){
   }catch(e){ console.error(e); }
 }
 
-// ── Schedule (roster management) ────────────────────────────────────────────
+// ── Schedule (week grid roster) ─────────────────────────────────────────────
 let scheduleData = [];
-function loadSchedule(){
-  const from = document.getElementById('sch-from').value;
-  const to   = document.getElementById('sch-to').value;
-  const status = document.getElementById('sch-status').value;
-  const p = new URLSearchParams();
-  if(from) p.set('date_from',from);
-  if(to)   p.set('date_to',to);
-  if(status) p.set('status',status);
-  apiFetch('/api/shifts?'+p).then(rows=>{ scheduleData=rows; renderScheduleTable(); }).catch(e=>toast(e.message,'error'));
+let schedWeekStart = mondayOf(new Date());
+let schedBy = 'sites';
+function mondayOf(d){
+  const x = new Date(d); const day = (x.getDay()+6)%7; // Mon=0 .. Sun=6
+  x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;
 }
-function renderScheduleTable(){
-  document.getElementById('schedule-tbody').innerHTML = scheduleData.length===0
-    ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No shifts found</p></td></tr>`
-    : scheduleData.map(sh=>{
-      const st = LIVEOPS_STATUS[sh.status] || {label:sh.status, style:''};
-      return `<tr>
-        <td>${sh.shift_date}</td>
-        <td><strong>${sh.guard_name}</strong></td>
-        <td>${sh.site_name}<br><small style="color:var(--muted)">${sh.client_name}</small></td>
-        <td>${sh.position||'—'}</td>
-        <td style="font-size:12px">${sh.start_time}–${sh.end_time}</td>
-        <td><span class="badge" style="${st.style}">${st.label}</span></td>
-        <td style="white-space:nowrap">
-          ${sh.status==='scheduled'?`<button class="btn btn-xs btn-primary" onclick='editShift(${JSON.stringify(sh)})'>Edit</button>
-          <button class="btn btn-xs btn-ghost" onclick="cancelShift('${sh.id}')">Cancel</button>`:''}
-          <button class="btn btn-xs btn-red" onclick="deleteShift('${sh.id}')">Delete</button>
-        </td>
-      </tr>`;
-    }).join('');
+function fmtISO(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+function shiftHours(start,end){
+  const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
+  let mins = (eh*60+em)-(sh*60+sm); if(mins<=0) mins+=24*60;
+  return mins/60;
 }
-async function openShiftModal(){
+function schedGoToday(){ schedWeekStart = mondayOf(new Date()); loadScheduleGrid(); }
+function schedShiftWeek(delta){ schedWeekStart = new Date(schedWeekStart.getTime()+delta*7*86400000); loadScheduleGrid(); }
+function setScheduleBy(mode){
+  schedBy = mode;
+  document.getElementById('sched-by-sites').classList.toggle('active', mode==='sites');
+  document.getElementById('sched-by-guards').classList.toggle('active', mode==='guards');
+  renderScheduleGrid();
+}
+async function loadScheduleGrid(){
+  if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
+  if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
+  populateScheduleCustomerFilter();
+  const from = fmtISO(schedWeekStart);
+  const to   = fmtISO(new Date(schedWeekStart.getTime()+6*86400000));
+  try{
+    scheduleData = (await apiFetch(`/api/shifts?date_from=${from}&date_to=${to}`)).filter(sh=>!sh.cancelled);
+    renderScheduleGrid();
+  }catch(e){ toast(e.message,'error'); }
+}
+function populateScheduleCustomerFilter(){
+  const sel = document.getElementById('sched-customer'); const current = sel.value;
+  const clients = [...new Set(allSitesAdmin.map(s=>s.client_name))].sort();
+  sel.innerHTML = '<option value="">All Customers</option>' + clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = clients.includes(current) ? current : '';
+}
+const SCHED_DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function renderScheduleGrid(){
+  const days = Array.from({length:7}, (_,i)=> new Date(schedWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  document.getElementById('sched-range-label').textContent =
+    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+
+  const customer = document.getElementById('sched-customer').value;
+  let rows = schedBy==='sites'
+    ? allSitesAdmin.filter(s=>!customer||s.client_name===customer)
+    : allGuardsAdmin.filter(g=>!customer || scheduleData.some(sh=>
+        sh.guard_id===g.id && allSitesAdmin.find(s=>s.id===sh.site_id)?.client_name===customer));
+
+  const cellShifts = (rowId, dISO) => scheduleData.filter(sh =>
+    sh.shift_date===dISO && (schedBy==='sites' ? sh.site_id===rowId : sh.guard_id===rowId));
+
+  let html = `<div class="sched-head-cell"></div>` + days.map((d,i)=>
+    `<div class="sched-head-cell">${SCHED_DAY_NAMES[i]}<div class="shd">${d.toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</div></div>`
+  ).join('');
+
+  if(!rows.length){
+    html += `<div class="sched-row-label" style="grid-column:1/-1;justify-content:center;color:var(--muted)">
+      ${schedBy==='sites'?'No sites':'No guards'} to schedule${customer?' for this customer':''}</div>`;
+  }
+  rows.forEach(row=>{
+    html += `<div class="sched-row-label">${row.name}</div>`;
+    dayISO.forEach(dISO=>{
+      const shifts = cellShifts(row.id, dISO);
+      html += `<div class="sched-cell">
+        <button class="sched-add-btn" onclick="openShiftModalFor('${schedBy==='sites'?'site':'guard'}','${row.id}','${dISO}')" title="Add shift">+</button>
+        ${shifts.map(sh=>{
+          const other = schedBy==='sites' ? sh.guard_name : sh.site_name;
+          const cls = ['sched-chip', sh.status?`st-${sh.status}`:'', sh.published?'':'unpub'].filter(Boolean).join(' ');
+          return `<button class="${cls}" onclick='editShift(${JSON.stringify(sh)})'>
+            <div class="sc-time">${sh.start_time}-${sh.end_time}</div>
+            <div class="sc-sub">${other}</div>
+          </button>`;
+        }).join('')}
+      </div>`;
+    });
+  });
+
+  html += `<div class="sched-row-label" style="background:var(--navy);color:#fff">Total</div>`;
+  dayISO.forEach(dISO=>{
+    const hrs = scheduleData.filter(sh=>sh.shift_date===dISO).reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0);
+    html += `<div class="sched-totals-cell">${hrs?hrs.toFixed(2):'0'} hrs</div>`;
+  });
+  document.getElementById('sched-grid').innerHTML = html;
+
+  const unpub = scheduleData.filter(sh=>!sh.published).length;
+  document.getElementById('sched-unpub-count').textContent = `${unpub} Shift${unpub===1?'':'s'} Unpublished`;
+  document.getElementById('sr-total').textContent = scheduleData.length;
+  document.getElementById('sr-unpub').textContent = unpub;
+  document.getElementById('sr-hours').textContent =
+    scheduleData.reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0).toFixed(2);
+}
+async function publishSchedule(){
+  const unpub = scheduleData.filter(sh=>!sh.published).length;
+  if(!unpub){ toast('Nothing to publish this week','info'); return; }
+  if(!confirm(`Publish ${unpub} shift${unpub===1?'':'s'} and notify guards by email?`)) return;
+  const from = fmtISO(schedWeekStart);
+  const to   = fmtISO(new Date(schedWeekStart.getTime()+6*86400000));
+  try{
+    const res = await apiFetch('/api/shifts/publish',{method:'POST',body:JSON.stringify({date_from:from,date_to:to})});
+    toast(`Published ${res.published} shift(s), notified ${res.notified} guard(s)`,'success');
+    loadScheduleGrid();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function openShiftModal(presets={}){
   document.getElementById('shift-modal-title').textContent='Add Shift';
   ['shm-id','shm-position','shm-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('shm-delete-btn').classList.add('hidden');
+  document.getElementById('shm-cancelshift-btn').classList.add('hidden');
   if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
   if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
   const gs=document.getElementById('shm-guard'); gs.innerHTML='';
   allGuardsAdmin.forEach(g=>{ const o=document.createElement('option'); o.value=g.id; o.textContent=g.name; gs.appendChild(o); });
   const ss=document.getElementById('shm-site'); ss.innerHTML='';
   allSitesAdmin.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name} (${s.client_name})`; ss.appendChild(o); });
-  document.getElementById('shm-date').valueAsDate = new Date();
+  document.getElementById('shm-date').valueAsDate = presets.date ? new Date(presets.date) : new Date();
   document.getElementById('shm-start').value='09:00';
   document.getElementById('shm-end').value='17:00';
+  if(presets.site_id)  document.getElementById('shm-site').value  = presets.site_id;
+  if(presets.guard_id) document.getElementById('shm-guard').value = presets.guard_id;
   openModal('shift-modal');
+}
+function openShiftModalFor(kind, id, dateISO){
+  openShiftModal(kind==='site' ? {site_id:id, date:dateISO} : {guard_id:id, date:dateISO});
 }
 async function editShift(sh){
   await openShiftModal();
@@ -2101,6 +2246,8 @@ async function editShift(sh){
   document.getElementById('shm-start').value=sh.start_time;
   document.getElementById('shm-end').value=sh.end_time;
   document.getElementById('shm-notes').value=sh.notes||'';
+  document.getElementById('shm-delete-btn').classList.remove('hidden');
+  document.getElementById('shm-cancelshift-btn').classList.toggle('hidden', sh.status!=='scheduled');
 }
 async function saveShift(){
   const id = document.getElementById('shm-id').value;
@@ -2120,21 +2267,21 @@ async function saveShift(){
     if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
     else   await apiFetch('/api/shifts',{method:'POST',body:JSON.stringify(body)});
     toast('Shift saved','success'); closeModal('shift-modal');
-    loadSchedule();
+    loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 async function cancelShift(id){
   if(!confirm('Cancel this shift? The guard will no longer see it on their roster.')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify({cancelled:1})});
-    toast('Shift cancelled','success'); loadSchedule();
+    toast('Shift cancelled','success'); closeModal('shift-modal'); loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 async function deleteShift(id){
   if(!confirm('Permanently delete this shift record?')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'DELETE'});
-    toast('Shift deleted','success'); loadSchedule();
+    toast('Shift deleted','success'); closeModal('shift-modal'); loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 
