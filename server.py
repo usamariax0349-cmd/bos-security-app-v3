@@ -272,8 +272,56 @@ def init_db():
             created_by          TEXT,
             created_at          TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS guard_site_prefs (
+            guard_id TEXT NOT NULL,
+            site_id  TEXT NOT NULL,
+            pref     TEXT NOT NULL,
+            PRIMARY KEY (guard_id, site_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS compliance_items (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS guard_compliance (
+            id               TEXT PRIMARY KEY,
+            guard_id         TEXT NOT NULL,
+            item_id          TEXT NOT NULL,
+            checked          INTEGER DEFAULT 0,
+            reference_no     TEXT DEFAULT '',
+            expiry_date      TEXT,
+            reminder_days    INTEGER DEFAULT 60,
+            critical         INTEGER DEFAULT 0,
+            file_filename    TEXT,
+            show_to_customer INTEGER DEFAULT 0,
+            UNIQUE(guard_id, item_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS guard_leave (
+            id         TEXT PRIMARY KEY,
+            guard_id   TEXT NOT NULL,
+            leave_type TEXT NOT NULL DEFAULT 'Fixed Leave',
+            start_date TEXT NOT NULL,
+            end_date   TEXT NOT NULL,
+            notes      TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     conn.commit()
+
+    # Seed the standard compliance catalog once (id-based, so admins can't
+    # accidentally duplicate it across restarts)
+    COMPLIANCE_CATALOG = ['Covid-19 Vaccination','CPR Accreditation','Crowd Control Card',
+        "Driver's Licence",'Firearms Licence','First Aid Certificate','Responsible Service of Alcohol',
+        'VISA','White Card','Working With Children Check']
+    if conn.execute('SELECT COUNT(*) FROM compliance_items').fetchone()[0] == 0:
+        for i, name in enumerate(COMPLIANCE_CATALOG):
+            conn.execute('INSERT INTO compliance_items (id,name,sort_order) VALUES (?,?,?)',
+                         (str(uuid.uuid4()), name, i))
+        conn.commit()
 
     # ── Schema migration: add any missing columns from older databases ──────────
     migrations = [
@@ -299,6 +347,18 @@ def init_db():
         ("submissions", "lng",               "ALTER TABLE submissions ADD COLUMN lng REAL"),
         ("submissions", "distance_m",        "ALTER TABLE submissions ADD COLUMN distance_m REAL"),
         ("submissions", "location_verified", "ALTER TABLE submissions ADD COLUMN location_verified INTEGER DEFAULT 0"),
+        # shifts table — draft/publish workflow for the roster grid.
+        # DEFAULT 1 so shifts that already exist (and were already visible to
+        # guards) stay visible; new shifts are inserted with published=0 explicitly.
+        ("shifts", "published", "ALTER TABLE shifts ADD COLUMN published INTEGER DEFAULT 1"),
+        # guards table — security licence detail + scheduling flags
+        ("guards", "license_state",         "ALTER TABLE guards ADD COLUMN license_state TEXT DEFAULT ''"),
+        ("guards", "license_expiry",        "ALTER TABLE guards ADD COLUMN license_expiry TEXT"),
+        ("guards", "license_reminder_days", "ALTER TABLE guards ADD COLUMN license_reminder_days INTEGER DEFAULT 60"),
+        ("guards", "license_critical",      "ALTER TABLE guards ADD COLUMN license_critical INTEGER DEFAULT 0"),
+        ("guards", "license_file",          "ALTER TABLE guards ADD COLUMN license_file TEXT"),
+        ("guards", "hide_on_schedule",      "ALTER TABLE guards ADD COLUMN hide_on_schedule INTEGER DEFAULT 0"),
+        ("guards", "no_license_required",   "ALTER TABLE guards ADD COLUMN no_license_required INTEGER DEFAULT 0"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -945,7 +1005,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        s.lat as site_lat, s.lng as site_lng, s.geofence_radius
                 FROM shifts sh
                 JOIN sites s ON s.id=sh.site_id
-                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day') AND sh.cancelled=0
+                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day')
+                      AND sh.cancelled=0 AND sh.published=1
                 ORDER BY sh.shift_date ASC, sh.start_time ASC LIMIT 30
             ''', (gid,)).fetchall())
             db.close(); self.send_json(with_shift_status(rows)); return
@@ -964,6 +1025,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Block must_change_password sessions from all other admin GET endpoints
         if s.get('must_change_password'):
             self.err('Please set your password before continuing', 403); return
+
+        if path == '/api/guards/all':
+            db = get_db()
+            rows = RL(db.execute('SELECT * FROM guards ORDER BY active DESC, name').fetchall())
+            db.close(); self.send_json(rows); return
+
+        m = re.match(r'^/api/guards/([^/]+)/site-prefs$', path)
+        if m:
+            db = get_db()
+            rows = RL(db.execute('SELECT site_id, pref FROM guard_site_prefs WHERE guard_id=?',
+                                  (m.group(1),)).fetchall())
+            db.close(); self.send_json(rows); return
+
+        m = re.match(r'^/api/guards/([^/]+)/compliance$', path)
+        if m:
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT ci.id as item_id, ci.name,
+                       COALESCE(gc.checked,0) as checked, COALESCE(gc.reference_no,'') as reference_no,
+                       gc.expiry_date, COALESCE(gc.reminder_days,60) as reminder_days,
+                       COALESCE(gc.critical,0) as critical, gc.file_filename,
+                       COALESCE(gc.show_to_customer,0) as show_to_customer
+                FROM compliance_items ci
+                LEFT JOIN guard_compliance gc ON gc.item_id=ci.id AND gc.guard_id=?
+                ORDER BY ci.sort_order
+            ''', (m.group(1),)).fetchall())
+            db.close(); self.send_json(rows); return
+
+        m = re.match(r'^/api/guards/([^/]+)/leave$', path)
+        if m:
+            db = get_db()
+            rows = RL(db.execute('SELECT * FROM guard_leave WHERE guard_id=? ORDER BY start_date DESC',
+                                  (m.group(1),)).fetchall())
+            db.close(); self.send_json(rows); return
 
         if path == '/api/dashboard':
             db = get_db()
@@ -1490,6 +1585,82 @@ class Handler(http.server.BaseHTTPRequestHandler):
             g = R(db.execute('SELECT * FROM guards WHERE id=?',(gid,)).fetchone()); db.close()
             self.send_json(g, 201); return
 
+        m = re.match(r'^/api/guards/([^/]+)/site-pref$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            site_id = data.get('site_id'); pref = data.get('pref') or ''
+            if not site_id: self.err('site_id required'); return
+            db = get_db()
+            if pref in ('blacklist','preferred'):
+                db.execute('''INSERT INTO guard_site_prefs (guard_id,site_id,pref) VALUES (?,?,?)
+                              ON CONFLICT(guard_id,site_id) DO UPDATE SET pref=excluded.pref''',
+                           (m.group(1), site_id, pref))
+            else:
+                db.execute('DELETE FROM guard_site_prefs WHERE guard_id=? AND site_id=?',
+                           (m.group(1), site_id))
+            audit(db, s, 'GUARD_SITE_PREF', f'{m.group(1)} site={site_id} pref={pref or "none"}')
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        m = re.match(r'^/api/guards/([^/]+)/blacklist-all$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            site_ids = [r[0] for r in db.execute('SELECT id FROM sites WHERE active=1').fetchall()]
+            for sid in site_ids:
+                db.execute('''INSERT INTO guard_site_prefs (guard_id,site_id,pref) VALUES (?,?,'blacklist')
+                              ON CONFLICT(guard_id,site_id) DO UPDATE SET pref='blacklist' ''',
+                           (m.group(1), sid))
+            audit(db, s, 'GUARD_BLACKLIST_ALL', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True, 'count':len(site_ids)}); return
+
+        m = re.match(r'^/api/guards/([^/]+)/compliance/([^/]+)/file$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            if not data.get('file_b64'): self.err('file_b64 required'); return
+            ext = re.sub(r'[^a-zA-Z0-9]', '', data.get('ext','dat'))[:6] or 'dat'
+            fname = f"compliance_{uuid.uuid4().hex}.{ext}"
+            with open(os.path.join(UPLOADS_PATH, fname), 'wb') as f:
+                f.write(base64.b64decode(data['file_b64']))
+            db = get_db()
+            db.execute('''INSERT INTO guard_compliance (id,guard_id,item_id,file_filename) VALUES (?,?,?,?)
+                          ON CONFLICT(guard_id,item_id) DO UPDATE SET file_filename=excluded.file_filename''',
+                       (str(uuid.uuid4()), m.group(1), m.group(2), fname))
+            audit(db, s, 'COMPLIANCE_FILE', f'{m.group(1)} item={m.group(2)}'); db.commit(); db.close()
+            self.send_json({'ok':True, 'filename':fname}); return
+
+        m = re.match(r'^/api/guards/([^/]+)/license-file$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            if not data.get('file_b64'): self.err('file_b64 required'); return
+            ext = re.sub(r'[^a-zA-Z0-9]', '', data.get('ext','dat'))[:6] or 'dat'
+            fname = f"license_{uuid.uuid4().hex}.{ext}"
+            with open(os.path.join(UPLOADS_PATH, fname), 'wb') as f:
+                f.write(base64.b64decode(data['file_b64']))
+            db = get_db()
+            db.execute('UPDATE guards SET license_file=? WHERE id=?', (fname, m.group(1)))
+            audit(db, s, 'LICENSE_FILE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True, 'filename':fname}); return
+
+        m = re.match(r'^/api/guards/([^/]+)/leave$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            for f in ('start_date','end_date'):
+                if not data.get(f): self.err(f'{f} required'); return
+            lid = str(uuid.uuid4()); db = get_db()
+            db.execute('''INSERT INTO guard_leave (id,guard_id,leave_type,start_date,end_date,notes)
+                          VALUES (?,?,?,?,?,?)''',
+                       (lid, m.group(1), data.get('leave_type','Fixed Leave'),
+                        data['start_date'], data['end_date'], data.get('notes','')))
+            audit(db, s, 'LEAVE_CREATE', f'{m.group(1)} {data["start_date"]}~{data["end_date"]}'); db.commit()
+            row = R(db.execute('SELECT * FROM guard_leave WHERE id=?', (lid,)).fetchone())
+            db.close(); self.send_json(row, 201); return
+
         if path == '/api/sites':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -1529,7 +1700,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not data.get(f): self.err(f'{f} required'); return
             shid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
-                          position,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?)''',
+                          position,notes,created_by,published) VALUES (?,?,?,?,?,?,?,?,?,0)''',
                        (shid, data['guard_id'], data['site_id'], data['shift_date'],
                         data['start_time'], data['end_time'], data.get('position',''),
                         data.get('notes',''), s['name']))
@@ -1538,6 +1709,40 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (shid,)).fetchone())])[0]
             db.close(); self.send_json(row, 201); return
+
+        if path == '/api/shifts/publish':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            date_from = data.get('date_from'); date_to = data.get('date_to')
+            if not date_from or not date_to: self.err('date_from and date_to required'); return
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT sh.*, g.name as guard_name, g.email as guard_email, s.name as site_name
+                FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+                WHERE sh.shift_date>=? AND sh.shift_date<=? AND sh.published=0 AND sh.cancelled=0
+            ''', (date_from, date_to)).fetchall())
+            if rows:
+                db.execute('''UPDATE shifts SET published=1
+                              WHERE shift_date>=? AND shift_date<=? AND published=0 AND cancelled=0''',
+                           (date_from, date_to))
+                audit(db, s, 'SHIFT_PUBLISH', f'{date_from}~{date_to} ({len(rows)} shifts)')
+                db.commit()
+            db.close()
+            by_guard = {}
+            for r in rows:
+                by_guard.setdefault(r['guard_id'], {'name':r['guard_name'],'email':r['guard_email'],'shifts':[]})
+                by_guard[r['guard_id']]['shifts'].append(r)
+            notified = 0
+            for g in by_guard.values():
+                if not g['email']: continue
+                lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time']} at {sh['site_name']}"
+                         for sh in g['shifts']]
+                body = (f"Hi {g['name']},\n\nYour shifts for {date_from} to {date_to} have been "
+                        f"published:\n\n" + "\n".join(lines) +
+                        f"\n\nView your roster in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
+                if send_email(g['email'], f'{COMPANY_NAME}: New shifts published', body):
+                    notified += 1
+            self.send_json({'published': len(rows), 'notified': notified}); return
 
         if path == '/api/rates':
             s2 = self.require_admin('manager')
@@ -1709,14 +1914,44 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s2 = self.require_admin('manager')
             if not s2: return
             db = get_db()
-            db.execute('''UPDATE guards SET name=?,license_number=?,base_rate=?,
-                          phone=?,email=?,notes=?,active=? WHERE id=?''',
-                       (data.get('name'),data.get('license_number'),float(data.get('base_rate',0)),
-                        data.get('phone'),data.get('email'),data.get('notes'),
-                        int(data.get('active',1)), m.group(1)))
-            db.commit()
+            updates=[]; params=[]
+            for f in ('name','license_number','phone','email','notes','license_state',
+                      'license_expiry'):
+                if f in data: updates.append(f'{f}=?'); params.append(data[f])
+            if 'base_rate' in data:
+                updates.append('base_rate=?'); params.append(float(data['base_rate']))
+            for f in ('active','hide_on_schedule','no_license_required',
+                      'license_reminder_days','license_critical'):
+                if f in data: updates.append(f'{f}=?'); params.append(int(data[f]))
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE guards SET {','.join(updates)} WHERE id=?", params)
+                audit(db, s, 'GUARD_UPDATE', m.group(1)); db.commit()
             g = R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone())
             db.close(); self.send_json(g); return
+
+        m = re.match(r'^/api/guards/([^/]+)/compliance/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            guard_id, item_id = m.group(1), m.group(2)
+            fields = {}
+            if 'checked' in data:          fields['checked']          = int(data['checked'])
+            if 'reference_no' in data:     fields['reference_no']     = data['reference_no']
+            if 'expiry_date' in data:      fields['expiry_date']      = data['expiry_date'] or None
+            if 'reminder_days' in data:    fields['reminder_days']    = int(data['reminder_days'] or 60)
+            if 'critical' in data:         fields['critical']         = int(data['critical'])
+            if 'show_to_customer' in data: fields['show_to_customer'] = int(data['show_to_customer'])
+            if not fields: self.err('No fields to update'); return
+            db = get_db()
+            cols = ','.join(fields.keys()); qs_ = ','.join('?'*len(fields))
+            upd  = ','.join(f'{k}=excluded.{k}' for k in fields)
+            db.execute(f'''INSERT INTO guard_compliance (id,guard_id,item_id,{cols})
+                          VALUES (?,?,?,{qs_})
+                          ON CONFLICT(guard_id,item_id) DO UPDATE SET {upd}''',
+                       [str(uuid.uuid4()), guard_id, item_id] + list(fields.values()))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         m = re.match(r'^/api/sites/([^/]+)$', path)
         if m:
@@ -1858,6 +2093,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('DELETE FROM checkpoints WHERE id=?', (m.group(1),))
             audit(db, s, 'CHECKPOINT_DELETE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+        m = re.match(r'^/api/leave/([^/]+)$', path)
+        if m:
+            db = get_db()
+            db.execute('DELETE FROM guard_leave WHERE id=?', (m.group(1),))
+            audit(db, s, 'LEAVE_DELETE', m.group(1)); db.commit(); db.close()
             self.send_json({'ok':True}); return
         m = re.match(r'^/api/shifts/([^/]+)$', path)
         if m:

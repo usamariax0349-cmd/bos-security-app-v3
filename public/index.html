@@ -36,6 +36,7 @@
 html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:15px}
 button{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-weight:600}
 input,select,textarea{font-family:inherit;font-size:14px;width:100%}
+input[type=checkbox],input[type=radio]{width:auto;flex-shrink:0}
 .hidden{display:none!important}
 a{color:var(--navy);text-decoration:none}
 
@@ -358,6 +359,89 @@ tr:hover td{background:#f8fafc}
 }
 
 /* ════════════════════════════════════════
+   SCHEDULE (week grid)
+════════════════════════════════════════ */
+.sched-layout{display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:start}
+.sched-unpub-count{text-align:center;font-size:12px;color:var(--muted);font-weight:600;margin-top:10px}
+.sched-by-toggle{display:flex;gap:6px;margin-top:8px}
+.sched-by-btn{flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
+.sched-by-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sched-report-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border)}
+.sched-report-row:last-child{border-bottom:none}
+.sched-report-row strong{color:var(--navy);font-size:15px}
+.sched-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.sched-range-label{font-weight:700;color:var(--navy);font-size:14px;padding:0 6px}
+.sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
+.sched-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));background:#fff;min-width:900px}
+.sched-head-cell{background:var(--navy);color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:10px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.12)}
+.sched-head-cell .shd{font-size:10px;font-weight:600;opacity:.6;margin-top:1px}
+.sched-row-label{background:var(--bg);font-weight:700;color:var(--navy);font-size:13px;padding:8px 10px;border-right:1px solid var(--border);border-top:1px solid var(--border);display:flex;align-items:center}
+.sched-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:6px;min-height:60px}
+.sched-add-btn{width:22px;height:22px;border-radius:6px;background:var(--bg);border:1px dashed var(--border);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--dur-fast) var(--ease-out);margin-bottom:4px}
+.sched-add-btn:hover{background:var(--navy);color:#fff;border-color:var(--navy);border-style:solid;transform:scale(1.08)}
+.sched-chip{display:block;width:100%;text-align:left;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:4px 6px;font-size:11px;margin-bottom:4px;cursor:pointer;line-height:1.3;transition:transform var(--dur-fast) var(--ease-spring)}
+.sched-chip:hover{transform:translateY(-1px)}
+.sched-chip .sc-time{font-weight:700}
+.sched-chip .sc-sub{opacity:.85;font-size:10px;margin-top:1px}
+.sched-chip.st-missed{background:var(--red)}
+.sched-chip.st-in_progress{background:var(--green)}
+.sched-chip.st-completed{background:var(--navy-l)}
+.sched-chip.unpub{box-shadow:inset 3px 0 0 var(--gold)}
+.sched-totals-row .sched-row-label{background:var(--navy);color:#fff}
+.sched-totals-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:8px 10px;text-align:center;font-weight:700;color:var(--navy);background:var(--bg);font-size:13px}
+@media(max-width:900px){
+  .sched-layout{grid-template-columns:1fr}
+}
+
+/* ════════════════════════════════════════
+   GUARDS (master-detail employee profile)
+════════════════════════════════════════ */
+.gd-layout{display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start}
+.gd-list-panel{padding:0;overflow:hidden}
+.gd-list-head{display:flex;gap:10px;padding:16px 16px 12px;align-items:center;flex-wrap:wrap}
+.gd-list-head .search-bar input{min-width:0}
+.gd-status-toggle{display:flex;gap:6px;padding:0 16px 12px;border-bottom:1px solid var(--border)}
+.gd-status-btn{padding:6px 14px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
+.gd-status-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.gd-list{max-height:min(65vh,600px);overflow-y:auto}
+.gd-list-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--dur-fast) var(--ease-out);border-left:3px solid transparent}
+.gd-list-item:hover{background:var(--bg)}
+.gd-list-item.active{background:#eef2ff;border-left-color:var(--navy)}
+.gd-list-item .gdn{font-size:13px;font-weight:600;color:var(--text)}
+.gd-list-item .gdc{color:var(--green);font-size:14px;flex-shrink:0}
+.gd-detail-panel{padding:24px;min-height:420px}
+.gd-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.gd-header h2{font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px;margin:0}
+.gd-subtabs{display:flex;gap:4px;border-bottom:1.5px solid var(--border);margin-bottom:20px;flex-wrap:wrap;overflow-x:auto}
+.gd-subtab-btn{padding:10px 16px;background:none;border:none;border-bottom:3px solid transparent;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;transition:all var(--dur-fast) var(--ease-out);white-space:nowrap}
+.gd-subtab-btn:hover{color:var(--navy)}
+.gd-subtab-btn.active{color:var(--navy);border-bottom-color:var(--gold)}
+.gd-section-title{font-size:15px;font-weight:700;color:var(--navy);margin:20px 0 10px}
+.gd-section-title:first-child{margin-top:0}
+.gd-site-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;flex-wrap:wrap;gap:8px}
+.gd-site-row .gsn{font-size:13px;font-weight:600;color:var(--text)}
+.gd-site-row .gsc{font-size:11px;color:var(--muted)}
+.gd-pref-btn{padding:5px 12px;border-radius:6px;border:1.5px solid var(--border);background:#fff;font-size:11px;font-weight:700;cursor:pointer;margin-left:6px;color:var(--muted);transition:all var(--dur-fast) var(--ease-out)}
+.gd-pref-btn.on.blacklist{background:var(--red);border-color:var(--red);color:#fff}
+.gd-pref-btn.on.preferred{background:var(--green);border-color:var(--green);color:#fff}
+.gd-comp-table{width:100%;border-collapse:collapse;font-size:12px}
+.gd-comp-table th{background:var(--navy);color:#fff;padding:8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.gd-comp-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.gd-comp-table input[type=text],.gd-comp-table input[type=date],.gd-comp-table input[type=number]{font-size:12px;padding:4px 6px;background:var(--bg);border:1.5px solid var(--border);border-radius:6px}
+.gd-leave-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
+.gd-cal-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.gd-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.gd-cal-dow{background:var(--navy);color:#fff;text-align:center;padding:6px;font-size:11px;font-weight:700}
+.gd-cal-cell{background:#fff;min-height:74px;padding:4px}
+.gd-cal-cell.other-month{background:var(--bg)}
+.gd-cal-cell .gcd{font-weight:700;color:var(--navy);font-size:11px;margin-bottom:2px}
+.gd-cal-cell.other-month .gcd{color:var(--muted)}
+.gd-cal-shift{background:var(--navy);color:#fff;border-radius:4px;padding:2px 4px;font-size:9px;margin-bottom:2px;line-height:1.3}
+@media(max-width:900px){
+  .gd-layout{grid-template-columns:1fr}
+}
+
+/* ════════════════════════════════════════
    CLIENT PORTAL
 ════════════════════════════════════════ */
 #client-page{min-height:100vh;background:var(--bg)}
@@ -665,29 +749,54 @@ tr:hover td{background:#f8fafc}
 
     <!-- SCHEDULE -->
     <div id="tab-schedule" class="tab-content">
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">Shift Schedule</span>
-          <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
+      <div class="sched-layout">
+        <div class="sched-sidebar">
+          <div class="section">
+            <div class="section-body">
+              <button class="btn btn-gold btn-block" onclick="publishSchedule()">📣 Publish &amp; Notify</button>
+              <div class="sched-unpub-count" id="sched-unpub-count">0 Shifts Unpublished</div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Select Customer</label>
+                <select id="sched-customer" class="form-control" onchange="renderScheduleGrid()">
+                  <option value="">All Customers</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <label class="form-label">Schedule By</label>
+              <div class="sched-by-toggle">
+                <button class="sched-by-btn active" id="sched-by-sites" onclick="setScheduleBy('sites')">Sites</button>
+                <button class="sched-by-btn" id="sched-by-guards" onclick="setScheduleBy('guards')">Guards</button>
+              </div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="section-body">
+              <div class="report-opts-title">Weekly Report</div>
+              <div class="sched-report-row"><span>Total Shifts</span><strong id="sr-total">0</strong></div>
+              <div class="sched-report-row"><span>Unpublished</span><strong id="sr-unpub">0</strong></div>
+              <div class="sched-report-row"><span>Filled Hours</span><strong id="sr-hours">0</strong></div>
+            </div>
+          </div>
         </div>
-        <div class="filter-bar">
-          <input type="date" id="sch-from" class="form-control" style="width:auto" onchange="loadSchedule()">
-          <input type="date" id="sch-to" class="form-control" style="width:auto" onchange="loadSchedule()">
-          <select id="sch-status" onchange="loadSchedule()">
-            <option value="">All Status</option>
-            <option value="scheduled">Awaiting Clock In</option>
-            <option value="missed">Missed Clock In</option>
-            <option value="in_progress">Clocked In</option>
-            <option value="completed">Clocked Out</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="loadSchedule()">↻ Refresh</button>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Position</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="schedule-tbody"></tbody>
-          </table>
+        <div class="sched-main">
+          <div class="sched-toolbar">
+            <button class="btn btn-ghost btn-sm" onclick="schedGoToday()">Today</button>
+            <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(-1)">‹</button>
+            <span class="sched-range-label" id="sched-range-label"></span>
+            <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(1)">›</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
+          </div>
+          <div class="sched-grid-wrap">
+            <div class="sched-grid" id="sched-grid"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -733,22 +842,23 @@ tr:hover td{background:#f8fafc}
 
     <!-- GUARDS -->
     <div id="tab-guards" class="tab-content">
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">Guards</span>
-          <button class="btn btn-primary btn-sm" onclick="openGuardModal()">+ Add Guard</button>
+      <div class="gd-layout">
+        <div class="gd-list-panel section">
+          <div class="gd-list-head">
+            <div class="search-bar" style="flex:1">
+              <span>🔍</span>
+              <input type="text" id="g-search" placeholder="Search..." oninput="renderGuardsList()">
+            </div>
+            <button class="btn btn-gold btn-sm" onclick="openGuardModal()">+ Add new</button>
+          </div>
+          <div class="gd-status-toggle">
+            <button class="gd-status-btn active" id="g-status-active" onclick="setGuardStatusFilter(1)">Active</button>
+            <button class="gd-status-btn" id="g-status-inactive" onclick="setGuardStatusFilter(0)">Inactive</button>
+          </div>
+          <div class="gd-list" id="guards-list"></div>
         </div>
-        <div class="filter-bar">
-          <input type="text" id="g-search" placeholder="Search name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:200px" oninput="renderGuardsTable()">
-          <select id="g-active" onchange="renderGuardsTable()" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px">
-            <option value="1">Active</option><option value="0">Inactive</option><option value="">All</option>
-          </select>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Name</th><th>License #</th><th>Base Rate</th><th>Phone</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody id="guards-tbody"></tbody>
-          </table>
+        <div class="gd-detail-panel section" id="gd-detail-panel">
+          <div class="empty-state"><div class="ei">👮</div><p>Select a guard to view their profile</p></div>
         </div>
       </div>
     </div>
@@ -1076,7 +1186,10 @@ tr:hover td{background:#f8fafc}
       <div class="form-group"><label class="form-label">Notes</label><textarea id="shm-notes" class="form-control" rows="2"></textarea></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Cancel</button>
+      <button class="btn btn-red btn-sm hidden" id="shm-delete-btn" onclick="deleteShift(document.getElementById('shm-id').value)">Delete</button>
+      <button class="btn btn-ghost btn-sm hidden" id="shm-cancelshift-btn" onclick="cancelShift(document.getElementById('shm-id').value)">Cancel Shift</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Close</button>
       <button class="btn btn-primary" onclick="saveShift()">Save Shift</button>
     </div>
   </div>
@@ -1098,11 +1211,6 @@ tr:hover td{background:#f8fafc}
       </div>
       <div class="form-group"><label class="form-label">Email</label><input type="email" id="gm-email" class="form-control" placeholder="guard@email.com"></div>
       <div class="form-group"><label class="form-label">Notes</label><textarea id="gm-notes" class="form-control" rows="2" placeholder="Any notes..."></textarea></div>
-      <div class="form-group" id="gm-active-wrap" style="display:none">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="gm-active"><span class="form-label" style="margin:0">Active</span>
-        </label>
-      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('guard-modal')">Cancel</button>
@@ -1459,7 +1567,7 @@ function showTab(name){
   else if(name==='invoices')loadInvoicesTab();
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
-  else if(name==='schedule') loadSchedule();
+  else if(name==='schedule') loadScheduleGrid();
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
   else if(name==='audit')   loadAudit();
@@ -2044,51 +2152,133 @@ async function loadLiveOps(){
   }catch(e){ console.error(e); }
 }
 
-// ── Schedule (roster management) ────────────────────────────────────────────
+// ── Schedule (week grid roster) ─────────────────────────────────────────────
 let scheduleData = [];
-function loadSchedule(){
-  const from = document.getElementById('sch-from').value;
-  const to   = document.getElementById('sch-to').value;
-  const status = document.getElementById('sch-status').value;
-  const p = new URLSearchParams();
-  if(from) p.set('date_from',from);
-  if(to)   p.set('date_to',to);
-  if(status) p.set('status',status);
-  apiFetch('/api/shifts?'+p).then(rows=>{ scheduleData=rows; renderScheduleTable(); }).catch(e=>toast(e.message,'error'));
+let schedWeekStart = mondayOf(new Date());
+let schedBy = 'sites';
+function mondayOf(d){
+  const x = new Date(d); const day = (x.getDay()+6)%7; // Mon=0 .. Sun=6
+  x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;
 }
-function renderScheduleTable(){
-  document.getElementById('schedule-tbody').innerHTML = scheduleData.length===0
-    ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No shifts found</p></td></tr>`
-    : scheduleData.map(sh=>{
-      const st = LIVEOPS_STATUS[sh.status] || {label:sh.status, style:''};
-      return `<tr>
-        <td>${sh.shift_date}</td>
-        <td><strong>${sh.guard_name}</strong></td>
-        <td>${sh.site_name}<br><small style="color:var(--muted)">${sh.client_name}</small></td>
-        <td>${sh.position||'—'}</td>
-        <td style="font-size:12px">${sh.start_time}–${sh.end_time}</td>
-        <td><span class="badge" style="${st.style}">${st.label}</span></td>
-        <td style="white-space:nowrap">
-          ${sh.status==='scheduled'?`<button class="btn btn-xs btn-primary" onclick='editShift(${JSON.stringify(sh)})'>Edit</button>
-          <button class="btn btn-xs btn-ghost" onclick="cancelShift('${sh.id}')">Cancel</button>`:''}
-          <button class="btn btn-xs btn-red" onclick="deleteShift('${sh.id}')">Delete</button>
-        </td>
-      </tr>`;
-    }).join('');
+function fmtISO(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+function shiftHours(start,end){
+  const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
+  let mins = (eh*60+em)-(sh*60+sm); if(mins<=0) mins+=24*60;
+  return mins/60;
 }
-async function openShiftModal(){
+function schedGoToday(){ schedWeekStart = mondayOf(new Date()); loadScheduleGrid(); }
+function schedShiftWeek(delta){ schedWeekStart = new Date(schedWeekStart.getTime()+delta*7*86400000); loadScheduleGrid(); }
+function setScheduleBy(mode){
+  schedBy = mode;
+  document.getElementById('sched-by-sites').classList.toggle('active', mode==='sites');
+  document.getElementById('sched-by-guards').classList.toggle('active', mode==='guards');
+  renderScheduleGrid();
+}
+async function loadScheduleGrid(){
+  if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
+  if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
+  populateScheduleCustomerFilter();
+  const from = fmtISO(schedWeekStart);
+  const to   = fmtISO(new Date(schedWeekStart.getTime()+6*86400000));
+  try{
+    scheduleData = (await apiFetch(`/api/shifts?date_from=${from}&date_to=${to}`)).filter(sh=>!sh.cancelled);
+    renderScheduleGrid();
+  }catch(e){ toast(e.message,'error'); }
+}
+function populateScheduleCustomerFilter(){
+  const sel = document.getElementById('sched-customer'); const current = sel.value;
+  const clients = [...new Set(allSitesAdmin.map(s=>s.client_name))].sort();
+  sel.innerHTML = '<option value="">All Customers</option>' + clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = clients.includes(current) ? current : '';
+}
+const SCHED_DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function renderScheduleGrid(){
+  const days = Array.from({length:7}, (_,i)=> new Date(schedWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  document.getElementById('sched-range-label').textContent =
+    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+
+  const customer = document.getElementById('sched-customer').value;
+  let rows = schedBy==='sites'
+    ? allSitesAdmin.filter(s=>!customer||s.client_name===customer)
+    : allGuardsAdmin.filter(g=>!customer || scheduleData.some(sh=>
+        sh.guard_id===g.id && allSitesAdmin.find(s=>s.id===sh.site_id)?.client_name===customer));
+
+  const cellShifts = (rowId, dISO) => scheduleData.filter(sh =>
+    sh.shift_date===dISO && (schedBy==='sites' ? sh.site_id===rowId : sh.guard_id===rowId));
+
+  let html = `<div class="sched-head-cell"></div>` + days.map((d,i)=>
+    `<div class="sched-head-cell">${SCHED_DAY_NAMES[i]}<div class="shd">${d.toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</div></div>`
+  ).join('');
+
+  if(!rows.length){
+    html += `<div class="sched-row-label" style="grid-column:1/-1;justify-content:center;color:var(--muted)">
+      ${schedBy==='sites'?'No sites':'No guards'} to schedule${customer?' for this customer':''}</div>`;
+  }
+  rows.forEach(row=>{
+    html += `<div class="sched-row-label">${row.name}</div>`;
+    dayISO.forEach(dISO=>{
+      const shifts = cellShifts(row.id, dISO);
+      html += `<div class="sched-cell">
+        <button class="sched-add-btn" onclick="openShiftModalFor('${schedBy==='sites'?'site':'guard'}','${row.id}','${dISO}')" title="Add shift">+</button>
+        ${shifts.map(sh=>{
+          const other = schedBy==='sites' ? sh.guard_name : sh.site_name;
+          const cls = ['sched-chip', sh.status?`st-${sh.status}`:'', sh.published?'':'unpub'].filter(Boolean).join(' ');
+          return `<button class="${cls}" onclick='editShift(${JSON.stringify(sh)})'>
+            <div class="sc-time">${sh.start_time}-${sh.end_time}</div>
+            <div class="sc-sub">${other}</div>
+          </button>`;
+        }).join('')}
+      </div>`;
+    });
+  });
+
+  html += `<div class="sched-row-label" style="background:var(--navy);color:#fff">Total</div>`;
+  dayISO.forEach(dISO=>{
+    const hrs = scheduleData.filter(sh=>sh.shift_date===dISO).reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0);
+    html += `<div class="sched-totals-cell">${hrs?hrs.toFixed(2):'0'} hrs</div>`;
+  });
+  document.getElementById('sched-grid').innerHTML = html;
+
+  const unpub = scheduleData.filter(sh=>!sh.published).length;
+  document.getElementById('sched-unpub-count').textContent = `${unpub} Shift${unpub===1?'':'s'} Unpublished`;
+  document.getElementById('sr-total').textContent = scheduleData.length;
+  document.getElementById('sr-unpub').textContent = unpub;
+  document.getElementById('sr-hours').textContent =
+    scheduleData.reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0).toFixed(2);
+}
+async function publishSchedule(){
+  const unpub = scheduleData.filter(sh=>!sh.published).length;
+  if(!unpub){ toast('Nothing to publish this week','info'); return; }
+  if(!confirm(`Publish ${unpub} shift${unpub===1?'':'s'} and notify guards by email?`)) return;
+  const from = fmtISO(schedWeekStart);
+  const to   = fmtISO(new Date(schedWeekStart.getTime()+6*86400000));
+  try{
+    const res = await apiFetch('/api/shifts/publish',{method:'POST',body:JSON.stringify({date_from:from,date_to:to})});
+    toast(`Published ${res.published} shift(s), notified ${res.notified} guard(s)`,'success');
+    loadScheduleGrid();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function openShiftModal(presets={}){
   document.getElementById('shift-modal-title').textContent='Add Shift';
   ['shm-id','shm-position','shm-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('shm-delete-btn').classList.add('hidden');
+  document.getElementById('shm-cancelshift-btn').classList.add('hidden');
   if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
   if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
   const gs=document.getElementById('shm-guard'); gs.innerHTML='';
   allGuardsAdmin.forEach(g=>{ const o=document.createElement('option'); o.value=g.id; o.textContent=g.name; gs.appendChild(o); });
   const ss=document.getElementById('shm-site'); ss.innerHTML='';
   allSitesAdmin.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name} (${s.client_name})`; ss.appendChild(o); });
-  document.getElementById('shm-date').valueAsDate = new Date();
+  document.getElementById('shm-date').valueAsDate = presets.date ? new Date(presets.date) : new Date();
   document.getElementById('shm-start').value='09:00';
   document.getElementById('shm-end').value='17:00';
+  if(presets.site_id)  document.getElementById('shm-site').value  = presets.site_id;
+  if(presets.guard_id) document.getElementById('shm-guard').value = presets.guard_id;
   openModal('shift-modal');
+}
+function openShiftModalFor(kind, id, dateISO){
+  openShiftModal(kind==='site' ? {site_id:id, date:dateISO} : {guard_id:id, date:dateISO});
 }
 async function editShift(sh){
   await openShiftModal();
@@ -2101,6 +2291,8 @@ async function editShift(sh){
   document.getElementById('shm-start').value=sh.start_time;
   document.getElementById('shm-end').value=sh.end_time;
   document.getElementById('shm-notes').value=sh.notes||'';
+  document.getElementById('shm-delete-btn').classList.remove('hidden');
+  document.getElementById('shm-cancelshift-btn').classList.toggle('hidden', sh.status!=='scheduled');
 }
 async function saveShift(){
   const id = document.getElementById('shm-id').value;
@@ -2120,21 +2312,21 @@ async function saveShift(){
     if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
     else   await apiFetch('/api/shifts',{method:'POST',body:JSON.stringify(body)});
     toast('Shift saved','success'); closeModal('shift-modal');
-    loadSchedule();
+    loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 async function cancelShift(id){
   if(!confirm('Cancel this shift? The guard will no longer see it on their roster.')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify({cancelled:1})});
-    toast('Shift cancelled','success'); loadSchedule();
+    toast('Shift cancelled','success'); closeModal('shift-modal'); loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 async function deleteShift(id){
   if(!confirm('Permanently delete this shift record?')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'DELETE'});
-    toast('Shift deleted','success'); loadSchedule();
+    toast('Shift deleted','success'); closeModal('shift-modal'); loadScheduleGrid();
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -2308,73 +2500,388 @@ async function rotatePhoto(id, degrees){
 }
 
 // ── Guards Admin ───────────────────────────────────────────────────────────────
+// ── Guards (master-detail employee profile) ────────────────────────────────
+let guardsFull = []; // ALL guards (active + inactive) — Guards page only.
+                      // allGuardsAdmin stays active-only for shift/rates/reminders pickers.
+let selectedGuardId = null;
+let guardStatusFilter = 1;
+let guardSitePrefs = [];
+let guardCompliance = [];
+let guardLeave = [];
+let gdActiveSubtab = 'details';
+let gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
 async function loadGuardsAdmin(){
-  try{ allGuardsAdmin = await apiFetch('/api/guards'); renderGuardsTable(); }
+  try{ guardsFull = await apiFetch('/api/guards/all'); renderGuardsList(); }
   catch(e){ toast(e.message,'error'); }
 }
-function renderGuardsTable(){
-  const q = (document.getElementById('g-search').value||'').toLowerCase();
-  const activeF = document.getElementById('g-active').value;
-  let d = allGuardsAdmin;
-  if(q) d=d.filter(g=>g.name.toLowerCase().includes(q)||(g.license_number||'').toLowerCase().includes(q));
-  if(activeF!=='') d=d.filter(g=>String(g.active)===activeF);
-  document.getElementById('guards-tbody').innerHTML = d.length===0
-    ? `<tr><td colspan="7" class="empty-state"><div class="ei">👮</div><p>No guards found</p></td></tr>`
-    : d.map(g=>`<tr>
-      <td><strong>${g.name}</strong></td>
-      <td style="font-size:12px;color:var(--muted)">${g.license_number||'—'}</td>
-      <td>${fmtMoney(g.base_rate)}/hr</td>
-      <td style="font-size:12px">${g.phone||'—'}</td>
-      <td style="font-size:12px">${g.email||'—'}</td>
-      <td><span class="badge ${g.active?'badge-approved':'badge-rejected'}">${g.active?'Active':'Inactive'}</span></td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-xs btn-primary" onclick='editGuard(${JSON.stringify(g)})'>Edit</button>
-        <button class="btn btn-xs btn-ghost" onclick="toggleGuardActive('${g.id}',${g.active})">${g.active?'Deactivate':'Activate'}</button>
-      </td>
-    </tr>`).join('');
+function setGuardStatusFilter(active){
+  guardStatusFilter = active;
+  document.getElementById('g-status-active').classList.toggle('active', active===1);
+  document.getElementById('g-status-inactive').classList.toggle('active', active===0);
+  renderGuardsList();
 }
+function renderGuardsList(){
+  const q = (document.getElementById('g-search').value||'').toLowerCase();
+  let d = guardsFull.filter(g=>g.active===guardStatusFilter);
+  if(q) d = d.filter(g=>g.name.toLowerCase().includes(q)||(g.license_number||'').toLowerCase().includes(q));
+  const wrap = document.getElementById('guards-list');
+  wrap.innerHTML = d.length===0
+    ? `<div class="empty-state"><div class="ei">👮</div><p>No guards found</p></div>`
+    : d.map(g=>`<div class="gd-list-item ${g.id===selectedGuardId?'active':''}" onclick="selectGuard('${g.id}')">
+        <span class="gdn">${g.name}</span>
+        <span class="gdc" title="Licence on file">${g.license_number?'✓':''}</span>
+      </div>`).join('');
+  if(selectedGuardId && !d.some(g=>g.id===selectedGuardId)){
+    selectedGuardId = null;
+    document.getElementById('gd-detail-panel').innerHTML =
+      `<div class="empty-state"><div class="ei">👮</div><p>Select a guard to view their profile</p></div>`;
+  }
+  if(!selectedGuardId && d.length) selectGuard(d[0].id);
+}
+function currentGuard(){ return guardsFull.find(g=>g.id===selectedGuardId); }
+function selectGuard(id){
+  selectedGuardId = id;
+  renderGuardsList();
+  gdActiveSubtab = 'details';
+  renderGuardDetail();
+}
+function renderGuardDetail(){
+  const g = currentGuard();
+  if(!g) return;
+  document.getElementById('gd-detail-panel').innerHTML = `
+    <div class="gd-header">
+      <h2>👮 ${g.name}</h2>
+      <button class="btn ${g.active?'btn-ghost':'btn-green'} btn-sm" onclick="toggleGuardActive('${g.id}',${g.active})">${g.active?'Deactivate':'Activate'}</button>
+    </div>
+    <div class="gd-subtabs">
+      <button class="gd-subtab-btn" data-gdtab="details" onclick="showGuardSubtab('details')">Employee Details</button>
+      <button class="gd-subtab-btn" data-gdtab="sites" onclick="showGuardSubtab('sites')">Sites</button>
+      <button class="gd-subtab-btn" data-gdtab="compliance" onclick="showGuardSubtab('compliance')">Licences / Compliance</button>
+      <button class="gd-subtab-btn" data-gdtab="leave" onclick="showGuardSubtab('leave')">Leave</button>
+      <button class="gd-subtab-btn" data-gdtab="calendar" onclick="showGuardSubtab('calendar')">Calendar</button>
+    </div>
+    <div id="gd-subtab-body"></div>
+  `;
+  showGuardSubtab(gdActiveSubtab);
+}
+function showGuardSubtab(name){
+  gdActiveSubtab = name;
+  document.querySelectorAll('.gd-subtab-btn').forEach(el=>el.classList.toggle('active', el.dataset.gdtab===name));
+  if(name==='details') renderGuardDetailsTab();
+  else if(name==='sites') renderGuardSitesTab();
+  else if(name==='compliance') renderGuardComplianceTab();
+  else if(name==='leave') renderGuardLeaveTab();
+  else if(name==='calendar') renderGuardCalendarTab();
+}
+
+// ── Employee Details ─────────────────────────────────────────────────────────
+function renderGuardDetailsTab(){
+  const g = currentGuard();
+  document.getElementById('gd-subtab-body').innerHTML = `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Full Name *</label><input id="gd-name" class="form-control" value="${g.name||''}"></div>
+      <div class="form-group"><label class="form-label">License #</label><input id="gd-lic" class="form-control" value="${g.license_number||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Base Rate (AUD/hr)</label><input type="number" step="0.01" id="gd-rate" class="form-control" value="${g.base_rate||0}"></div>
+      <div class="form-group"><label class="form-label">Mobile Number</label><input id="gd-phone" class="form-control" value="${g.phone||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Email Address</label><input type="email" id="gd-email" class="form-control" value="${g.email||''}"></div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea id="gd-notes" class="form-control" rows="2">${g.notes||''}</textarea></div>
+    <div class="gd-section-title">Scheduling</div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="gd-hide-schedule" ${g.hide_on_schedule?'checked':''}> Hide this guard on the schedule
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="gd-no-license" ${g.no_license_required?'checked':''}> Does not require a security licence
+    </label>
+    <button class="btn btn-primary" onclick="saveGuardDetails()">Save Changes</button>
+  `;
+}
+async function saveGuardDetails(){
+  const id = selectedGuardId;
+  const body = {
+    name: document.getElementById('gd-name').value,
+    license_number: document.getElementById('gd-lic').value,
+    base_rate: parseFloat(document.getElementById('gd-rate').value)||0,
+    phone: document.getElementById('gd-phone').value,
+    email: document.getElementById('gd-email').value,
+    notes: document.getElementById('gd-notes').value,
+    hide_on_schedule: document.getElementById('gd-hide-schedule').checked?1:0,
+    no_license_required: document.getElementById('gd-no-license').checked?1:0,
+  };
+  if(!body.name){ toast('Name required','error'); return; }
+  try{
+    const g = await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify(body)});
+    const idx = guardsFull.findIndex(x=>x.id===id); if(idx>=0) guardsFull[idx] = g;
+    toast('Guard saved','success');
+    renderGuardsList(); loadGuardsAndSites();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Sites (blacklist / preferred) ────────────────────────────────────────────
+async function renderGuardSitesTab(){
+  const body = document.getElementById('gd-subtab-body');
+  body.innerHTML = `<p>Loading…</p>`;
+  try{
+    if(!allSitesAdmin.length) allSitesAdmin = await apiFetch('/api/sites');
+    guardSitePrefs = await apiFetch(`/api/guards/${selectedGuardId}/site-prefs`);
+  }catch(e){ toast(e.message,'error'); return; }
+  body.innerHTML = `
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Select the sites that ${currentGuard().name} can work at:</p>
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <input type="text" id="gd-site-search" class="form-control" style="width:auto;flex:1;min-width:160px" placeholder="Search sites..." oninput="renderGuardSitesList()">
+      <button class="btn btn-red btn-sm" onclick="blacklistGuardFromAllSites()">Blacklist from all sites</button>
+    </div>
+    <div id="gd-sites-list"></div>
+  `;
+  renderGuardSitesList();
+}
+function renderGuardSitesList(){
+  const q = (document.getElementById('gd-site-search').value||'').toLowerCase();
+  let sites = allSitesAdmin;
+  if(q) sites = sites.filter(s=>s.name.toLowerCase().includes(q)||s.client_name.toLowerCase().includes(q));
+  document.getElementById('gd-sites-list').innerHTML = sites.map(s=>{
+    const pref = guardSitePrefs.find(p=>p.site_id===s.id)?.pref || '';
+    return `<div class="gd-site-row">
+      <div><div class="gsn">${s.name}</div><div class="gsc">${s.client_name}</div></div>
+      <div>
+        <button class="gd-pref-btn ${pref==='blacklist'?'on blacklist':''}" onclick="setGuardSitePref('${s.id}','blacklist')">Blacklist</button>
+        <button class="gd-pref-btn ${pref==='preferred'?'on preferred':''}" onclick="setGuardSitePref('${s.id}','preferred')">Preferred</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function setGuardSitePref(siteId, pref){
+  const existing = guardSitePrefs.find(p=>p.site_id===siteId);
+  const next = existing && existing.pref===pref ? '' : pref; // click again to clear
+  try{
+    await apiFetch(`/api/guards/${selectedGuardId}/site-pref`,{method:'POST',body:JSON.stringify({site_id:siteId,pref:next})});
+    if(existing) existing.pref = next; else guardSitePrefs.push({site_id:siteId,pref:next});
+    renderGuardSitesList();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function blacklistGuardFromAllSites(){
+  if(!confirm(`Blacklist ${currentGuard().name} from all sites?`)) return;
+  try{
+    await apiFetch(`/api/guards/${selectedGuardId}/blacklist-all`,{method:'POST',body:'{}'});
+    toast('Guard blacklisted from all sites','success');
+    renderGuardSitesTab();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Licences / Compliance ────────────────────────────────────────────────────
+const AU_STATES = ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'];
+async function renderGuardComplianceTab(){
+  const g = currentGuard();
+  const body = document.getElementById('gd-subtab-body');
+  body.innerHTML = `<p>Loading…</p>`;
+  try{ guardCompliance = await apiFetch(`/api/guards/${selectedGuardId}/compliance`); }
+  catch(e){ toast(e.message,'error'); return; }
+  body.innerHTML = `
+    <div class="gd-section-title">Security Licence</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">State</label>
+        <select id="gd-lic-state" class="form-control">
+          <option value="">—</option>
+          ${AU_STATES.map(st=>`<option value="${st}" ${g.license_state===st?'selected':''}>${st}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Licence #</label><input id="gd-lic-num" class="form-control" value="${g.license_number||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Expiry Date</label><input type="date" id="gd-lic-expiry" class="form-control" value="${g.license_expiry||''}"></div>
+      <div class="form-group"><label class="form-label">Reminder (days before)</label><input type="number" id="gd-lic-reminder" class="form-control" value="${g.license_reminder_days||60}"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="gd-lic-critical" ${g.license_critical?'checked':''}> Critical
+    </label>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">📎 Attach File<input type="file" style="display:none" onchange="uploadLicenseFile(this)"></label>
+      ${g.license_file?`<button class="btn btn-ghost btn-sm" onclick="window.open('/uploads/${g.license_file}','_blank')">View File</button>`:''}
+      <button class="btn btn-primary btn-sm" onclick="saveLicense()">Save Licence</button>
+    </div>
+
+    <div class="gd-section-title">Compliance</div>
+    <div class="tbl-wrap">
+      <table class="gd-comp-table">
+        <thead><tr><th></th><th>Description</th><th>Reference #</th><th>Expiry Date</th><th>Reminder</th><th>Critical</th><th>File</th><th>Show to Customer</th></tr></thead>
+        <tbody>
+          ${guardCompliance.map(c=>`<tr>
+            <td><input type="checkbox" ${c.checked?'checked':''} onchange="saveComplianceField('${c.item_id}','checked',this.checked?1:0)"></td>
+            <td>${c.name}</td>
+            <td><input type="text" value="${c.reference_no||''}" onblur="saveComplianceField('${c.item_id}','reference_no',this.value)"></td>
+            <td><input type="date" value="${c.expiry_date||''}" onchange="saveComplianceField('${c.item_id}','expiry_date',this.value)"></td>
+            <td><input type="number" style="width:60px" value="${c.reminder_days||60}" onchange="saveComplianceField('${c.item_id}','reminder_days',this.value)"></td>
+            <td style="text-align:center"><input type="checkbox" ${c.critical?'checked':''} onchange="saveComplianceField('${c.item_id}','critical',this.checked?1:0)"></td>
+            <td style="white-space:nowrap">
+              <label class="btn btn-xs btn-ghost" style="cursor:pointer">Attach<input type="file" style="display:none" onchange="uploadComplianceFile('${c.item_id}',this)"></label>
+              ${c.file_filename?`<button class="btn btn-xs btn-ghost" onclick="window.open('/uploads/${c.file_filename}','_blank')">View</button>`:''}
+            </td>
+            <td style="text-align:center"><input type="checkbox" ${c.show_to_customer?'checked':''} onchange="saveComplianceField('${c.item_id}','show_to_customer',this.checked?1:0)"></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+async function saveLicense(){
+  const body = {
+    license_number: document.getElementById('gd-lic-num').value,
+    license_state: document.getElementById('gd-lic-state').value,
+    license_expiry: document.getElementById('gd-lic-expiry').value,
+    license_reminder_days: parseInt(document.getElementById('gd-lic-reminder').value)||60,
+    license_critical: document.getElementById('gd-lic-critical').checked?1:0,
+  };
+  try{
+    const g = await apiFetch(`/api/guards/${selectedGuardId}`,{method:'PUT',body:JSON.stringify(body)});
+    const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
+    toast('Licence saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+function readFileAsBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+async function uploadLicenseFile(input){
+  const file = input.files[0]; if(!file) return;
+  try{
+    const b64 = await readFileAsBase64(file);
+    const ext = (file.name.split('.').pop()||'dat');
+    const res = await apiFetch(`/api/guards/${selectedGuardId}/license-file`,{method:'POST',body:JSON.stringify({file_b64:b64,ext})});
+    const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx].license_file = res.filename;
+    toast('File uploaded','success'); renderGuardComplianceTab();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function uploadComplianceFile(itemId, input){
+  const file = input.files[0]; if(!file) return;
+  try{
+    const b64 = await readFileAsBase64(file);
+    const ext = (file.name.split('.').pop()||'dat');
+    await apiFetch(`/api/guards/${selectedGuardId}/compliance/${itemId}/file`,{method:'POST',body:JSON.stringify({file_b64:b64,ext})});
+    toast('File uploaded','success'); renderGuardComplianceTab();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function saveComplianceField(itemId, field, value){
+  try{
+    await apiFetch(`/api/guards/${selectedGuardId}/compliance/${itemId}`,{method:'PUT',body:JSON.stringify({[field]:value})});
+    const c = guardCompliance.find(x=>x.item_id===itemId); if(c) c[field]=value;
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Leave ─────────────────────────────────────────────────────────────────────
+async function renderGuardLeaveTab(){
+  const body = document.getElementById('gd-subtab-body');
+  body.innerHTML = `<p>Loading…</p>`;
+  try{ guardLeave = await apiFetch(`/api/guards/${selectedGuardId}/leave`); }
+  catch(e){ toast(e.message,'error'); return; }
+  body.innerHTML = `
+    <div class="gd-section-title">Add Leave</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Start Date</label><input type="date" id="gd-lv-from" class="form-control"></div>
+      <div class="form-group"><label class="form-label">End Date</label><input type="date" id="gd-lv-to" class="form-control"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Notes</label><input id="gd-lv-notes" class="form-control" placeholder="Optional"></div>
+    <button class="btn btn-primary btn-sm" onclick="addGuardLeave()">+ Add Fixed Leave</button>
+    <div class="gd-section-title">Leave Records</div>
+    ${guardLeave.length===0 ? `<div class="empty-state"><div class="ei">🌴</div><p>No leave recorded</p></div>` :
+      guardLeave.map(l=>`<div class="gd-leave-row">
+        <div><strong>${l.leave_type}</strong><div style="font-size:12px;color:var(--muted)">${l.start_date} – ${l.end_date}${l.notes?' · '+l.notes:''}</div></div>
+        <button class="btn btn-xs btn-red" onclick="deleteGuardLeave('${l.id}')">Delete</button>
+      </div>`).join('')}
+  `;
+}
+async function addGuardLeave(){
+  const start = document.getElementById('gd-lv-from').value;
+  const end   = document.getElementById('gd-lv-to').value;
+  const notes = document.getElementById('gd-lv-notes').value;
+  if(!start||!end){ toast('Start and end date required','error'); return; }
+  try{
+    await apiFetch(`/api/guards/${selectedGuardId}/leave`,{method:'POST',body:JSON.stringify({leave_type:'Fixed Leave',start_date:start,end_date:end,notes})});
+    toast('Leave added','success'); renderGuardLeaveTab();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteGuardLeave(id){
+  if(!confirm('Delete this leave record?')) return;
+  try{ await apiFetch(`/api/leave/${id}`,{method:'DELETE'}); toast('Deleted','success'); renderGuardLeaveTab(); }
+  catch(e){ toast(e.message,'error'); }
+}
+
+// ── Calendar ──────────────────────────────────────────────────────────────────
+async function renderGuardCalendarTab(){
+  const body = document.getElementById('gd-subtab-body');
+  const year = gdCalMonth.getFullYear(), month = gdCalMonth.getMonth();
+  const first = new Date(year, month, 1);
+  const startOffset = first.getDay();
+  const gridStart = new Date(year, month, 1-startOffset);
+  const from = fmtISO(gridStart);
+  const to   = fmtISO(new Date(gridStart.getTime()+41*86400000));
+  let shifts = [];
+  try{ shifts = await apiFetch(`/api/shifts?guard_id=${selectedGuardId}&date_from=${from}&date_to=${to}`); }catch(e){}
+  body.innerHTML = `
+    <div class="gd-cal-toolbar">
+      <button class="btn btn-ghost btn-sm" onclick="gdCalShift(-1)">‹</button>
+      <span class="sched-range-label">${first.toLocaleDateString('en-AU',{month:'long',year:'numeric'})}</span>
+      <button class="btn btn-ghost btn-sm" onclick="gdCalShift(1)">›</button>
+      <button class="btn btn-ghost btn-sm" onclick="gdCalToday()">Today</button>
+    </div>
+    <div class="gd-cal-grid" id="gd-cal-grid"></div>
+  `;
+  let html = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="gd-cal-dow">${d}</div>`).join('');
+  for(let i=0;i<42;i++){
+    const d = new Date(gridStart.getTime()+i*86400000);
+    const iso = fmtISO(d);
+    const inMonth = d.getMonth()===month;
+    const dayShifts = shifts.filter(sh=>sh.shift_date===iso);
+    html += `<div class="gd-cal-cell ${inMonth?'':'other-month'}">
+      <div class="gcd">${d.getDate()}</div>
+      ${dayShifts.map(sh=>`<div class="gd-cal-shift">${sh.start_time}-${sh.end_time}<br>${sh.site_name}</div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('gd-cal-grid').innerHTML = html;
+}
+function gdCalShift(delta){ gdCalMonth = new Date(gdCalMonth.getFullYear(), gdCalMonth.getMonth()+delta, 1); renderGuardCalendarTab(); }
+function gdCalToday(){ gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1); renderGuardCalendarTab(); }
+
+// ── Add-guard modal (creation only — editing happens inline above) ─────────
 function openGuardModal(){
   document.getElementById('guard-modal-title').textContent='Add Guard';
   ['gm-id','gm-name','gm-lic','gm-phone','gm-email','gm-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('gm-rate').value='0';
-  document.getElementById('gm-active-wrap').style.display='none';
-  openModal('guard-modal');
-}
-function editGuard(g){
-  document.getElementById('guard-modal-title').textContent='Edit Guard';
-  document.getElementById('gm-id').value=g.id;
-  document.getElementById('gm-name').value=g.name||'';
-  document.getElementById('gm-lic').value=g.license_number||'';
-  document.getElementById('gm-rate').value=g.base_rate||0;
-  document.getElementById('gm-phone').value=g.phone||'';
-  document.getElementById('gm-email').value=g.email||'';
-  document.getElementById('gm-notes').value=g.notes||'';
-  document.getElementById('gm-active-wrap').style.display='block';
-  document.getElementById('gm-active').checked=!!g.active;
   openModal('guard-modal');
 }
 async function saveGuard(){
-  const id=document.getElementById('gm-id').value;
   const body={name:document.getElementById('gm-name').value,
     license_number:document.getElementById('gm-lic').value,
     base_rate:parseFloat(document.getElementById('gm-rate').value)||0,
     phone:document.getElementById('gm-phone').value,
     email:document.getElementById('gm-email').value,
-    notes:document.getElementById('gm-notes').value,
-    active:document.getElementById('gm-active').checked?1:0};
+    notes:document.getElementById('gm-notes').value};
   if(!body.name){ toast('Name required','error'); return; }
   try{
-    if(id) await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify(body)});
-    else   await apiFetch('/api/guards',{method:'POST',body:JSON.stringify(body)});
-    toast('Guard saved','success'); closeModal('guard-modal');
-    loadGuardsAdmin(); loadGuardsAndSites();
+    const g = await apiFetch('/api/guards',{method:'POST',body:JSON.stringify(body)});
+    toast('Guard added','success'); closeModal('guard-modal');
+    await loadGuardsAdmin(); loadGuardsAndSites();
+    selectGuard(g.id);
   }catch(e){ toast(e.message,'error'); }
 }
 async function toggleGuardActive(id, current){
   try{
-    const g=allGuardsAdmin.find(x=>x.id===id);
-    await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify({...g,active:current?0:1})});
-    toast('Updated','success'); loadGuardsAdmin();
+    await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify({active:current?0:1})});
+    toast('Updated','success');
+    guardsFull = await apiFetch('/api/guards/all');
+    guardStatusFilter = current?0:1;
+    document.getElementById('g-status-active').classList.toggle('active', guardStatusFilter===1);
+    document.getElementById('g-status-inactive').classList.toggle('active', guardStatusFilter===0);
+    selectedGuardId = id;
+    renderGuardsList();
+    renderGuardDetail();
+    loadGuardsAndSites();
   }catch(e){ toast(e.message,'error'); }
 }
 
