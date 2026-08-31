@@ -330,6 +330,26 @@ tr:hover td{background:#f8fafc}
 .chk-list label{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px;cursor:pointer}
 
 /* ════════════════════════════════════════
+   REPORTS HUB
+════════════════════════════════════════ */
+.reports-layout{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start}
+.report-list{max-height:min(70vh,640px);overflow-y:auto}
+.report-cat-label{padding:10px 20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--bg);position:sticky;top:0}
+.report-item{padding:14px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-left-color var(--dur-fast) var(--ease-out);border-left:3px solid transparent}
+.report-item:last-child{border-bottom:none}
+.report-item:hover{background:var(--bg)}
+.report-item.active{background:#eef2ff;border-left-color:var(--navy)}
+.report-item .rt{font-weight:700;color:var(--navy);font-size:14px}
+.report-item .rd{font-size:12px;color:var(--muted);margin-top:2px;font-style:italic}
+.report-sidebar{position:sticky;top:132px}
+.report-opts-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.report-selected-name{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+@media(max-width:900px){
+  .reports-layout{grid-template-columns:1fr}
+  .report-sidebar{position:static}
+}
+
+/* ════════════════════════════════════════
    CLIENT PORTAL
 ════════════════════════════════════════ */
 #client-page{min-height:100vh;background:var(--bg)}
@@ -586,6 +606,7 @@ tr:hover td{background:#f8fafc}
     <button class="tab-btn" onclick="showTab('sites')" data-tab="sites">📍 Sites</button>
     <button class="tab-btn" onclick="showTab('rates')" data-tab="rates">💲 Rates</button>
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
+    <button class="tab-btn" onclick="showTab('reports')" data-tab="reports">📈 Reports</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
     <button class="tab-btn" onclick="showTab('activity')" data-tab="activity">📡 Live Activity</button>
     <button class="tab-btn" onclick="showTab('incidents')" data-tab="incidents">🚨 Incidents</button>
@@ -803,6 +824,33 @@ tr:hover td{background:#f8fafc}
         </div>
       </div>
       <div id="inv-empty" class="empty-state"><div class="ei">🧾</div><p>Select a date range to preview your invoice</p></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div id="tab-reports" class="tab-content">
+      <div class="reports-layout">
+        <div class="section" style="margin-bottom:0">
+          <div class="section-head"><span class="section-title">Reports</span></div>
+          <div id="reports-list" class="report-list"></div>
+        </div>
+        <div class="report-sidebar">
+          <div class="section">
+            <div class="section-body">
+              <div class="report-opts-title">Report Options</div>
+              <div id="report-selected-name" class="report-selected-name">No report selected</div>
+              <div class="form-group">
+                <label class="form-label">Date Range</label>
+                <div class="form-row">
+                  <input type="date" id="rpt-from" class="form-control">
+                  <input type="date" id="rpt-to" class="form-control">
+                </div>
+              </div>
+              <button class="btn btn-gold btn-block" id="rpt-gen-csv" onclick="generateReport('csv')" disabled>Generate Report (CSV) →</button>
+              <button class="btn btn-ghost btn-block" id="rpt-gen-xlsx" onclick="generateReport('xlsx')" disabled style="margin-top:10px">📊 Download Excel</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- REMINDERS -->
@@ -1378,6 +1426,7 @@ function showTab(name){
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='rates')   loadRates();
   else if(name==='invoices')loadInvoicesTab();
+  else if(name==='reports') loadReportsTab();
   else if(name==='reminders')loadRemindersTab();
   else if(name==='schedule') loadSchedule();
   else if(name==='activity') loadActivity();
@@ -2603,6 +2652,62 @@ async function dlInvoice(fmt){
     a.href=URL.createObjectURL(blob);
     a.download=`BOS_invoice_${(client||'all').replace(/\s+/g,'_')}_${from}_${to}.${extMap[fmt]}`;
     a.click(); URL.revokeObjectURL(a.href); toast('Downloaded!','success');
+  }catch(e){ toast(e.message,'error'); }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+
+// ── Reports hub ───────────────────────────────────────────────────────────────
+let reportsCatalog = null;
+let selectedReportId = null;
+async function loadReportsTab(){
+  if(reportsCatalog){ renderReportsList(); return; }
+  try{
+    reportsCatalog = await apiFetch('/api/reports/catalog');
+    renderReportsList();
+  }catch(e){ toast(e.message,'error'); }
+}
+function renderReportsList(){
+  const wrap = document.getElementById('reports-list');
+  const cats = [];
+  reportsCatalog.forEach(r=>{
+    let cat = cats.find(c=>c.name===r.category);
+    if(!cat){ cat = {name:r.category, items:[]}; cats.push(cat); }
+    cat.items.push(r);
+  });
+  wrap.innerHTML = cats.map(cat=>`
+    <div class="report-cat-label">${cat.name}</div>
+    ${cat.items.map(r=>`
+      <div class="report-item" data-report-id="${r.id}" onclick="selectReport('${r.id}')">
+        <div class="rt">${r.title}</div>
+        <div class="rd">${r.desc}</div>
+      </div>`).join('')}
+  `).join('');
+}
+function selectReport(id){
+  selectedReportId = id;
+  document.querySelectorAll('.report-item').forEach(el=>el.classList.toggle('active', el.dataset.reportId===id));
+  const r = reportsCatalog.find(x=>x.id===id);
+  document.getElementById('report-selected-name').textContent = r ? r.title : 'No report selected';
+  document.getElementById('rpt-gen-csv').disabled = false;
+  document.getElementById('rpt-gen-xlsx').disabled = false;
+}
+async function generateReport(fmt){
+  if(!selectedReportId){ toast('Select a report first','error'); return; }
+  const from = document.getElementById('rpt-from').value;
+  const to   = document.getElementById('rpt-to').value;
+  const p = new URLSearchParams({report:selectedReportId, format:fmt});
+  if(from) p.set('date_from',from);
+  if(to)   p.set('date_to',to);
+  const btn = event.target; btn.disabled=true; const orig=btn.textContent; btn.textContent='Generating…';
+  try{
+    const res = await fetch('/api/reports/run?'+p, {headers:{'X-Auth-Token':authToken}});
+    if(!res.ok){ const e=await res.json().catch(()=>({error:'Report failed'})); toast(e.error,'error'); return; }
+    const blob = await res.blob(); const a = document.createElement('a');
+    const cd = res.headers.get('content-disposition')||'';
+    const m = cd.match(/filename="(.+)"/);
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : `report.${fmt}`;
+    a.click(); URL.revokeObjectURL(a.href); toast('Report downloaded!','success');
   }catch(e){ toast(e.message,'error'); }
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
