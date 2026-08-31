@@ -509,6 +509,225 @@ def make_xlsx(rows, client_name, date_from, date_to, total):
     xb = io.BytesIO(); wb.save(xb); xb.seek(0)
     return xb.read()
 
+# ─── Reports hub ──────────────────────────────────────────────────────────────
+def rows_to_csv(headers, rows):
+    buf = io.StringIO(); w = csv.writer(buf)
+    w.writerow(headers)
+    for r in rows: w.writerow(r)
+    return ('\ufeff'+buf.getvalue()).encode('utf-8')
+
+def rows_to_xlsx(headers, rows, title='Report'):
+    wb = Workbook(); ws = wb.active; ws.title = (title[:31] or 'Report')
+    navy = PatternFill('solid', fgColor='1A2744')
+    white_bold = Font(color='FFFFFF', bold=True, size=11)
+    ws.append(headers)
+    for c in range(1, len(headers)+1):
+        ce = ws.cell(1, c); ce.fill = navy; ce.font = white_bold
+    for r in rows: ws.append(r)
+    for i, h in enumerate(headers, 1):
+        vals = [str(h)] + [str(r[i-1]) for r in rows]
+        ws.column_dimensions[get_column_letter(i)].width = min(max(max(len(v) for v in vals)+2, 10), 40)
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.read()
+
+def _date_where(qs, col, where, params):
+    if qs.get('date_from'): where.append(f'{col}>=?'); params.append(qs['date_from'][0])
+    if qs.get('date_to'):   where.append(f'{col}<=?'); params.append(qs['date_to'][0])
+
+def report_schedule_by_guard(qs):
+    where, params = ['sh.cancelled=0'], []
+    _date_where(qs, 'sh.shift_date', where, params)
+    db = get_db()
+    rows = with_shift_status(RL(db.execute(f'''
+        SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+        FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+        WHERE {" AND ".join(where)} ORDER BY g.name, sh.shift_date, sh.start_time
+    ''', params).fetchall()))
+    db.close()
+    headers = ['Guard','Site','Client','Date','Start','End','Position','Status']
+    data = [[r['guard_name'],r['site_name'],r['client_name'],r['shift_date'],
+             r['start_time'],r['end_time'],r['position'] or '—',r['status']] for r in rows]
+    return headers, data
+
+def report_schedule_by_site(qs):
+    where, params = ['sh.cancelled=0'], []
+    _date_where(qs, 'sh.shift_date', where, params)
+    db = get_db()
+    rows = with_shift_status(RL(db.execute(f'''
+        SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+        FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+        WHERE {" AND ".join(where)} ORDER BY s.name, sh.shift_date, sh.start_time
+    ''', params).fetchall()))
+    db.close()
+    headers = ['Site','Client','Guard','Date','Start','End','Position','Status']
+    data = [[r['site_name'],r['client_name'],r['guard_name'],r['shift_date'],
+             r['start_time'],r['end_time'],r['position'] or '—',r['status']] for r in rows]
+    return headers, data
+
+def report_timesheet_approved(qs):
+    where, params = ["sub.status='approved'"], []
+    _date_where(qs, 'sub.shift_date', where, params)
+    db = get_db()
+    rows = RL(db.execute(f'''
+        SELECT sub.*, g.name as guard_name, g.license_number, s.name as site_name, s.client_name,
+               COALESCE(r.rate, g.base_rate) as rate
+        FROM submissions sub
+        JOIN guards g ON g.id=sub.guard_id
+        JOIN sites  s ON s.id=sub.site_id
+        LEFT JOIN rates r ON r.guard_id=sub.guard_id AND r.site_id=sub.site_id
+        WHERE {" AND ".join(where)} ORDER BY sub.shift_date, g.name
+    ''', params).fetchall())
+    db.close()
+    headers = ['Date','Guard','Licence #','Site','Client','Start','End','Hours','Rate','Amount','Verified']
+    data = [[r['shift_date'], r['guard_name'], r['license_number'] or '—', r['site_name'], r['client_name'],
+             r['start_time'], r['end_time'], r['total_hours'], r['rate'],
+             round(r['total_hours']*r['rate'],2), 'Yes' if r.get('location_verified') else 'No'] for r in rows]
+    return headers, data
+
+def report_timesheet_with_notes(qs):
+    where, params = ["sub.status='approved'"], []
+    _date_where(qs, 'sub.shift_date', where, params)
+    db = get_db()
+    rows = RL(db.execute(f'''
+        SELECT sub.*, g.name as guard_name, s.name as site_name
+        FROM submissions sub JOIN guards g ON g.id=sub.guard_id JOIN sites s ON s.id=sub.site_id
+        WHERE {" AND ".join(where)} ORDER BY sub.shift_date, g.name
+    ''', params).fetchall())
+    db.close()
+    headers = ['Date','Guard','Site','Start','End','Hours','Notes']
+    data = [[r['shift_date'], r['guard_name'], r['site_name'], r['start_time'], r['end_time'],
+             r['total_hours'], r['notes'] or ''] for r in rows]
+    return headers, data
+
+def report_activity_slip(qs):
+    rows, total = invoice_query(qs)
+    headers = ['Date','Guard','Site','Client','Start','End','Hours','Rate','Amount']
+    data = [[r['shift_date'],r['guard_name'],r['site_name'],r['client_name'],
+             r['start_time'],r['end_time'],r['total_hours'],r['rate'],r['amount']] for r in rows]
+    data.append(['','','','','','','','TOTAL', round(total,2)])
+    return headers, data
+
+def report_live_operations(qs):
+    today = datetime.now().strftime('%Y-%m-%d')
+    where, params = ['sh.cancelled=0'], []
+    where.append('sh.shift_date>=?'); params.append(qs.get('date_from',[today])[0])
+    where.append('sh.shift_date<=?'); params.append(qs.get('date_to',[today])[0])
+    db = get_db()
+    rows = with_shift_status(RL(db.execute(f'''
+        SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+        FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
+        WHERE {" AND ".join(where)} ORDER BY sh.shift_date, sh.start_time
+    ''', params).fetchall()))
+    db.close()
+    def verify_label(r):
+        if r['status'] not in ('in_progress','completed'): return '—'
+        ok = r.get('clock_in_verified') and (r['status']!='completed' or r.get('clock_out_verified'))
+        return 'Verified' if ok else 'Unverified'
+    headers = ['Site','Guard','Position','Status','Start Time','End Time','Verification']
+    data = [[r['site_name'], r['guard_name'], r['position'] or '—', r['status'],
+             r['clock_in_at'] or '—', r['clock_out_at'] or '—', verify_label(r)] for r in rows]
+    return headers, data
+
+def report_guard_listing(qs):
+    db = get_db()
+    rows = RL(db.execute('SELECT * FROM guards ORDER BY active DESC, name').fetchall())
+    db.close()
+    headers = ['Name','Licence #','Phone','Email','Base Rate','Status']
+    data = [[r['name'], r['license_number'] or '—', r['phone'] or '—', r['email'] or '—',
+             r['base_rate'], 'Active' if r['active'] else 'Inactive'] for r in rows]
+    return headers, data
+
+def report_licence(qs):
+    db = get_db()
+    rows = RL(db.execute('SELECT * FROM guards WHERE active=1 ORDER BY name').fetchall())
+    db.close()
+    headers = ['Name','Licence #','Phone','Licence On File']
+    data = [[r['name'], r['license_number'] or '—', r['phone'] or '—',
+             'Yes' if r['license_number'] else 'No'] for r in rows]
+    return headers, data
+
+def report_site_listing(qs):
+    db = get_db()
+    rows = RL(db.execute('SELECT * FROM sites ORDER BY active DESC, client_name, name').fetchall())
+    db.close()
+    headers = ['Site','Client','Address','Default Rate','Contact Name','Contact Phone','Status']
+    data = [[r['name'], r['client_name'], r['address'] or '—', r['default_rate'],
+             r['contact_name'] or '—', r['contact_phone'] or '—',
+             'Active' if r['active'] else 'Inactive'] for r in rows]
+    return headers, data
+
+def report_checkpoints(qs):
+    where, params = [], []
+    _date_where(qs, 'cs.scanned_at', where, params)
+    wc = ('WHERE '+' AND '.join(where)) if where else ''
+    db = get_db()
+    rows = RL(db.execute(f'''
+        SELECT cs.*, g.name as guard_name, s.name as site_name
+        FROM checkpoint_scans cs JOIN guards g ON g.id=cs.guard_id JOIN sites s ON s.id=cs.site_id
+        {wc} ORDER BY cs.scanned_at DESC
+    ''', params).fetchall())
+    db.close()
+    headers = ['Date/Time','Guard','Site','Checkpoint','Distance (m)']
+    data = [[r['scanned_at'], r['guard_name'], r['site_name'], r['checkpoint_name'] or '—',
+             round(r['distance_m']) if r['distance_m'] is not None else '—'] for r in rows]
+    return headers, data
+
+def report_incidents(qs):
+    where, params = [], []
+    _date_where(qs, 'i.occurred_at', where, params)
+    wc = ('WHERE '+' AND '.join(where)) if where else ''
+    db = get_db()
+    rows = RL(db.execute(f'''
+        SELECT i.*, g.name as guard_name, s.name as site_name
+        FROM incidents i JOIN guards g ON g.id=i.guard_id JOIN sites s ON s.id=i.site_id
+        {wc} ORDER BY i.occurred_at DESC
+    ''', params).fetchall())
+    db.close()
+    headers = ['Date/Time','Guard','Site','Type','Description','Status']
+    data = [[r['occurred_at'], r['guard_name'], r['site_name'], r['type'],
+             (r['description'] or ''), r['status']] for r in rows]
+    return headers, data
+
+def report_audit(qs):
+    where, params = [], []
+    _date_where(qs, 'created_at', where, params)
+    wc = ('WHERE '+' AND '.join(where)) if where else ''
+    db = get_db()
+    rows = RL(db.execute(f'SELECT * FROM audit_log {wc} ORDER BY created_at DESC LIMIT 1000', params).fetchall())
+    db.close()
+    headers = ['Date/Time','Admin','Action','Details']
+    data = [[r['created_at'], r['admin_name'] or '—', r['action'], r['details'] or ''] for r in rows]
+    return headers, data
+
+REPORTS = {
+    'schedule_by_guard': {'category':'Roster Reports','title':'Schedule By Guard',
+        'desc':'Generate schedule grouped by guard','fn':report_schedule_by_guard},
+    'schedule_by_site': {'category':'Roster Reports','title':'Schedule By Site',
+        'desc':'Generate schedule grouped by site','fn':report_schedule_by_site},
+    'timesheet_approved': {'category':'Timesheet Reports','title':'Approved Timesheet',
+        'desc':'Generate a listing of approved timesheets with pay details','fn':report_timesheet_approved},
+    'timesheet_notes': {'category':'Timesheet Reports','title':'Timesheet With Notes',
+        'desc':'Generate a listing of approved timesheets including shift notes','fn':report_timesheet_with_notes},
+    'activity_slip': {'category':'Activity Reports','title':'Activity Slip',
+        'desc':'Generate approved shifts with pay details','fn':report_activity_slip},
+    'live_operations': {'category':'Activity Reports','title':'Live Operations Report',
+        'desc':'Generate a listing of shifts in the live operations dashboard','fn':report_live_operations},
+    'guard_listing': {'category':'Staff Reports','title':'Staff Listing',
+        'desc':'Generate a listing of all guards','fn':report_guard_listing},
+    'licence': {'category':'Staff Reports','title':'Security Licence Report',
+        'desc':'Generate a report for security licences on file','fn':report_licence},
+    'site_listing': {'category':'Site Reports','title':'Site Listing',
+        'desc':'Generate a listing of all sites and their contacts','fn':report_site_listing},
+    'checkpoints': {'category':'Checkpoint Reports','title':'Checkpoint Report',
+        'desc':'Generate a listing of all patrol checkpoint scans','fn':report_checkpoints},
+    'incidents': {'category':'Incident Reports','title':'Incident Report',
+        'desc':'Generate a listing of reported incidents','fn':report_incidents},
+    'invoice_report': {'category':'Invoice Reports','title':'Invoice Report',
+        'desc':'Generate invoice-ready billing details, optionally filtered by client','fn':report_activity_slip},
+    'audit': {'category':'Audit Reports','title':'Audit Log',
+        'desc':'Generate a listing of all admin actions','fn':report_audit},
+}
+
 # ─── Handler ──────────────────────────────────────────────────────────────────
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -842,6 +1061,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             data = ('\ufeff'+buf.getvalue()).encode('utf-8')
             fn   = f"BOS_invoice_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             self.send_download(data,'text/csv; charset=utf-8', fn); return
+
+        if path == '/api/reports/catalog':
+            self.send_json([{'id':k,'category':v['category'],'title':v['title'],'desc':v['desc']}
+                             for k,v in REPORTS.items()]); return
+
+        if path == '/api/reports/run':
+            rid = qs.get('report',[''])[0]
+            entry = REPORTS.get(rid)
+            if not entry: self.err('Unknown report'); return
+            try:
+                headers, data = entry['fn'](qs)
+            except Exception as e:
+                self.err(f'Report failed: {e}', 500); return
+            fmt   = qs.get('format',['csv'])[0]
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe  = re.sub(r'[^A-Za-z0-9]+','_', entry['title']).strip('_')
+            if fmt == 'xlsx':
+                if not OPENPYXL_OK: self.err('Run: py -m pip install openpyxl', 500); return
+                out = rows_to_xlsx(headers, data, entry['title'])
+                db = get_db(); audit(db, s, 'REPORT_RUN', f"{entry['title']} xlsx"); db.commit(); db.close()
+                self.send_download(out, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                    f'BOS_{safe}_{stamp}.xlsx'); return
+            out = rows_to_csv(headers, data)
+            db = get_db(); audit(db, s, 'REPORT_RUN', f"{entry['title']} csv"); db.commit(); db.close()
+            self.send_download(out, 'text/csv; charset=utf-8', f'BOS_{safe}_{stamp}.csv'); return
 
         if path == '/api/reminders/all':
             db = get_db()
