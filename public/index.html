@@ -206,6 +206,14 @@ tr:hover td{background:#f8fafc}
 .tab-content{display:none;padding:24px 20px}
 .tab-content.active{display:block}
 
+/* Organization dropdown (in tabs bar) */
+.tab-dropdown{position:relative;flex-shrink:0}
+.tab-dropdown-menu{position:fixed;background:#fff;border-radius:8px;box-shadow:var(--sh-lg);min-width:170px;padding:6px;z-index:300}
+.tab-dropdown-menu:not(.hidden){animation:riseIn var(--dur-fast) var(--ease-out)}
+.tab-dropdown-item{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:6px;background:none;border:none;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.tab-dropdown-item:hover{background:var(--bg)}
+.tab-dropdown-item.active{background:#eef2ff;color:var(--navy)}
+
 /* Bulk bar */
 .bulk-bar{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .bulk-count{font-weight:700;color:var(--blue);font-size:13px}
@@ -602,14 +610,19 @@ tr:hover td{background:#f8fafc}
     <button class="tab-btn active" onclick="showTab('dashboard')" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" onclick="showTab('schedule')" data-tab="schedule">🗓️ Schedule</button>
     <button class="tab-btn" onclick="showTab('submissions')" data-tab="submissions">📋 Submissions</button>
-    <button class="tab-btn" onclick="showTab('guards')" data-tab="guards">👮 Guards</button>
-    <button class="tab-btn" onclick="showTab('sites')" data-tab="sites">📍 Sites</button>
     <button class="tab-btn" onclick="showTab('rates')" data-tab="rates">💲 Rates</button>
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
     <button class="tab-btn" onclick="showTab('reports')" data-tab="reports">📈 Reports</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
     <button class="tab-btn" onclick="showTab('activity')" data-tab="activity">📡 Live Activity</button>
     <button class="tab-btn" onclick="showTab('incidents')" data-tab="incidents">🚨 Incidents</button>
+    <div class="tab-dropdown" id="org-dropdown">
+      <button class="tab-btn" id="org-trigger" onclick="toggleOrgDropdown(event)">🏢 Organization ▾</button>
+      <div class="tab-dropdown-menu hidden" id="org-menu">
+        <button class="tab-dropdown-item" data-tab="guards" onclick="selectOrgTab('guards')">👮 Guards</button>
+        <button class="tab-dropdown-item" data-tab="sites" onclick="selectOrgTab('sites')">📍 Sites</button>
+      </div>
+    </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
     <button class="tab-btn" onclick="showTab('audit')" data-tab="audit">📜 Audit Log</button>
   </div>
@@ -1416,11 +1429,34 @@ async function loadClientCoverage(){
       </tr>`).join('');
   }catch(e){ toast(e.message,'error'); }
 }
+function toggleOrgDropdown(e){
+  e.stopPropagation();
+  const menu = document.getElementById('org-menu');
+  if(menu.classList.contains('hidden')){
+    const r = document.getElementById('org-trigger').getBoundingClientRect();
+    menu.style.top = (r.bottom+4)+'px';
+    menu.style.left = r.left+'px';
+  }
+  menu.classList.toggle('hidden');
+}
+document.addEventListener('click', (e)=>{
+  const menu = document.getElementById('org-menu');
+  if(menu && !menu.classList.contains('hidden') && !document.getElementById('org-dropdown').contains(e.target)){
+    menu.classList.add('hidden');
+  }
+});
+function selectOrgTab(name){
+  document.getElementById('org-menu').classList.add('hidden');
+  showTab(name);
+}
 function showTab(name){
   document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-dropdown-item').forEach(el=>el.classList.remove('active'));
   document.getElementById(`tab-${name}`)?.classList.add('active');
-  document.querySelector(`[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
+  document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites');
   if(name==='submissions') loadSubmissions();
   else if(name==='guards')  loadGuardsAdmin();
   else if(name==='sites')   loadSitesAdmin();
