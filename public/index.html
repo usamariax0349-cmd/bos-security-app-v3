@@ -614,7 +614,6 @@ tr:hover td{background:#f8fafc}
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
     <button class="tab-btn" onclick="showTab('reports')" data-tab="reports">📈 Reports</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
-    <button class="tab-btn" onclick="showTab('activity')" data-tab="activity">📡 Live Activity</button>
     <button class="tab-btn" onclick="showTab('incidents')" data-tab="incidents">🚨 Incidents</button>
     <div class="tab-dropdown" id="org-dropdown">
       <button class="tab-btn" id="org-trigger" onclick="toggleOrgDropdown(event)">🏢 Organization ▾</button>
@@ -841,6 +840,18 @@ tr:hover td{background:#f8fafc}
 
     <!-- REPORTS -->
     <div id="tab-reports" class="tab-content">
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head"><span class="section-title">🗺️ Live Activity — Victoria, AU</span></div>
+        <div class="section-body">
+          <div id="activity-map" class="map-box light" style="height:320px"></div>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head"><span class="section-title">Live Feed</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadActivity()">↻ Refresh</button>
+        </div>
+        <div id="activity-feed"></div>
+      </div>
       <div class="reports-layout">
         <div class="section" style="margin-bottom:0">
           <div class="section-head"><span class="section-title">Reports</span></div>
@@ -896,22 +907,6 @@ tr:hover td{background:#f8fafc}
             <tbody id="rem-tbody"></tbody>
           </table>
         </div>
-      </div>
-    </div>
-
-    <!-- LIVE ACTIVITY -->
-    <div id="tab-activity" class="tab-content">
-      <div class="section" style="margin-bottom:20px">
-        <div class="section-head"><span class="section-title">🗺️ Sites — Victoria, AU</span></div>
-        <div class="section-body">
-          <div id="activity-map" class="map-box light" style="height:320px"></div>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-head"><span class="section-title">Live Feed</span>
-          <button class="btn btn-ghost btn-sm" onclick="loadActivity()">↻ Refresh</button>
-        </div>
-        <div id="activity-feed"></div>
       </div>
     </div>
 
@@ -1462,10 +1457,9 @@ function showTab(name){
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='rates')   loadRates();
   else if(name==='invoices')loadInvoicesTab();
-  else if(name==='reports') loadReportsTab();
+  else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
   else if(name==='schedule') loadSchedule();
-  else if(name==='activity') loadActivity();
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
   else if(name==='audit')   loadAudit();
@@ -1952,23 +1946,27 @@ async function submitFirstPassword(){
   }
 }
 function applyRoleRestrictions(role){
-  const tab = name => document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  const tab = name => document.querySelector(`.tab-btn[data-tab="${name}"], .tab-dropdown-item[data-tab="${name}"]`);
   const show = name => { const el=tab(name); if(el) el.style.display=''; };
   const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
-  // Reset all tabs to visible first
-  ['dashboard','schedule','submissions','guards','sites','rates','invoices','reminders','activity','incidents','admins','audit']
+  const orgDropdown = document.getElementById('org-dropdown');
+  // Reset all tabs (and the Organization dropdown) to visible first
+  ['dashboard','schedule','submissions','guards','sites','rates','invoices','reminders','incidents','admins','audit']
     .forEach(show);
+  if(orgDropdown) orgDropdown.style.display = '';
   if(role==='superadmin') return; // full access — nothing hidden
   if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
   if(role==='manager'){
     // Manager: dashboard + submissions only
     hide('guards'); hide('sites'); hide('rates'); hide('invoices');
-    hide('reminders'); hide('admins'); hide('audit'); return;
+    hide('reminders'); hide('admins'); hide('audit');
+    if(orgDropdown) orgDropdown.style.display='none'; return;
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only)
     hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('rates');
-    hide('invoices'); hide('reminders'); hide('admins'); hide('audit'); return;
+    hide('invoices'); hide('reminders'); hide('admins'); hide('audit');
+    if(orgDropdown) orgDropdown.style.display='none'; return;
   }
 }
 async function doLogout(){
@@ -2828,7 +2826,7 @@ function renderActivityMap(){
   }
 }
 let _activityTimer = setInterval(()=>{
-  if(document.getElementById('tab-activity')?.classList.contains('active')) loadActivity();
+  if(document.getElementById('tab-reports')?.classList.contains('active')) loadActivity();
 }, 20000);
 
 // ── Incidents ─────────────────────────────────────────────────────────────────
