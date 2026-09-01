@@ -370,44 +370,63 @@ def init_db():
             print(f'  Migrated: added {table}.{col}')
     conn.commit()
 
-    # ── One-time roster seed (week of 31 Aug – 6 Sep 2026) ──────────────────
-    # Real guards/sites/shifts transcribed from the company's existing
-    # roster, entered once so the app reflects the current week. Only the
-    # two shifts that had a confirmed end time in the source roster are
-    # included — the rest showed "Required" with no end time, which this
-    # app's schema can't represent without guessing pay-affecting hours.
-    # Marked published=1 since these already happened / were already
-    # communicated to guards, not new drafts needing Publish & Notify.
-    if not conn.execute("SELECT 1 FROM sites WHERE name='Anglers Tavern'").fetchone():
-        SEED_SITES = ['Anglers Tavern','Apollo Bay','Eureka Hotel','Gardiner Hotel','Hotel Esplanade',
-            'Melbourne Public','Public House','RSL on Bell','Swan Hotel','The Continental Sorrento',
-            'The Provincial Hotel','Skinny Dog Hotel']
-        SEED_GUARDS = ['Usama Riaz','Abdullah Sajjad','Harman (BOS)','Mudassar Habib','Joseph Greige',
-            'Ahmed Ilyas','Georges Zaya','Hilal Isik','Shoaib Sherani','Asad ullah Saleem',
-            'Faraz Ahmed Kazi','Ishtiyaq Ahmed','Jitender Singh','Usama Khan Niazi','Saied Shohani',
-            'Mohammad Sultan','Justin Elzaibak','Nikhil Goyal','Talha Kolcak','Harshdeep Singh',
-            'Rahul Kumar','Zubair Mohammed','Kartikay Sharma','Ali Hussaini','Zamin Rezai',
-            'Sandeep Singh','Aman Verma','Vikramjeet Singh','Rohan Sharma']
-        site_ids = {}
-        for name in SEED_SITES:
-            sid = str(uuid.uuid4())
-            conn.execute('INSERT INTO sites (id,name,client_name) VALUES (?,?,?)', (sid, name, name))
-            site_ids[name] = sid
-        guard_ids = {}
-        for name in SEED_GUARDS:
-            gid = str(uuid.uuid4())
-            conn.execute('INSERT INTO guards (id,name) VALUES (?,?)', (gid, name))
-            guard_ids[name] = gid
-        SEED_SHIFTS = [
-            ('Usama Riaz',   'Anglers Tavern',   '2026-09-06', '06:30', '10:30'),
-            ('Rohan Sharma', 'Skinny Dog Hotel', '2026-09-05', '19:00', '23:00'),
-        ]
-        for guard_name, site_name, d, st, et in SEED_SHIFTS:
+    # ── Roster seed for the week of 31 Aug – 6 Sep 2026 ──────────────────────
+    # seed_data.py (run by the Procfile before this script, on every startup)
+    # already loads the full 108-guard/60-site roster, including almost
+    # everyone/everywhere below — so this only adds the names genuinely
+    # missing from that master list, matched per-name (idempotent on every
+    # restart), then the 2 shifts with a confirmed end time from the source
+    # roster screenshots. A few names differ only by a middle name/initial
+    # in seed_data.py's list (aliased below to the existing record instead
+    # of creating a near-duplicate person).
+    NAME_ALIASES = {
+        'Ahmed Ilyas':        'Ahmed Khalid Ilyas',
+        'Usama Khan Niazi':   'Usama arif Khan Niazi',
+        'Justin Elzaibak':    'Justin L Elzaibak',
+    }
+    NEW_GUARDS = ['Abdullah Sajjad', 'Harman (BOS)', 'Shoaib Sherani', 'Faraz Ahmed Kazi',
+                  'Sandeep Singh', 'Aman Verma', 'Vikramjeet Singh', 'Rohan Sharma']
+    added_guards = 0
+    for name in NEW_GUARDS:
+        if not conn.execute('SELECT 1 FROM guards WHERE name=?', (name,)).fetchone():
+            conn.execute('INSERT INTO guards (id,name) VALUES (?,?)', (str(uuid.uuid4()), name))
+            added_guards += 1
+    NEW_SITES = [('Skinny Dog Hotel', 'Prime VIC')]  # matches the client_name seed_data.py uses for its siblings
+    added_sites = 0
+    for name, client in NEW_SITES:
+        if not conn.execute('SELECT 1 FROM sites WHERE name=?', (name,)).fetchone():
+            conn.execute('INSERT INTO sites (id,name,client_name) VALUES (?,?,?)',
+                         (str(uuid.uuid4()), name, client))
+            added_sites += 1
+    conn.commit()
+
+    def _resolve_guard_id(name):
+        row = conn.execute('SELECT id FROM guards WHERE name=?',
+                            (NAME_ALIASES.get(name, name),)).fetchone()
+        return row[0] if row else None
+    def _resolve_site_id(name):
+        row = conn.execute('SELECT id FROM sites WHERE name=?', (name,)).fetchone()
+        return row[0] if row else None
+
+    SEED_SHIFTS = [
+        ('Usama Riaz',   'Anglers Tavern',   '2026-09-06', '06:30', '10:30'),
+        ('Rohan Sharma', 'Skinny Dog Hotel', '2026-09-05', '19:00', '23:00'),
+    ]
+    seeded_shifts = 0
+    for guard_name, site_name, d, st, et in SEED_SHIFTS:
+        gid, sid = _resolve_guard_id(guard_name), _resolve_site_id(site_name)
+        if not gid or not sid:
+            print(f'  WARNING: could not seed shift for {guard_name} @ {site_name} — guard or site not found')
+            continue
+        if not conn.execute('''SELECT 1 FROM shifts WHERE guard_id=? AND site_id=?
+                                AND shift_date=? AND start_time=?''', (gid, sid, d, st)).fetchone():
+            # published=1: this reflects an already-existing roster guards already
+            # know about, not a new draft needing Publish & Notify.
             conn.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,published)
-                            VALUES (?,?,?,?,?,?,1)''',
-                         (str(uuid.uuid4()), guard_ids[guard_name], site_ids[site_name], d, st, et))
-        conn.commit()
-        print(f'  Seeded roster: {len(SEED_SITES)} sites, {len(SEED_GUARDS)} guards, {len(SEED_SHIFTS)} shifts')
+                            VALUES (?,?,?,?,?,?,1)''', (str(uuid.uuid4()), gid, sid, d, st, et))
+            seeded_shifts += 1
+    conn.commit()
+    print(f'  Roster seed: {added_guards} new guards, {added_sites} new sites, {seeded_shifts} shifts added')
 
     # Always ensure the superadmin from env vars exists with correct password
     h, salt = hash_password(DEFAULT_ADMIN_PASSWORD)
