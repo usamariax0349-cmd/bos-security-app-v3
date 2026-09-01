@@ -370,6 +370,45 @@ def init_db():
             print(f'  Migrated: added {table}.{col}')
     conn.commit()
 
+    # ── One-time roster seed (week of 31 Aug – 6 Sep 2026) ──────────────────
+    # Real guards/sites/shifts transcribed from the company's existing
+    # roster, entered once so the app reflects the current week. Only the
+    # two shifts that had a confirmed end time in the source roster are
+    # included — the rest showed "Required" with no end time, which this
+    # app's schema can't represent without guessing pay-affecting hours.
+    # Marked published=1 since these already happened / were already
+    # communicated to guards, not new drafts needing Publish & Notify.
+    if not conn.execute("SELECT 1 FROM sites WHERE name='Anglers Tavern'").fetchone():
+        SEED_SITES = ['Anglers Tavern','Apollo Bay','Eureka Hotel','Gardiner Hotel','Hotel Esplanade',
+            'Melbourne Public','Public House','RSL on Bell','Swan Hotel','The Continental Sorrento',
+            'The Provincial Hotel','Skinny Dog Hotel']
+        SEED_GUARDS = ['Usama Riaz','Abdullah Sajjad','Harman (BOS)','Mudassar Habib','Joseph Greige',
+            'Ahmed Ilyas','Georges Zaya','Hilal Isik','Shoaib Sherani','Asad ullah Saleem',
+            'Faraz Ahmed Kazi','Ishtiyaq Ahmed','Jitender Singh','Usama Khan Niazi','Saied Shohani',
+            'Mohammad Sultan','Justin Elzaibak','Nikhil Goyal','Talha Kolcak','Harshdeep Singh',
+            'Rahul Kumar','Zubair Mohammed','Kartikay Sharma','Ali Hussaini','Zamin Rezai',
+            'Sandeep Singh','Aman Verma','Vikramjeet Singh','Rohan Sharma']
+        site_ids = {}
+        for name in SEED_SITES:
+            sid = str(uuid.uuid4())
+            conn.execute('INSERT INTO sites (id,name,client_name) VALUES (?,?,?)', (sid, name, name))
+            site_ids[name] = sid
+        guard_ids = {}
+        for name in SEED_GUARDS:
+            gid = str(uuid.uuid4())
+            conn.execute('INSERT INTO guards (id,name) VALUES (?,?)', (gid, name))
+            guard_ids[name] = gid
+        SEED_SHIFTS = [
+            ('Usama Riaz',   'Anglers Tavern',   '2026-09-06', '06:30', '10:30'),
+            ('Rohan Sharma', 'Skinny Dog Hotel', '2026-09-05', '19:00', '23:00'),
+        ]
+        for guard_name, site_name, d, st, et in SEED_SHIFTS:
+            conn.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,published)
+                            VALUES (?,?,?,?,?,?,1)''',
+                         (str(uuid.uuid4()), guard_ids[guard_name], site_ids[site_name], d, st, et))
+        conn.commit()
+        print(f'  Seeded roster: {len(SEED_SITES)} sites, {len(SEED_GUARDS)} guards, {len(SEED_SHIFTS)} shifts')
+
     # Always ensure the superadmin from env vars exists with correct password
     h, salt = hash_password(DEFAULT_ADMIN_PASSWORD)
     existing = conn.execute('SELECT id FROM admins WHERE email=?',
