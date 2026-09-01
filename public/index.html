@@ -693,8 +693,6 @@ tr:hover td{background:#f8fafc}
   <div class="tabs" id="admin-tabs">
     <button class="tab-btn active" onclick="showTab('dashboard')" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" onclick="showTab('schedule')" data-tab="schedule">🗓️ Schedule</button>
-    <button class="tab-btn" onclick="showTab('submissions')" data-tab="submissions">📋 Submissions</button>
-    <button class="tab-btn" onclick="showTab('rates')" data-tab="rates">💲 Rates</button>
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
     <button class="tab-btn" onclick="showTab('reports')" data-tab="reports">📈 Reports</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
@@ -802,44 +800,6 @@ tr:hover td{background:#f8fafc}
     </div>
 
     <!-- SUBMISSIONS -->
-    <div id="tab-submissions" class="tab-content">
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">All Submissions</span>
-          <button class="btn btn-primary btn-sm" onclick="loadSubmissions()">↻ Refresh</button>
-        </div>
-        <div class="filter-bar">
-          <select id="f-status" onchange="loadSubmissions()">
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-          <input type="text" id="f-guard" placeholder="Guard name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
-          <input type="text" id="f-site" placeholder="Site name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
-          <input type="date" id="f-from" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
-          <input type="date" id="f-to" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
-          <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
-        </div>
-        <div id="bulk-bar" class="bulk-bar hidden">
-          <span class="bulk-count" id="bulk-count-lbl">0 selected</span>
-          <button class="btn btn-green btn-sm" onclick="bulkAction('approve')">✓ Approve All</button>
-          <button class="btn btn-red btn-sm" onclick="bulkAction('reject')">✗ Reject All</button>
-          <button class="btn btn-ghost btn-sm" onclick="clearBulk()">Clear</button>
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr>
-              <th><input type="checkbox" id="chk-all" onchange="toggleAllChk(this)"></th>
-              <th>Date</th><th>Guard</th><th>Site</th><th>Hours</th><th>Photo</th>
-              <th>Status</th><th>Submitted</th><th>Actions</th>
-            </tr></thead>
-            <tbody id="sub-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- GUARDS -->
     <div id="tab-guards" class="tab-content">
       <div class="gd-layout">
@@ -885,67 +845,112 @@ tr:hover td{background:#f8fafc}
       </div>
     </div>
 
-    <!-- RATES -->
-    <div id="tab-rates" class="tab-content">
-      <div class="section">
-        <div class="section-head">
-          <span class="section-title">Custom Rates</span>
-          <button class="btn btn-primary btn-sm" onclick="openRateModal()">+ Set Rate</button>
-        </div>
-        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">Override the default base rate for a specific guard at a specific site. If no custom rate is set, the guard's base rate is used.</p>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr><th>Guard</th><th>Site</th><th>Client</th><th>Rate (AUD/hr)</th><th>Actions</th></tr></thead>
-            <tbody id="rates-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- INVOICES -->
+    <!-- INVOICES (Submissions + Rates + Invoices, grouped under one tab) -->
     <div id="tab-invoices" class="tab-content">
-      <div class="section">
-        <div class="section-head"><span class="section-title">Generate Invoice</span></div>
-        <div class="section-body">
-          <div class="form-row" style="margin-bottom:12px">
-            <div class="form-group">
-              <label class="form-label">Client</label>
-              <select id="inv-client" class="form-control" onchange="loadInvoicePreview()"><option value="">All Clients</option></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">From Date</label>
-              <input type="date" id="inv-from" class="form-control" onchange="loadInvoicePreview()">
-            </div>
-          </div>
-          <div class="form-row" style="margin-bottom:20px">
-            <div class="form-group">
-              <label class="form-label">To Date</label>
-              <input type="date" id="inv-to" class="form-control" onchange="loadInvoicePreview()">
-            </div>
-            <div></div>
-          </div>
-          <div id="inv-actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-            <button class="btn btn-gold" onclick="dlInvoice('pdf')">⬇ Download PDF</button>
-            <button class="btn btn-primary" onclick="dlInvoice('xlsx')">📊 Download Excel</button>
-            <button class="btn btn-ghost btn-sm" onclick="dlInvoice('csv')">📄 CSV</button>
-          </div>
-        </div>
+      <div class="gd-subtabs" id="billing-subtabs">
+        <button class="gd-subtab-btn" data-billtab="submissions" onclick="showBillingSubtab('submissions')">📋 Submissions</button>
+        <button class="gd-subtab-btn" data-billtab="rates" onclick="showBillingSubtab('rates')">💲 Rates</button>
+        <button class="gd-subtab-btn" data-billtab="invoices" onclick="showBillingSubtab('invoices')">🧾 Invoices</button>
       </div>
-      <div id="invoice-preview-wrap" class="hidden">
-        <div class="invoice-preview">
-          <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:700;color:var(--navy)">Invoice Preview</span>
-            <span id="inv-total-label" style="font-size:18px;font-weight:800;color:var(--navy)"></span>
+
+      <div id="billing-submissions" class="billing-subtab-content hidden">
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">All Submissions</span>
+            <button class="btn btn-primary btn-sm" onclick="loadSubmissions()">↻ Refresh</button>
+          </div>
+          <div class="filter-bar">
+            <select id="f-status" onchange="loadSubmissions()">
+              <option value="">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <input type="text" id="f-guard" placeholder="Guard name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
+            <input type="text" id="f-site" placeholder="Site name..." style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:150px" oninput="loadSubmissions()">
+            <input type="date" id="f-from" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
+            <input type="date" id="f-to" style="background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px" onchange="loadSubmissions()">
+            <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
+          </div>
+          <div id="bulk-bar" class="bulk-bar hidden">
+            <span class="bulk-count" id="bulk-count-lbl">0 selected</span>
+            <button class="btn btn-green btn-sm" onclick="bulkAction('approve')">✓ Approve All</button>
+            <button class="btn btn-red btn-sm" onclick="bulkAction('reject')">✗ Reject All</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearBulk()">Clear</button>
           </div>
           <div class="tbl-wrap">
             <table>
-              <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Client</th><th>Start</th><th>End</th><th>Hours</th><th>Rate</th><th>Amount</th></tr></thead>
-              <tbody id="inv-tbody"></tbody>
+              <thead><tr>
+                <th><input type="checkbox" id="chk-all" onchange="toggleAllChk(this)"></th>
+                <th>Date</th><th>Guard</th><th>Site</th><th>Hours</th><th>Photo</th>
+                <th>Status</th><th>Submitted</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="sub-tbody"></tbody>
             </table>
           </div>
         </div>
       </div>
-      <div id="inv-empty" class="empty-state"><div class="ei">🧾</div><p>Select a date range to preview your invoice</p></div>
+
+      <div id="billing-rates" class="billing-subtab-content hidden">
+        <div class="section">
+          <div class="section-head">
+            <span class="section-title">Custom Rates</span>
+            <button class="btn btn-primary btn-sm" onclick="openRateModal()">+ Set Rate</button>
+          </div>
+          <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">Override the default base rate for a specific guard at a specific site. If no custom rate is set, the guard's base rate is used.</p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Guard</th><th>Site</th><th>Client</th><th>Rate (AUD/hr)</th><th>Actions</th></tr></thead>
+              <tbody id="rates-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="billing-invoices" class="billing-subtab-content hidden">
+        <div class="section">
+          <div class="section-head"><span class="section-title">Generate Invoice</span></div>
+          <div class="section-body">
+            <div class="form-row" style="margin-bottom:12px">
+              <div class="form-group">
+                <label class="form-label">Client</label>
+                <select id="inv-client" class="form-control" onchange="loadInvoicePreview()"><option value="">All Clients</option></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">From Date</label>
+                <input type="date" id="inv-from" class="form-control" onchange="loadInvoicePreview()">
+              </div>
+            </div>
+            <div class="form-row" style="margin-bottom:20px">
+              <div class="form-group">
+                <label class="form-label">To Date</label>
+                <input type="date" id="inv-to" class="form-control" onchange="loadInvoicePreview()">
+              </div>
+              <div></div>
+            </div>
+            <div id="inv-actions" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+              <button class="btn btn-gold" onclick="dlInvoice('pdf')">⬇ Download PDF</button>
+              <button class="btn btn-primary" onclick="dlInvoice('xlsx')">📊 Download Excel</button>
+              <button class="btn btn-ghost btn-sm" onclick="dlInvoice('csv')">📄 CSV</button>
+            </div>
+          </div>
+        </div>
+        <div id="invoice-preview-wrap" class="hidden">
+          <div class="invoice-preview">
+            <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:700;color:var(--navy)">Invoice Preview</span>
+              <span id="inv-total-label" style="font-size:18px;font-weight:800;color:var(--navy)"></span>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Client</th><th>Start</th><th>End</th><th>Hours</th><th>Rate</th><th>Amount</th></tr></thead>
+                <tbody id="inv-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div id="inv-empty" class="empty-state"><div class="ei">🧾</div><p>Select a date range to preview your invoice</p></div>
+      </div>
     </div>
 
     <!-- REPORTS -->
@@ -1560,11 +1565,9 @@ function showTab(name){
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
   document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites');
-  if(name==='submissions') loadSubmissions();
-  else if(name==='guards')  loadGuardsAdmin();
+  if(name==='guards')  loadGuardsAdmin();
   else if(name==='sites')   loadSitesAdmin();
-  else if(name==='rates')   loadRates();
-  else if(name==='invoices')loadInvoicesTab();
+  else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
   else if(name==='schedule') loadScheduleGrid();
@@ -2058,23 +2061,30 @@ function applyRoleRestrictions(role){
   const show = name => { const el=tab(name); if(el) el.style.display=''; };
   const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
   const orgDropdown = document.getElementById('org-dropdown');
-  // Reset all tabs (and the Organization dropdown) to visible first
-  ['dashboard','schedule','submissions','guards','sites','rates','invoices','reminders','incidents','admins','audit']
+  const billRatesBtn    = document.querySelector('#billing-subtabs [data-billtab="rates"]');
+  const billInvoicesBtn = document.querySelector('#billing-subtabs [data-billtab="invoices"]');
+  const showBillTabs = ()=>{ billRatesBtn?.classList.remove('hidden'); billInvoicesBtn?.classList.remove('hidden'); };
+  const hideBillTabs = ()=>{ billRatesBtn?.classList.add('hidden'); billInvoicesBtn?.classList.add('hidden'); billingSubtab='submissions'; };
+  // Reset all tabs (and the Organization dropdown / billing sub-tabs) to visible first
+  ['dashboard','schedule','guards','sites','invoices','reminders','incidents','admins','audit']
     .forEach(show);
   if(orgDropdown) orgDropdown.style.display = '';
+  showBillTabs();
   if(role==='superadmin') return; // full access — nothing hidden
   if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
   if(role==='manager'){
-    // Manager: dashboard + submissions only
-    hide('guards'); hide('sites'); hide('rates'); hide('invoices');
+    // Manager: dashboard + submissions only (Rates/Invoices sub-tabs hidden within Invoices)
+    hide('guards'); hide('sites');
     hide('reminders'); hide('admins'); hide('audit');
-    if(orgDropdown) orgDropdown.style.display='none'; return;
+    if(orgDropdown) orgDropdown.style.display='none';
+    hideBillTabs(); return;
   }
   if(role==='viewer'){
-    // Viewer: submissions only (read-only)
-    hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('rates');
-    hide('invoices'); hide('reminders'); hide('admins'); hide('audit');
-    if(orgDropdown) orgDropdown.style.display='none'; return;
+    // Viewer: submissions only (read-only, Rates/Invoices sub-tabs hidden within Invoices)
+    hide('dashboard'); hide('schedule'); hide('guards'); hide('sites');
+    hide('reminders'); hide('admins'); hide('audit');
+    if(orgDropdown) orgDropdown.style.display='none';
+    hideBillTabs(); return;
   }
 }
 async function doLogout(){
@@ -2330,6 +2340,18 @@ async function deleteShift(id){
   }catch(e){ toast(e.message,'error'); }
 }
 
+// ── Billing (Submissions / Rates / Invoices, grouped under one tab) ────────────
+let billingSubtab = 'submissions';
+function showBillingSubtab(name){
+  billingSubtab = name;
+  document.querySelectorAll('#billing-subtabs .gd-subtab-btn').forEach(el=>el.classList.toggle('active', el.dataset.billtab===name));
+  document.querySelectorAll('.billing-subtab-content').forEach(el=>el.classList.add('hidden'));
+  document.getElementById('billing-'+name)?.classList.remove('hidden');
+  if(name==='submissions') loadSubmissions();
+  else if(name==='rates') loadRates();
+  else if(name==='invoices') loadInvoicesTab();
+}
+
 // ── Submissions ───────────────────────────────────────────────────────────────
 let subsData = [];
 async function loadSubmissions(){
@@ -2567,7 +2589,7 @@ function renderGuardDetail(){
 }
 function showGuardSubtab(name){
   gdActiveSubtab = name;
-  document.querySelectorAll('.gd-subtab-btn').forEach(el=>el.classList.toggle('active', el.dataset.gdtab===name));
+  document.querySelectorAll('#gd-detail-panel .gd-subtab-btn').forEach(el=>el.classList.toggle('active', el.dataset.gdtab===name));
   if(name==='details') renderGuardDetailsTab();
   else if(name==='sites') renderGuardSitesTab();
   else if(name==='compliance') renderGuardComplianceTab();
