@@ -1060,6 +1060,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   (m.group(1),)).fetchall())
             db.close(); self.send_json(rows); return
 
+        if path == '/api/leave':
+            # All guards' leave overlapping a date range — used by the weekly
+            # availability view. Without a range, returns everything.
+            date_from = qs.get('date_from',[None])[0]
+            date_to   = qs.get('date_to',[None])[0]
+            where, params = [], []
+            if date_to:   where.append('gl.start_date<=?'); params.append(date_to)
+            if date_from: where.append('gl.end_date>=?');   params.append(date_from)
+            wc = ('WHERE '+' AND '.join(where)) if where else ''
+            db = get_db()
+            rows = RL(db.execute(f'''
+                SELECT gl.*, g.name as guard_name
+                FROM guard_leave gl JOIN guards g ON g.id=gl.guard_id
+                {wc} ORDER BY gl.start_date
+            ''', params).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/dashboard':
             db = get_db()
             today = datetime.now().strftime('%Y-%m-%d')

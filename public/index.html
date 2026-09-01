@@ -802,6 +802,24 @@ tr:hover td{background:#f8fafc}
     <!-- SUBMISSIONS -->
     <!-- GUARDS -->
     <div id="tab-guards" class="tab-content">
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head">
+          <span class="section-title">📅 This Week's Availability</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="availGoToday()">Today</button>
+            <button class="btn btn-ghost btn-sm" onclick="availShiftWeek(-1)">‹</button>
+            <span class="sched-range-label" id="avail-range-label"></span>
+            <button class="btn btn-ghost btn-sm" onclick="availShiftWeek(1)">›</button>
+          </div>
+        </div>
+        <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">At a glance: which active guards are working, on leave, or free each day this week.</p>
+        <div class="tbl-wrap">
+          <table id="avail-table">
+            <thead></thead>
+            <tbody id="avail-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="gd-layout">
         <div class="gd-list-panel section">
           <div class="gd-list-head">
@@ -1565,7 +1583,7 @@ function showTab(name){
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
   document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites');
-  if(name==='guards')  loadGuardsAdmin();
+  if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
@@ -2532,6 +2550,41 @@ let guardCompliance = [];
 let guardLeave = [];
 let gdActiveSubtab = 'details';
 let gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+// ── Weekly Availability (who's working / on leave / free, at a glance) ─────
+let availWeekStart = mondayOf(new Date());
+function availGoToday(){ availWeekStart = mondayOf(new Date()); loadAvailability(); }
+function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); loadAvailability(); }
+async function loadAvailability(){
+  const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  document.getElementById('avail-range-label').textContent =
+    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  document.querySelector('#avail-table thead').innerHTML =
+    `<tr><th>Guard</th>${days.map((d,i)=>`<th>${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
+  if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
+  const from = dayISO[0], to = dayISO[6];
+  let shifts = [], leave = [];
+  try{
+    [shifts, leave] = await Promise.all([
+      apiFetch(`/api/shifts?date_from=${from}&date_to=${to}`),
+      apiFetch(`/api/leave?date_from=${from}&date_to=${to}`)
+    ]);
+  }catch(e){ toast(e.message,'error'); return; }
+  const activeGuards = guardsFull.filter(g=>g.active).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById('avail-tbody').innerHTML = activeGuards.length===0
+    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>No active guards</p></td></tr>`
+    : activeGuards.map(g=>{
+      const cells = dayISO.map(iso=>{
+        const onLeave = leave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
+        if(onLeave) return `<td><span class="badge badge-rejected" style="font-size:10px">On Leave</span></td>`;
+        const dayShifts = shifts.filter(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled);
+        if(!dayShifts.length) return `<td><span style="color:var(--green);font-size:12px;font-weight:600">Free</span></td>`;
+        return `<td>${dayShifts.map(sh=>`<strong style="color:var(--navy);font-size:12px">${sh.start_time}-${sh.end_time}</strong><br><small style="color:var(--muted)">${sh.site_name}</small>`).join('<br>')}</td>`;
+      }).join('');
+      return `<tr><td><strong>${g.name}</strong></td>${cells}</tr>`;
+    }).join('');
+}
 
 async function loadGuardsAdmin(){
   try{ guardsFull = await apiFetch('/api/guards/all'); renderGuardsList(); }
