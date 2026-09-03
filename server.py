@@ -321,6 +321,20 @@ def init_db():
             sent_at        TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(guard_id, item_key, threshold_days)
         );
+
+        -- Two-way admin <-> guard conversation thread, one row per message.
+        -- Distinct from `reminders` (one-way, system/admin-broadcast notices):
+        -- this is an actual back-and-forth per guard, so guards don't have to
+        -- text or call the office for something the app can carry.
+        CREATE TABLE IF NOT EXISTS messages (
+            id          TEXT PRIMARY KEY,
+            guard_id    TEXT NOT NULL,
+            sender      TEXT NOT NULL,   -- 'admin' or 'guard'
+            sender_name TEXT,
+            body        TEXT NOT NULL,
+            created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+            read_at     TEXT
+        );
     ''')
     conn.commit()
 
@@ -1331,6 +1345,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.close()
             self.send_json({'confirmed_at': guard['availability_confirmed_at'], 'leave': leave}); return
 
+        # Guard's own message thread with the office — no auth needed.
+        if path == '/api/guard-messages':
+            gid = qs.get('guard_id',[None])[0]
+            if not gid: self.err('guard_id required'); return
+            db = get_db()
+            rows = RL(db.execute(
+                'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gid,)).fetchall())
+            db.close(); self.send_json(rows); return
+
         # /api/me is available to any authenticated role, including 'client'
         if path == '/api/me':
             s0 = self.get_session()
@@ -1621,6 +1644,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ''').fetchall()))
             db.close(); return
 
+        # Inbox: one row per guard who has an active conversation, newest first,
+        # with the last message and how many of the guard's are still unread.
+        if path == '/api/messages/threads':
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT g.id as guard_id, g.name as guard_name,
+                       (SELECT body FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_body,
+                       (SELECT sender FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_sender,
+                       (SELECT created_at FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_at,
+                       (SELECT COUNT(*) FROM messages WHERE guard_id=g.id AND sender='guard' AND read_at IS NULL) as unread
+                FROM guards g
+                WHERE EXISTS (SELECT 1 FROM messages m WHERE m.guard_id=g.id)
+                ORDER BY last_at DESC
+            ''').fetchall())
+            db.close(); self.send_json(rows); return
+
+        if path == '/api/messages':
+            gid = qs.get('guard_id',[None])[0]
+            if not gid: self.err('guard_id required'); return
+            db = get_db()
+            rows = RL(db.execute(
+                'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gid,)).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/admins':
             s2 = self.require_admin('administrator')
             if not s2: return
@@ -1888,6 +1935,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not guard: db.close(); self.err('Guard not found', 404); return
             db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
                        (datetime.now().isoformat(), guard['id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        # Guard sends a message to the office — no auth needed.
+        if path == '/api/guard-messages':
+            if not data.get('guard_id') or not (data.get('body') or '').strip():
+                self.err('guard_id and body required'); return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            mid = str(uuid.uuid4())
+            db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
+                       (mid, guard['id'], 'guard', guard['name'], data['body'].strip()))
+            db.commit(); db.close()
+            self.send_json({'id':mid,'ok':True}, 201); return
+
+        # Guard marks the office's messages in their thread as read — no auth needed.
+        if path == '/api/guard-messages/read':
+            if not data.get('guard_id'): self.err('guard_id required'); return
+            db = get_db()
+            db.execute("UPDATE messages SET read_at=? WHERE guard_id=? AND sender='admin' AND read_at IS NULL",
+                       (datetime.now().isoformat(), data['guard_id']))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
@@ -2253,6 +2322,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            (str(uuid.uuid4()),gid,msg))
             audit(db, s, 'REMINDERS_SENT', f'{len(guard_ids)} guards'); db.commit(); db.close()
             self.send_json({'ok':True,'sent':len(guard_ids)}); return
+
+        if path == '/api/messages':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            if not data.get('guard_id') or not (data.get('body') or '').strip():
+                self.err('guard_id and body required'); return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            mid = str(uuid.uuid4())
+            db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
+                       (mid, guard['id'], 'admin', s2['name'], data['body'].strip()))
+            audit(db, s2, 'MESSAGE_SEND', f"to {guard['name']}"); db.commit(); db.close()
+            self.send_json({'id':mid,'ok':True}, 201); return
+
+        if path == '/api/messages/read':
+            if not data.get('guard_id'): self.err('guard_id required'); return
+            db = get_db()
+            db.execute("UPDATE messages SET read_at=? WHERE guard_id=? AND sender='guard' AND read_at IS NULL",
+                       (datetime.now().isoformat(), data['guard_id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         if path == '/api/submissions/bulk':
             s2 = self.require_admin('manager')
