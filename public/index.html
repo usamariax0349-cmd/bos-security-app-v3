@@ -322,6 +322,20 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .mode-btn .mi{font-size:26px}
 .mode-btn .mt{font-weight:700;font-size:15px}
 .mode-btn .ms{font-size:12px;color:rgba(255,255,255,.5);margin-top:2px}
+.gavail-nav{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.gavail-range{flex:1;text-align:center;font-weight:700;color:#fff;font-size:14px}
+.gaday-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.gaday-row.is-today{border-color:rgba(201,168,76,.5)}
+.gaday-date{font-weight:700;color:#fff;font-size:14px}
+.gaday-status{font-size:11px;margin-top:2px}
+.gaday-status.st-free{color:#4ade80}
+.gaday-status.st-partial{color:var(--gold-l)}
+.gaday-status.st-off{color:#f87171}
+.gaday-status.st-working{color:#93c5fd}
+.gavm-opt{display:flex;align-items:flex-start;gap:10px;padding:14px;margin-bottom:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;cursor:pointer;color:#fff;transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.gavm-opt:hover{border-color:var(--gold)}
+.gavm-opt input{margin-top:3px}
+.gavm-opt small{color:rgba(255,255,255,.5);font-size:11px}
 .cp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .cp-row.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08)}
 .cp-name{font-weight:700;color:#fff;font-size:14px}
@@ -380,6 +394,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .sched-hidden-note button{background:none;border:none;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0}
 .sched-head-cell.is-today,.avail-today{background:var(--gold)!important;color:var(--navy)!important}
 #avail-table th.avail-today{color:var(--navy)!important}
+.avail-freshness{font-size:10px;font-weight:600;margin-top:2px;white-space:nowrap}
+.avail-freshness.avail-fresh{color:var(--muted)}
+.avail-freshness.avail-stale{color:var(--red)}
 /* With only a couple of days on screen, pin the day columns to a sensible
    width and let the guard column absorb the slack — otherwise one day stretches
    across the whole table. With 4+ days the natural distribution is better, so
@@ -440,6 +457,8 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .avail-partial:hover{transform:translateY(-1px)}
 .avail-partial .sc-time{font-weight:700}
 .avail-partial .sc-sub{opacity:.85;font-size:10px;margin-top:1px}
+.avail-edit-link{display:block;width:100%;text-align:center;background:none;border:none;color:var(--muted);font-size:10px;padding:3px 0 0;cursor:pointer;transition:color var(--dur-fast) var(--ease-out)}
+.avail-edit-link:hover{color:var(--navy);text-decoration:underline}
 .avail-mini{position:absolute;top:5px;right:3px;width:17px;height:17px;padding:0;border:none;border-radius:4px;background:transparent;color:var(--muted);font-size:11px;line-height:1;cursor:pointer;opacity:0;transition:all var(--dur-fast) var(--ease-out)}
 .avail-cell:hover .avail-mini,.avail-mini:focus{opacity:1}
 .avail-mini:hover{background:var(--navy);color:#fff;transform:scale(1.15)}
@@ -578,6 +597,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <span class="mi">🚨</span>
           <span><div class="mt">Report Incident</div><div class="ms">Log an incident with photo &amp; location</div></span>
         </button>
+        <button class="mode-btn" onclick="startAvailabilityFlow()">
+          <span class="mi">📅</span>
+          <span><div class="mt">My Availability</div><div class="ms">Let the office know when you're free</div></span>
+        </button>
       </div>
       <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="backToGuardSelect()">← Back</button>
     </div>
@@ -698,6 +721,33 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="nav-btn nav-next" onclick="resetIncidentForm()" style="width:100%;margin-top:4px">+ Report Another</button>
         <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
       </div>
+    </div>
+
+    <!-- My Availability: week list -->
+    <div class="guard-card hidden" id="step-availability">
+      <div class="step-title">📅 My Availability</div>
+      <div class="gavail-nav">
+        <button class="nav-btn nav-back" style="flex:0" onclick="gaShiftWeek(-1)">‹</button>
+        <span id="gavail-range" class="gavail-range"></span>
+        <button class="nav-btn nav-back" style="flex:0" onclick="gaShiftWeek(1)">›</button>
+      </div>
+      <p id="gavail-updated" style="font-size:11px;color:rgba(255,255,255,.4);text-align:center;margin:8px 0 14px"></p>
+      <button class="nav-btn nav-next" style="width:100%;margin-bottom:16px" onclick="gaConfirmNoChanges()">✓ Nothing's changed — confirm as-is</button>
+      <div id="gavail-days"></div>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
+    </div>
+
+    <!-- My Availability: edit one day -->
+    <div class="guard-card hidden" id="step-avail-edit">
+      <div class="step-title" id="gae-title">Set Availability</div>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="free" onchange="gaeSync()"><span><strong>Available all day</strong><br><small>Clears any unavailability for this day</small></span></label>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="partial" onchange="gaeSync()"><span><strong>Free from a time</strong><br><small>Busy earlier, available after this</small></span></label>
+      <div id="gae-time-row" style="margin:0 0 10px 32px">
+        <input type="time" id="gae-from" class="form-control" style="width:150px" value="18:00" onfocus="gaePick('partial')">
+      </div>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="off" onchange="gaeSync()"><span><strong>Unavailable all day</strong><br><small>Won't be offered shifts this day</small></span></label>
+      <button class="nav-btn nav-next" style="width:100%;margin-top:16px" onclick="gaeSave()">Save</button>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showGuardCard('step-availability')">← Cancel</button>
     </div>
 
     <div class="admin-link"><a href="#" onclick="showLogin();return false">Admin Login</a></div>
@@ -877,7 +927,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <button class="btn btn-ghost btn-sm" onclick="availShiftWeek(1)">›</button>
           </div>
         </div>
-        <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">Click <strong style="color:var(--green)">Free</strong> to schedule a shift (site + times) · click a <strong style="color:var(--navy)">shift</strong> to edit or delete it · hover a cell for <strong>🕒</strong> to set availability (free from a time, or unavailable all day). Pick a date to check just that day.</p>
+        <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">Click <strong style="color:var(--green)">Free</strong> or a <strong style="color:var(--gold)">Free from</strong> tag to schedule a shift (site + times, pre-filled from their start of availability) · click a <strong style="color:var(--navy)">shift</strong> to edit or delete it · hover a cell for <strong>🕒</strong> to set availability. Pick a date to check just that day.</p>
         <div class="gd-status-toggle" style="padding:0 20px 12px;border-bottom:none;flex-wrap:wrap;align-items:center">
           <button class="gd-status-btn active" id="avail-filter-all" onclick="setAvailFilter('all')">All Guards</button>
           <button class="gd-status-btn" id="avail-filter-working" onclick="setAvailFilter('working')">Working Guards</button>
@@ -1548,6 +1598,11 @@ function fmtDate(d){ if(!d)return '—'; try{ return new Date(d).toLocaleDateStr
 function fmtTime(t){ return t||'—'; }
 function fmtMoney(n){ return n!=null?`$${Number(n).toFixed(2)}`:'—'; }
 function fmtDateTime(d){ if(!d)return '—'; try{ return new Date(d).toLocaleString('en-AU',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }catch{ return d; } }
+function fmtRelativeDays(d){
+  if(!d) return 'never';
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if(days<=0) return 'today'; if(days===1) return 'yesterday'; return `${days} days ago`;
+}
 function closeModal(id){
   const el = document.getElementById(id);
   el.classList.add('closing');
@@ -1757,7 +1812,7 @@ async function loadGuardsAndSites(){
   }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success'];
+const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success','step-availability','step-avail-edit'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -1773,6 +1828,7 @@ function startShiftFlow(){
 }
 function startPatrolFlow(){ showGuardCard('step-patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
+function startAvailabilityFlow(){ showGuardCard('step-availability'); loadGuardAvailability(); }
 
 // ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
 const VIC_CENTER = [-37.4713, 144.7852];
@@ -1873,6 +1929,91 @@ function renderMyShiftsList(){
     </div>`;
   }).join('');
 }
+
+// ── My Availability (Guard Portal self-service) ─────────────────────────────
+let gaWeekStart = mondayOf(new Date());
+let gaLeave = [], gaConfirmedAt = null, gaShifts = [], gaEditDate = null;
+function gaShiftWeek(delta){ gaWeekStart = new Date(gaWeekStart.getTime()+delta*7*86400000); loadGuardAvailability(); }
+async function loadGuardAvailability(){
+  if(!selectedGuard) return;
+  const days = Array.from({length:7},(_,i)=>new Date(gaWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  document.getElementById('gavail-days').innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
+  try{
+    const [avail, shifts] = await Promise.all([
+      apiFetch(`/api/guard-availability?guard_id=${selectedGuard.id}&date_from=${dayISO[0]}&date_to=${dayISO[6]}`),
+      apiFetch(`/api/shifts/mine?guard_id=${selectedGuard.id}`)
+    ]);
+    gaLeave = avail.leave; gaConfirmedAt = avail.confirmed_at;
+    gaShifts = shifts.filter(sh=>!sh.cancelled && dayISO.includes(sh.shift_date));
+    renderGuardAvailability();
+  }catch(e){
+    document.getElementById('gavail-days').innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Could not load your availability.</p>`;
+  }
+}
+function renderGuardAvailability(){
+  const days = Array.from({length:7},(_,i)=>new Date(gaWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  const todayISO = fmtISO(new Date());
+  document.getElementById('gavail-range').textContent =
+    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  document.getElementById('gavail-updated').textContent = gaConfirmedAt
+    ? `You last updated this ${fmtRelativeDays(gaConfirmedAt)}`
+    : `You haven't set your availability yet`;
+  document.getElementById('gavail-days').innerHTML = dayISO.map((iso,i)=>{
+    // A shift always wins the row — same rule as the admin board. Availability
+    // is only for days nothing's booked yet, so a working day isn't editable
+    // from here (swapping/dropping a shift is a different flow).
+    const shift = gaShifts.find(sh=>sh.shift_date===iso);
+    const leaveRec = gaLeave.find(l=>iso>=l.start_date && iso<=l.end_date);
+    const dayLabel = `${SCHED_DAY_NAMES[i]} ${days[i].getDate()}/${days[i].getMonth()+1}`;
+    let status, cls, editable = true;
+    if(shift){ status = `Working — ${shift.site_name}`; cls='st-working'; editable=false; }
+    else if(leaveRec && leaveRec.available_from){ status = `Free from ${leaveRec.available_from}`; cls='st-partial'; }
+    else if(leaveRec){ status = 'Unavailable'; cls='st-off'; }
+    else { status = 'Available all day'; cls='st-free'; }
+    return `<div class="gaday-row ${iso===todayISO?'is-today':''}">
+      <div><div class="gaday-date">${dayLabel}</div><div class="gaday-status ${cls}">${status}</div></div>
+      ${editable ? `<button class="btn btn-sm btn-gold" onclick="gaOpenEdit('${iso}')">Change</button>` : ''}
+    </div>`;
+  }).join('');
+}
+function gaOpenEdit(iso){
+  gaEditDate = iso;
+  const leaveRec = gaLeave.find(l=>iso>=l.start_date && iso<=l.end_date);
+  const d = new Date(iso+'T00:00:00');
+  document.getElementById('gae-title').textContent = 'Set Availability — ' + d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
+  const mode = !leaveRec ? 'free' : (leaveRec.available_from ? 'partial' : 'off');
+  document.querySelector(`input[name="gae-mode"][value="${mode}"]`).checked = true;
+  document.getElementById('gae-from').value = (leaveRec && leaveRec.available_from) || '18:00';
+  gaeSync();
+  showGuardCard('step-avail-edit');
+}
+function gaeMode(){ return document.querySelector('input[name="gae-mode"]:checked')?.value || 'free'; }
+function gaeSync(){ document.getElementById('gae-time-row').style.opacity = gaeMode()==='partial' ? '1' : '.4'; }
+function gaePick(mode){ document.querySelector(`input[name="gae-mode"][value="${mode}"]`).checked = true; gaeSync(); }
+async function gaeSave(){
+  const mode = gaeMode();
+  const from = document.getElementById('gae-from').value;
+  if(mode==='partial' && !from){ toast('Pick the time you become free','error'); return; }
+  try{
+    await apiFetch('/api/guard-availability',{method:'POST',body:JSON.stringify({
+      guard_id: selectedGuard.id, date: gaEditDate, mode, available_from: mode==='partial' ? from : ''
+    })});
+    toast('Availability updated','success');
+    showGuardCard('step-availability');
+    loadGuardAvailability();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function gaConfirmNoChanges(){
+  if(!selectedGuard) return;
+  try{
+    await apiFetch('/api/guard-availability/confirm',{method:'POST',body:JSON.stringify({guard_id:selectedGuard.id})});
+    toast('Thanks — availability confirmed','success');
+    loadGuardAvailability();
+  }catch(e){ toast(e.message,'error'); }
+}
+
 function clockIn(shiftId){
   if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
   const statusEl = document.getElementById('myshifts-status');
@@ -1954,12 +2095,17 @@ function filterGuards(q){
   const ql = q.toLowerCase();
   const matches = guardsData.filter(g=>g.name.toLowerCase().includes(ql)).slice(0,20);
   if(!matches.length){ dd.classList.add('hidden'); return; }
-  dd.innerHTML = matches.map(g=>`<div class="search-option" onmousedown="selectGuard('${g.id}','${g.name.replace(/'/g,"\\'")}')">
+  dd.innerHTML = matches.map(g=>`<div class="search-option" onmousedown="selectGuardPortal('${g.id}','${g.name.replace(/'/g,"\\'")}')">
     ${g.name.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),m=>`<mark>${m}</mark>`)}</div>`).join('');
   dd.classList.remove('hidden');
 }
 function closeGuardDD(){ document.getElementById('guard-dropdown').classList.add('hidden'); }
-function selectGuard(id, name){
+// Renamed from selectGuard: that name collided with the admin Guards
+// master-detail's selectGuard(id) added later in the file — JS function
+// declarations don't scope per-section, so the later one silently replaced
+// this one, and the Guard Portal's name picker stopped working for anyone
+// without an already-remembered guard in localStorage.
+function selectGuardPortal(id, name){
   selectedGuard = {id, name};
   localStorage.setItem('sg_guard_id', id);
   localStorage.setItem('sg_guard_name', name);
@@ -2451,14 +2597,16 @@ async function openShiftModal(presets={}){
   const ss=document.getElementById('shm-site'); ss.innerHTML='';
   allSitesAdmin.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name} (${s.client_name})`; ss.appendChild(o); });
   document.getElementById('shm-date').valueAsDate = presets.date ? new Date(presets.date) : new Date();
-  document.getElementById('shm-start').value='09:00';
+  document.getElementById('shm-start').value = presets.start_time || '09:00';
   document.getElementById('shm-end').value='17:00';
   if(presets.site_id)  document.getElementById('shm-site').value  = presets.site_id;
   if(presets.guard_id) document.getElementById('shm-guard').value = presets.guard_id;
   openModal('shift-modal');
 }
-function openShiftModalFor(kind, id, dateISO){
-  openShiftModal(kind==='site' ? {site_id:id, date:dateISO} : {guard_id:id, date:dateISO});
+function openShiftModalFor(kind, id, dateISO, startTime){
+  const preset = kind==='site' ? {site_id:id, date:dateISO} : {guard_id:id, date:dateISO};
+  if(startTime) preset.start_time = startTime;
+  openShiftModal(preset);
 }
 async function editShift(sh){
   await openShiftModal();
@@ -2860,34 +3008,49 @@ function renderAvailability(){
       const cells = scopeISO.map(iso=>{
         const leaveRec = leave.find(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
         const clockBtn = `<button class="avail-mini" onclick="openAvailModal('${g.id}','${gn}','${iso}')" title="Set availability for this day">🕒</button>`;
-        // A leave record carrying available_from is a partial day: busy until
-        // that time, free after it. Without it, the guard is off all day.
-        if(leaveRec && leaveRec.available_from) return `<td class="avail-cell">
-          <button class="avail-partial" onclick="openAvailModal('${g.id}','${gn}','${iso}')" title="Click to change this guard's availability">
-            <div class="sc-time">Free from ${leaveRec.available_from}</div><div class="sc-sub">✎ Click to change</div>
-          </button></td>`;
-        if(leaveRec) return `<td class="avail-cell">
-          <button class="avail-leave" onclick="openAvailModal('${g.id}','${gn}','${iso}')" title="Click to change this guard's availability">
-            <div class="sc-time">On Leave</div><div class="sc-sub">✎ Click to change</div>
-          </button></td>`;
         const dayShifts = shifts.filter(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled);
-        if(!dayShifts.length) return `<td class="avail-cell">
-          <button class="avail-free" onclick="availAddShift('${g.id}','${iso}')" title="Click to schedule a shift — pick the site and times">
-            <span class="afb-idle">Free</span><span class="afb-hover">+ Add Shift</span>
-          </button>${clockBtn}
-        </td>`;
-        return `<td class="avail-cell">
+        // A booked shift always wins the cell — the "free from" tag was only
+        // there to help you find someone to book. Once they're booked, showing
+        // "Free from 18:00" instead of the actual shift would hide real work
+        // and, worse, leave no way to add the shift in the first place.
+        if(dayShifts.length) return `<td class="avail-cell">
           ${dayShifts.map(sh=>`<button class="sched-chip" onclick='availEditShift(${JSON.stringify(sh)})' title="Click to edit this shift — site, times, or delete it">
               <div class="sc-time">${sh.start_time}-${sh.end_time||'Required'} <span class="sc-edit">✎</span></div>
               <div class="sc-sub">${sh.site_name}</div>
             </button>`).join('')}
           <button class="avail-mini" onclick="availAddShift('${g.id}','${iso}')" title="Add another shift this day">+</button>
         </td>`;
+        // A leave record carrying available_from is a partial day: busy until
+        // that time, free after it. Without it, the guard is off all day.
+        if(leaveRec && leaveRec.available_from) return `<td class="avail-cell">
+          <button class="avail-partial" onclick="availAddShift('${g.id}','${iso}','${leaveRec.available_from}')" title="Click to schedule a shift starting from ${leaveRec.available_from}">
+            <div class="sc-time">Free from ${leaveRec.available_from}</div><div class="sc-sub">+ Add Shift</div>
+          </button>
+          <button class="avail-edit-link" onclick="openAvailModal('${g.id}','${gn}','${iso}')">✎ Edit availability</button>
+        </td>`;
+        if(leaveRec) return `<td class="avail-cell">
+          <button class="avail-leave" onclick="openAvailModal('${g.id}','${gn}','${iso}')" title="Click to change this guard's availability">
+            <div class="sc-time">On Leave</div><div class="sc-sub">✎ Click to change</div>
+          </button></td>`;
+        // No shifts and no leave record — fully free.
+        return `<td class="avail-cell">
+          <button class="avail-free" onclick="availAddShift('${g.id}','${iso}')" title="Click to schedule a shift — pick the site and times">
+            <span class="afb-idle">Free</span><span class="afb-hover">+ Add Shift</span>
+          </button>${clockBtn}
+        </td>`;
       }).join('');
-      return `<tr><td><strong>${g.name}</strong></td>${cells}</tr>`;
+      const fresh = availFreshnessLabel(g);
+      return `<tr><td><strong>${g.name}</strong><div class="avail-freshness ${fresh.cls}" title="Set when the guard themselves last used My Availability in the Guard Portal — admin edits don't count">${fresh.text}</div></td>${cells}</tr>`;
     }).join('');
 }
-function availAddShift(guardId, dateISO){ openShiftModalFor('guard', guardId, dateISO); }
+const AVAIL_STALE_DAYS = 14;
+function availFreshnessLabel(g){
+  if(!g.availability_confirmed_at) return {text:'Never confirmed by guard', cls:'avail-stale'};
+  const days = Math.floor((Date.now() - new Date(g.availability_confirmed_at).getTime()) / 86400000);
+  const label = days<=0 ? 'today' : days===1 ? 'yesterday' : `${days}d ago`;
+  return {text:`Guard updated ${label}`, cls: days>AVAIL_STALE_DAYS ? 'avail-stale' : 'avail-fresh'};
+}
+function availAddShift(guardId, dateISO, startTime){ openShiftModalFor('guard', guardId, dateISO, startTime); }
 async function availEditShift(sh){ await editShift(sh); }
 // ── Availability editor ───────────────────────────────────────────────────────
 // One day of one guard has three states: available all day (no record), free
