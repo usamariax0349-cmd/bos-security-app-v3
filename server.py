@@ -5,7 +5,7 @@ Production | Multi-Admin | Roles | Audit Log | v3.0
 Run:  py server.py  →  http://localhost:5000
 """
 
-import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math
+import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
@@ -309,6 +309,18 @@ def init_db():
             notes      TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- One row per (guard, licence-or-compliance-item, threshold) reminder
+        -- actually sent, so the expiry check never nags the same person about
+        -- the same deadline twice.
+        CREATE TABLE IF NOT EXISTS expiry_reminders_sent (
+            id             TEXT PRIMARY KEY,
+            guard_id       TEXT NOT NULL,
+            item_key       TEXT NOT NULL,   -- 'license' or a compliance_items.id
+            threshold_days INTEGER NOT NULL,
+            sent_at        TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(guard_id, item_key, threshold_days)
+        );
     ''')
     conn.commit()
 
@@ -512,7 +524,17 @@ def init_db():
                      (str(uuid.uuid4()), DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL.lower(), h, salt))
         print(f'  Superadmin created: {DEFAULT_ADMIN_EMAIL}')
     conn.commit()
+
     conn.close()
+
+    # expiring_items()/check_expiry_reminders() read rows by column name (via
+    # RL/R), which needs row_factory=sqlite3.Row — init_db's own bare
+    # sqlite3.connect() above doesn't set that, so this runs on its own
+    # get_db() connection instead, after the migration/seed work is committed.
+    db = get_db()
+    sent = check_expiry_reminders(db)
+    if sent: print(f'  Expiry check: {sent} new licence/compliance reminder(s) sent')
+    db.close()
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -557,6 +579,80 @@ def delete_submissions(conn, ids, session):
               f"{row['total_hours']}h ({row['status']})")
         deleted += 1
     return deleted
+
+_last_expiry_check = 0  # unix time; module-level throttle, resets on restart — fine, see check site
+EXPIRY_THRESHOLDS = (30, 14, 3, 0)  # days out; 0 covers "already expired"
+
+def expiring_items(conn, within_days=None):
+    """Every guard licence / compliance item with an expiry date, each tagged
+    with its days_left (negative = already expired). within_days filters to
+    items due within that many days OR already expired; None returns all.
+    Shared by the dashboard panel, the Guards list flag, the report, and the
+    reminder check below, so all four agree on exactly the same set."""
+    today = datetime.now().date()
+    rows = []
+    for g in RL(conn.execute('''SELECT id,name,license_number,license_expiry,license_reminder_days
+                                FROM guards
+                                WHERE active=1 AND no_license_required=0
+                                  AND license_expiry IS NOT NULL AND license_expiry<>\'\'''').fetchall()):
+        try: exp = datetime.strptime(g['license_expiry'], '%Y-%m-%d').date()
+        except ValueError: continue
+        rows.append({'guard_id':g['id'], 'guard_name':g['name'], 'item_key':'license',
+                     'item_name':f"Security Licence {g['license_number'] or ''}".strip(),
+                     'expiry_date':g['license_expiry'], 'reminder_days':g['license_reminder_days'] or 60,
+                     'days_left':(exp-today).days})
+    for gc in RL(conn.execute('''SELECT gc.item_id, gc.expiry_date, gc.reminder_days,
+                                        g.id as guard_id, g.name as guard_name, ci.name as item_name
+                                 FROM guard_compliance gc
+                                 JOIN guards g ON g.id=gc.guard_id
+                                 JOIN compliance_items ci ON ci.id=gc.item_id
+                                 WHERE g.active=1 AND gc.checked=1
+                                   AND gc.expiry_date IS NOT NULL AND gc.expiry_date<>\'\'''').fetchall()):
+        try: exp = datetime.strptime(gc['expiry_date'], '%Y-%m-%d').date()
+        except ValueError: continue
+        rows.append({'guard_id':gc['guard_id'], 'guard_name':gc['guard_name'], 'item_key':gc['item_id'],
+                     'item_name':gc['item_name'], 'expiry_date':gc['expiry_date'],
+                     'reminder_days':gc['reminder_days'] or 60, 'days_left':(exp-today).days})
+    if within_days is not None:
+        rows = [r for r in rows if r['days_left'] <= within_days]
+    rows.sort(key=lambda r: r['days_left'])
+    return rows
+
+def check_expiry_reminders(conn):
+    """Fire the 30/14/3-day-out and expired reminders: an in-app reminder for
+    the guard (existing Guard Portal popup) plus an admin email, deduped
+    per (guard, item, threshold) via expiry_reminders_sent so nobody gets the
+    same warning twice. Safe to call often — most calls find nothing new due.
+
+    Each item fires AT MOST ONE reminder per check: the tightest threshold it
+    has actually crossed (e.g. something 5 days overdue is just "expired",
+    not "expired" + "3 days" + "14 days" + "30 days" all at once because
+    today happens to be the first time anyone checked). If a still-tighter
+    threshold is crossed later, that fires as its own, separate reminder.
+    """
+    sent = 0
+    for item in expiring_items(conn):
+        bucket = next((t for t in sorted(EXPIRY_THRESHOLDS) if item['days_left'] <= t), None)
+        if bucket is None:
+            continue  # not within any threshold yet
+        already = conn.execute(
+            'SELECT 1 FROM expiry_reminders_sent WHERE guard_id=? AND item_key=? AND threshold_days=?',
+            (item['guard_id'], item['item_key'], bucket)).fetchone()
+        if already:
+            continue
+        when = f"expired {-item['days_left']} day(s) ago" if item['days_left']<0 \
+               else f"expires in {item['days_left']} day(s)" if item['days_left']>0 else 'expires today'
+        conn.execute('INSERT INTO reminders (id,guard_id,message) VALUES (?,?,?)',
+                    (str(uuid.uuid4()), item['guard_id'],
+                     f"{item['item_name']} {when} ({item['expiry_date']}). Please renew and update your details."))
+        send_email(DEFAULT_ADMIN_EMAIL, f'{COMPANY_NAME}: {item["item_name"]} {when}',
+                   f"{item['guard_name']}'s {item['item_name']} {when} (on {item['expiry_date']}).")
+        conn.execute('''INSERT INTO expiry_reminders_sent (id,guard_id,item_key,threshold_days)
+                        VALUES (?,?,?,?)''',
+                    (str(uuid.uuid4()), item['guard_id'], item['item_key'], bucket))
+        sent += 1
+    if sent: conn.commit()
+    return sent
 
 # ─── Invoice helpers ──────────────────────────────────────────────────────────
 def invoice_query(qs):
@@ -865,6 +961,15 @@ def report_licence(qs):
              'Yes' if r['license_number'] else 'No'] for r in rows]
     return headers, data
 
+def report_licenses_expiring(qs):
+    db = get_db()
+    rows = expiring_items(db)
+    db.close()
+    headers = ['Guard','Item','Expiry Date','Days Left','Status']
+    data = [[r['guard_name'], r['item_name'], r['expiry_date'], r['days_left'],
+             'Expired' if r['days_left']<0 else 'Expires Today' if r['days_left']==0 else 'Upcoming'] for r in rows]
+    return headers, data
+
 def report_site_listing(qs):
     db = get_db()
     rows = RL(db.execute('SELECT * FROM sites ORDER BY active DESC, client_name, name').fetchall())
@@ -935,6 +1040,8 @@ REPORTS = {
         'desc':'Generate a listing of all guards','fn':report_guard_listing},
     'licence': {'category':'Staff Reports','title':'Security Licence Report',
         'desc':'Generate a report for security licences on file','fn':report_licence},
+    'licenses_expiring': {'category':'Staff Reports','title':'Licences & Compliance Expiring',
+        'desc':'Every guard licence or compliance item with an expiry date, soonest first','fn':report_licenses_expiring},
     'site_listing': {'category':'Site Reports','title':'Site Listing',
         'desc':'Generate a listing of all sites and their contacts','fn':report_site_listing},
     'checkpoints': {'category':'Checkpoint Reports','title':'Checkpoint Report',
@@ -1258,6 +1365,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/api/dashboard':
             db = get_db()
+            # No background scheduler in this app (single long-lived process,
+            # no cron) — piggyback the expiry check on dashboard loads instead,
+            # throttled so a busy admin doesn't rescan on every click. It also
+            # runs once at every server startup (see init_db), so an expiring
+            # licence is caught within a day either way.
+            global _last_expiry_check
+            if time.time() - _last_expiry_check > 6*3600:
+                check_expiry_reminders(db)
+                _last_expiry_check = time.time()
             today = datetime.now().strftime('%Y-%m-%d')
             month_start = datetime.now().strftime('%Y-%m-01')
             pending  = db.execute("SELECT COUNT(*) FROM submissions WHERE status='pending'").fetchone()[0]
@@ -1279,10 +1395,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 JOIN sites  s ON s.id=sub.site_id
                 ORDER BY sub.submitted_at DESC LIMIT 15
             ''').fetchall())
+            expiring = expiring_items(db, within_days=30)
             db.close()
             self.send_json({'pending': pending, 'approved_today': approved_today,
                             'total_guards': total_guards, 'total_sites': total_sites,
-                            'revenue_month': round(rev_row, 2), 'recent': recent}); return
+                            'revenue_month': round(rev_row, 2), 'recent': recent,
+                            'expiring_licenses': expiring}); return
+
+        if path == '/api/licenses/expiring':
+            # within_days omitted = everyone with an expiry date on file, for
+            # the Reports export; the dashboard panel always passes 30.
+            within = qs.get('within_days',[None])[0]
+            db = get_db()
+            rows = expiring_items(db, within_days=int(within) if within else None)
+            db.close(); self.send_json(rows); return
 
         if path == '/api/submissions':
             db = get_db(); where=[]; params=[]
