@@ -359,6 +359,10 @@ def init_db():
         ("guards", "license_file",          "ALTER TABLE guards ADD COLUMN license_file TEXT"),
         ("guards", "hide_on_schedule",      "ALTER TABLE guards ADD COLUMN hide_on_schedule INTEGER DEFAULT 0"),
         ("guards", "no_license_required",   "ALTER TABLE guards ADD COLUMN no_license_required INTEGER DEFAULT 0"),
+        # An unavailability record with available_from set is a PARTIAL day:
+        # the guard is tied up until that time and free afterwards ("free after
+        # 6pm"). Empty/NULL keeps the original meaning — unavailable all day.
+        ("guard_leave", "available_from",   "ALTER TABLE guard_leave ADD COLUMN available_from TEXT DEFAULT ''"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -517,6 +521,8 @@ def audit(conn, session, action, details=''):
     conn.execute('INSERT INTO audit_log (id,admin_id,admin_name,action,details) VALUES (?,?,?,?,?)',
                  (str(uuid.uuid4()), session.get('admin_id',''), session.get('name',''),
                   action, details))
+
+DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 
 def delete_submissions(conn, ids, session):
     """Delete submissions and everything that hangs off them.
@@ -1322,6 +1328,64 @@ class Handler(http.server.BaseHTTPRequestHandler):
             fn   = f"BOS_invoice_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             self.send_download(data,'text/csv; charset=utf-8', fn); return
 
+        if path == '/api/availability/export':
+            # The weekly availability board as a spreadsheet: one row per guard,
+            # one column per day, matching what's on screen (including the
+            # Working/Free/On Leave filter the user has applied).
+            if not OPENPYXL_OK: self.err('Run: py -m pip install openpyxl', 500); return
+            date_from = qs.get('date_from',[None])[0]
+            if not date_from: self.err('date_from required'); return
+            only = qs.get('filter',['all'])[0]
+            day_filter = qs.get('date',[''])[0]
+            start = datetime.strptime(date_from, '%Y-%m-%d')
+            days = [(start + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+            db = get_db()
+            guards = RL(db.execute('SELECT id,name FROM guards WHERE active=1 ORDER BY name').fetchall())
+            shifts = RL(db.execute('''SELECT sh.*, s.name as site_name FROM shifts sh
+                                      JOIN sites s ON s.id=sh.site_id
+                                      WHERE sh.shift_date>=? AND sh.shift_date<=?
+                                        AND COALESCE(sh.cancelled,0)=0''',
+                                   (days[0], days[6])).fetchall())
+            leave = RL(db.execute('''SELECT * FROM guard_leave
+                                     WHERE start_date<=? AND end_date>=?''',
+                                  (days[6], days[0])).fetchall())
+            db.close()
+
+            def day_shifts(gid, d):
+                return [x for x in shifts if x['guard_id']==gid and x['shift_date']==d]
+            def day_leave(gid, d):
+                for l in leave:
+                    if l['guard_id']==gid and l['start_date'] <= d <= l['end_date']: return l
+                return None
+            def day_full_leave(gid, d):
+                # Matches the board: only a full-day record counts as on leave —
+                # "free from 18:00" still leaves the guard rosterable.
+                l = day_leave(gid, d)
+                return l if (l and not l.get('available_from')) else None
+            def cell(gid, d):
+                sh = day_shifts(gid, d)
+                if sh:
+                    return '\n'.join(f"{x['start_time']}-{x['end_time'] or 'Required'} {x['site_name']}" for x in sh)
+                lv = day_leave(gid, d)
+                if lv: return f"Free from {lv['available_from']}" if lv.get('available_from') else 'On Leave'
+                return 'Free'
+
+            scope = [day_filter] if day_filter in days else days
+            def keep(g):
+                if only == 'working': return any(day_shifts(g['id'], d) for d in scope)
+                if only == 'leave':   return any(day_full_leave(g['id'], d) for d in scope)
+                if only == 'free':
+                    return all(not day_shifts(g['id'], d) and not day_full_leave(g['id'], d) for d in scope)
+                return True
+
+            rows = [[g['name']] + [cell(g['id'], d) for d in days] for g in guards if keep(g)]
+            headers = ['Guard'] + [f"{DAY_NAMES[i]} {d[8:10]}/{d[5:7]}" for i, d in enumerate(days)]
+            out = rows_to_xlsx(headers, rows, 'Availability')
+            audit_db = get_db(); audit(audit_db, s, 'AVAILABILITY_EXPORT',
+                                      f'{days[0]}~{days[6]} ({only})'); audit_db.commit(); audit_db.close()
+            self.send_download(out, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                               f'BOS_Availability_{days[0]}.xlsx'); return
+
         if path == '/api/reports/catalog':
             self.send_json([{'id':k,'category':v['category'],'title':v['title'],'desc':v['desc']}
                              for k,v in REPORTS.items()]); return
@@ -1818,11 +1882,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for f in ('start_date','end_date'):
                 if not data.get(f): self.err(f'{f} required'); return
             lid = str(uuid.uuid4()); db = get_db()
-            db.execute('''INSERT INTO guard_leave (id,guard_id,leave_type,start_date,end_date,notes)
-                          VALUES (?,?,?,?,?,?)''',
+            avail_from = data.get('available_from','')
+            db.execute('''INSERT INTO guard_leave (id,guard_id,leave_type,start_date,end_date,notes,available_from)
+                          VALUES (?,?,?,?,?,?,?)''',
                        (lid, m.group(1), data.get('leave_type','Fixed Leave'),
-                        data['start_date'], data['end_date'], data.get('notes','')))
-            audit(db, s, 'LEAVE_CREATE', f'{m.group(1)} {data["start_date"]}~{data["end_date"]}'); db.commit()
+                        data['start_date'], data['end_date'], data.get('notes',''), avail_from))
+            audit(db, s, 'LEAVE_CREATE',
+                  f'{m.group(1)} {data["start_date"]}~{data["end_date"]}'
+                  + (f' (free from {avail_from})' if avail_from else '')); db.commit()
             row = R(db.execute('SELECT * FROM guard_leave WHERE id=?', (lid,)).fetchone())
             db.close(); self.send_json(row, 201); return
 
