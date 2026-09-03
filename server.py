@@ -412,8 +412,69 @@ def init_db():
         ('Usama Riaz',   'Anglers Tavern',   '2026-09-06', '06:30', '10:30'),
         ('Rohan Sharma', 'Skinny Dog Hotel', '2026-09-05', '19:00', '23:00'),
     ]
+    # "Required" shifts: end time wasn't confirmed in the source roster (common in
+    # hospitality security — the shift runs until the venue closes), so end_time
+    # is left blank ('') and the UI shows "Required" instead of a bogus time.
+    SEED_SHIFTS_OPEN_ENDED = [
+        ('Harman (BOS)',        'Eureka Hotel', '2026-09-04', '20:00'),
+        ('Mudassar Habib',      'Eureka Hotel', '2026-09-04', '20:00'),
+        ('Usama Riaz',          'Eureka Hotel', '2026-09-05', '20:00'),
+        ('Mudassar Habib',      'Eureka Hotel', '2026-09-05', '21:00'),
+        ('Usama Riaz',          'Eureka Hotel', '2026-09-05', '21:00'),
+
+        ('Joseph Greige',       'Gardiner Hotel', '2026-09-04', '18:00'),
+        ('Ahmed Ilyas',         'Gardiner Hotel', '2026-09-04', '19:00'),
+        ('Joseph Greige',       'Gardiner Hotel', '2026-09-05', '18:00'),
+        ('Ahmed Ilyas',         'Gardiner Hotel', '2026-09-05', '19:00'),
+        ('Georges Zaya',        'Gardiner Hotel', '2026-09-05', '20:00'),
+
+        ('Abdullah Sajjad',     'Apollo Bay', '2026-09-05', '18:00'),
+
+        ('Hilal Isik',          'Hotel Esplanade', '2026-09-04', '22:00'),
+        ('Shoaib Sherani',      'Hotel Esplanade', '2026-09-04', '22:00'),
+        ('Asad ullah Saleem',   'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Faraz Ahmed Kazi',    'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Hilal Isik',          'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Ishtiyaq Ahmed',      'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Jitender Singh',      'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Shoaib Sherani',      'Hotel Esplanade', '2026-09-05', '22:00'),
+        ('Usama Khan Niazi',    'Hotel Esplanade', '2026-09-05', '22:00'),
+
+        ('Saied Shohani',       'Melbourne Public', '2026-08-31', '16:30'),
+        ('Usama Riaz',          'Melbourne Public', '2026-08-31', '16:30'),
+        ('Mohammad Sultan',     'Melbourne Public', '2026-09-04', '18:00'),
+
+        ('Saied Shohani',       'Public House', '2026-09-04', '18:00'),
+        ('Justin Elzaibak',     'Public House', '2026-09-05', '17:30'),
+        ('Saied Shohani',       'Public House', '2026-09-05', '18:00'),
+        ('Nikhil Goyal',        'Public House', '2026-09-05', '20:00'),
+
+        ('Talha Kolcak',        'RSL on Bell', '2026-09-04', '18:00'),
+        ('Talha Kolcak',        'RSL on Bell', '2026-09-05', '18:00'),
+
+        ('Harshdeep Singh',     'Swan Hotel', '2026-09-04', '17:00'),
+        ('Rahul Kumar',         'Swan Hotel', '2026-09-04', '22:00'),
+        ('Zubair Mohammed',     'Swan Hotel', '2026-09-04', '22:00'),
+        ('Rahul Kumar',         'Swan Hotel', '2026-09-05', '18:00'),
+        ('Harshdeep Singh',     'Swan Hotel', '2026-09-05', '22:00'),
+        ('Zubair Mohammed',     'Swan Hotel', '2026-09-05', '22:00'),
+
+        ('Kartikay Sharma',     'The Continental Sorrento', '2026-09-05', '20:30'),
+        ('Ali Hussaini',        'The Continental Sorrento', '2026-09-05', '21:00'),
+        ('Usama Riaz',          'The Continental Sorrento', '2026-09-05', '21:00'),
+        ('Zamin Rezai',         'The Continental Sorrento', '2026-09-05', '21:30'),
+
+        ('Sandeep Singh',       'The Provincial Hotel', '2026-09-04', '20:00'),
+        ('Aman Verma',          'The Provincial Hotel', '2026-09-04', '22:00'),
+        ('Vikramjeet Singh',    'The Provincial Hotel', '2026-09-04', '22:00'),
+        ('Sandeep Singh',       'The Provincial Hotel', '2026-09-05', '20:00'),
+        ('Aman Verma',          'The Provincial Hotel', '2026-09-05', '22:00'),
+        ('Vikramjeet Singh',    'The Provincial Hotel', '2026-09-05', '22:00'),
+
+        ('Georges Zaya',        'Skinny Dog Hotel', '2026-09-04', '19:00'),
+    ]
     seeded_shifts = 0
-    for guard_name, site_name, d, st, et in SEED_SHIFTS:
+    for guard_name, site_name, d, st, et in SEED_SHIFTS + [(g, s, d, st, '') for g, s, d, st in SEED_SHIFTS_OPEN_ENDED]:
         gid, sid = _resolve_guard_id(guard_name), _resolve_site_id(site_name)
         if not gid or not sid:
             print(f'  WARNING: could not seed shift for {guard_name} @ {site_name} — guard or site not found')
@@ -664,7 +725,7 @@ def report_schedule_by_guard(qs):
     db.close()
     headers = ['Guard','Site','Client','Date','Start','End','Position','Status']
     data = [[r['guard_name'],r['site_name'],r['client_name'],r['shift_date'],
-             r['start_time'],r['end_time'],r['position'] or '—',r['status']] for r in rows]
+             r['start_time'],r['end_time'] or 'Required',r['position'] or '—',r['status']] for r in rows]
     return headers, data
 
 def report_schedule_by_site(qs):
@@ -679,7 +740,7 @@ def report_schedule_by_site(qs):
     db.close()
     headers = ['Site','Client','Guard','Date','Start','End','Position','Status']
     data = [[r['site_name'],r['client_name'],r['guard_name'],r['shift_date'],
-             r['start_time'],r['end_time'],r['position'] or '—',r['status']] for r in rows]
+             r['start_time'],r['end_time'] or 'Required',r['position'] or '—',r['status']] for r in rows]
     return headers, data
 
 def report_timesheet_approved(qs):
@@ -1771,15 +1832,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == '/api/shifts':
             s2 = self.require_admin('manager')
             if not s2: return
-            for f in ['guard_id','site_id','shift_date','start_time','end_time']:
+            # end_time is optional: an empty end_time means "Required" (open-ended,
+            # e.g. hospitality security running until the venue closes) — the
+            # guard's actual worked hours still come from their real clock-out,
+            # not this scheduled field.
+            for f in ['guard_id','site_id','shift_date','start_time']:
                 if not data.get(f): self.err(f'{f} required'); return
             shid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
                           position,notes,created_by,published) VALUES (?,?,?,?,?,?,?,?,?,0)''',
                        (shid, data['guard_id'], data['site_id'], data['shift_date'],
-                        data['start_time'], data['end_time'], data.get('position',''),
+                        data['start_time'], data.get('end_time',''), data.get('position',''),
                         data.get('notes',''), s['name']))
-            audit(db, s, 'SHIFT_CREATE', f"{data['shift_date']} {data['start_time']}-{data['end_time']}"); db.commit()
+            audit(db, s, 'SHIFT_CREATE',
+                  f"{data['shift_date']} {data['start_time']}-{data.get('end_time') or 'Required'}"); db.commit()
             row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (shid,)).fetchone())])[0]
@@ -1810,7 +1876,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             notified = 0
             for g in by_guard.values():
                 if not g['email']: continue
-                lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time']} at {sh['site_name']}"
+                lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time'] or 'Required'} at {sh['site_name']}"
                          for sh in g['shifts']]
                 body = (f"Hi {g['name']},\n\nYour shifts for {date_from} to {date_to} have been "
                         f"published:\n\n" + "\n".join(lines) +
