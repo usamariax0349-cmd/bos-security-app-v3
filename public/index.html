@@ -336,6 +336,22 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .gavm-opt:hover{border-color:var(--gold)}
 .gavm-opt input{margin-top:3px}
 .gavm-opt small{color:rgba(255,255,255,.5);font-size:11px}
+.msg-thread{display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.msg-bubble{max-width:80%;padding:9px 13px;border-radius:14px;font-size:13px;line-height:1.4;word-break:break-word}
+.msg-bubble.mine{align-self:flex-end;background:var(--gold);color:#241d05;border-bottom-right-radius:4px}
+.msg-meta{font-size:10px;opacity:.65;margin-top:3px}
+#msg-thread{max-height:360px;margin-bottom:12px}
+#msg-thread .msg-bubble.theirs{align-self:flex-start;background:rgba(255,255,255,.1);color:#fff;border-bottom-left-radius:4px}
+#msg-admin-thread{flex:1;min-height:0;padding:4px 2px}
+#msg-admin-thread .msg-bubble.theirs{align-self:flex-start;background:var(--bg);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
+.tab-badge{display:inline-block;min-width:16px;padding:1px 5px;margin-left:5px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:14px;text-align:center;vertical-align:2px}
+.msg-dot{display:inline-block;min-width:16px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center}
+.msg-nav-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
+.msg-thread-item{padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.msg-thread-item:hover{background:var(--bg)}
+.msg-thread-item.active{background:rgba(201,168,76,.12)}
+.msg-thread-item .mti-name{font-size:13px}
+.msg-thread-item .mti-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .cp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .cp-row.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08)}
 .cp-name{font-weight:700;color:#fff;font-size:14px}
@@ -606,6 +622,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <span class="mi">📅</span>
           <span><div class="mt">My Availability</div><div class="ms">Let the office know when you're free</div></span>
         </button>
+        <button class="mode-btn" onclick="startMessagesFlow()">
+          <span class="mi">💬</span>
+          <span><div class="mt">Messages<span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms">Chat directly with the office</div></span>
+        </button>
       </div>
       <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="backToGuardSelect()">← Back</button>
     </div>
@@ -755,6 +775,17 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showGuardCard('step-availability')">← Cancel</button>
     </div>
 
+    <!-- Messages -->
+    <div class="guard-card hidden" id="step-messages">
+      <div class="step-title">💬 Messages</div>
+      <div id="msg-thread" class="msg-thread"></div>
+      <div class="form-group">
+        <textarea id="msg-input" class="form-control" rows="2" placeholder="Type a message to the office..."></textarea>
+      </div>
+      <button class="nav-btn nav-next" style="width:100%" onclick="sendGuardMessage()">Send</button>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
+    </div>
+
     <div class="admin-link"><a href="#" onclick="showLogin();return false">Admin Login</a></div>
   </div>
 </div>
@@ -807,6 +838,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <button class="tab-btn" onclick="showTab('invoices')" data-tab="invoices">🧾 Invoices</button>
     <button class="tab-btn" onclick="showTab('reports')" data-tab="reports">📈 Reports</button>
     <button class="tab-btn" onclick="showTab('reminders')" data-tab="reminders">🔔 Reminders</button>
+    <button class="tab-btn" onclick="showTab('messages')" data-tab="messages">💬 Messages<span id="msg-tab-badge" class="tab-badge hidden">0</span></button>
     <button class="tab-btn" onclick="showTab('incidents')" data-tab="incidents">🚨 Incidents</button>
     <div class="tab-dropdown" id="org-dropdown">
       <button class="tab-btn" id="org-trigger" onclick="toggleOrgDropdown(event)">🏢 Organization ▾</button>
@@ -1190,6 +1222,33 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <thead><tr><th>Guard</th><th>Message</th><th>Sent</th><th>Seen</th></tr></thead>
             <tbody id="rem-tbody"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div id="tab-messages" class="tab-content">
+      <div class="section" style="padding:0;overflow:hidden">
+        <div style="display:flex;min-height:560px">
+          <div style="width:280px;flex-shrink:0;border-right:1.5px solid var(--border);overflow-y:auto;max-height:640px">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+              <div class="section-title" style="margin-bottom:10px">Conversations</div>
+              <select id="msg-new-guard" class="form-control" style="font-size:12px;margin-bottom:8px"></select>
+              <button class="btn btn-ghost btn-sm" style="width:100%" onclick="startNewMessageThread()">+ New Conversation</button>
+            </div>
+            <div id="msg-threads-list"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;padding:18px;min-width:0">
+            <div id="msg-admin-empty" style="margin:auto;color:var(--muted);font-size:13px">Select a guard to view the conversation.</div>
+            <div id="msg-admin-panel" class="hidden" style="display:flex;flex-direction:column;height:100%;min-height:0">
+              <div class="section-title" id="msg-admin-guard-name" style="margin-bottom:12px"></div>
+              <div id="msg-admin-thread" class="msg-thread"></div>
+              <div style="display:flex;gap:8px;margin-top:12px">
+                <textarea id="msg-admin-input" class="form-control" rows="2" placeholder="Type a reply..." style="flex:1"></textarea>
+                <button class="btn btn-primary" onclick="sendAdminMessage()">Send</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1661,6 +1720,7 @@ function showAdmin(){
   hideAllPages();
   document.getElementById('admin-page').classList.remove('hidden');
   loadDashboard();
+  loadMessageThreads();
 }
 function showClientPortal(){
   hideAllPages();
@@ -1769,6 +1829,7 @@ function showTab(name){
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
+  else if(name==='messages') loadMessageThreads();
   else if(name==='schedule') loadScheduleGrid();
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
@@ -1821,6 +1882,7 @@ async function init(){
     document.getElementById('guard-pill-name').textContent = gname;
     document.getElementById('guard-search-wrap').style.display='none';
     checkReminders(gid);
+    checkUnreadMessages(gid);
   }
 }
 
@@ -1831,7 +1893,7 @@ async function loadGuardsAndSites(){
   }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success','step-availability','step-avail-edit'];
+const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -1848,6 +1910,7 @@ function startShiftFlow(){
 function startPatrolFlow(){ showGuardCard('step-patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
 function startAvailabilityFlow(){ showGuardCard('step-availability'); loadGuardAvailability(); }
+function startMessagesFlow(){ showGuardCard('step-messages'); loadGuardMessages(); }
 
 // ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
 const VIC_CENTER = [-37.4713, 144.7852];
@@ -2133,6 +2196,7 @@ function selectGuardPortal(id, name){
   document.getElementById('guard-search-wrap').style.display='none';
   document.getElementById('guard-dropdown').classList.add('hidden');
   checkReminders(id);
+  checkUnreadMessages(id);
 }
 function clearGuard(){
   selectedGuard = null;
@@ -2312,6 +2376,55 @@ async function dismissReminder(){
   document.getElementById('reminder-overlay').classList.add('hidden');
 }
 
+// ── Messages (two-way guard <-> office chat) ─────────────────────────────────
+function escapeHtml(s){
+  return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function renderMsgThread(box, rows, viewerRole){
+  if(!rows.length){
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">No messages yet. Say hello 👋</p>';
+    return;
+  }
+  box.innerHTML = rows.map(m=>{
+    const mine = m.sender===viewerRole;
+    const who = m.sender==='admin' ? (m.sender_name||'Office') : (m.sender_name||'Guard');
+    return `<div class="msg-bubble ${mine?'mine':'theirs'}">
+      <div>${escapeHtml(m.body)}</div>
+      <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}${fmtDateTime(m.created_at)}</div>
+    </div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function checkUnreadMessages(gid){
+  try{
+    const rows = await apiFetch(`/api/guard-messages?guard_id=${gid}`);
+    const unread = rows.filter(m=>m.sender==='admin' && !m.read_at).length;
+    document.getElementById('msg-unread-dot')?.classList.toggle('hidden', unread===0);
+  }catch(e){}
+}
+async function loadGuardMessages(){
+  const box = document.getElementById('msg-thread');
+  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  try{
+    const rows = await apiFetch(`/api/guard-messages?guard_id=${selectedGuard.id}`);
+    renderMsgThread(box, rows, 'guard');
+    if(rows.some(m=>m.sender==='admin' && !m.read_at)){
+      await apiFetch('/api/guard-messages/read', {method:'POST', body: JSON.stringify({guard_id:selectedGuard.id})});
+      document.getElementById('msg-unread-dot')?.classList.add('hidden');
+    }
+  }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load messages.</p>'; }
+}
+async function sendGuardMessage(){
+  const input = document.getElementById('msg-input');
+  const body = input.value.trim();
+  if(!body) return;
+  try{
+    await apiFetch('/api/guard-messages', {method:'POST', body: JSON.stringify({guard_id:selectedGuard.id, body})});
+    input.value='';
+    loadGuardMessages();
+  }catch(e){ toast('Could not send message','error'); }
+}
+
 // ── Admin Auth ─────────────────────────────────────────────────────────────────
 async function doLogin(){
   const email=document.getElementById('login-email').value.trim();
@@ -2377,7 +2490,7 @@ function applyRoleRestrictions(role){
   const showBillTabs = ()=>{ billRatesBtn?.classList.remove('hidden'); billInvoicesBtn?.classList.remove('hidden'); };
   const hideBillTabs = ()=>{ billRatesBtn?.classList.add('hidden'); billInvoicesBtn?.classList.add('hidden'); billingSubtab='submissions'; };
   // Reset all tabs (and the Organization dropdown / billing sub-tabs) to visible first
-  ['dashboard','schedule','guards','sites','invoices','reminders','incidents','admins','audit']
+  ['dashboard','schedule','guards','sites','invoices','reminders','messages','incidents','admins','audit']
     .forEach(show);
   if(orgDropdown) orgDropdown.style.display = '';
   showBillTabs();
@@ -2386,14 +2499,14 @@ function applyRoleRestrictions(role){
   if(role==='manager'){
     // Manager: dashboard + submissions only (Rates/Invoices sub-tabs hidden within Invoices)
     hide('guards'); hide('sites');
-    hide('reminders'); hide('admins'); hide('audit');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only, Rates/Invoices sub-tabs hidden within Invoices)
     hide('dashboard'); hide('schedule'); hide('guards'); hide('sites');
-    hide('reminders'); hide('admins'); hide('audit');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
@@ -3994,6 +4107,76 @@ async function sendReminders(){
     document.getElementById('rem-msg').value=''; clearReminderSelection();
     loadReminderHistory();
   }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Messages (admin inbox) ────────────────────────────────────────────────────
+let msgThreads = [], msgActiveGuard = null;
+async function loadMessageThreads(){
+  if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
+  try{
+    msgThreads = await apiFetch('/api/messages/threads');
+    renderMsgThreadsList();
+    updateMsgTabBadge();
+  }catch(e){}
+}
+function renderMsgThreadsList(){
+  const sel = document.getElementById('msg-new-guard');
+  if(sel) sel.innerHTML = '<option value="">Select a guard…</option>' +
+    allGuardsAdmin.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+  const box = document.getElementById('msg-threads-list');
+  box.innerHTML = msgThreads.length===0
+    ? '<p style="padding:14px 16px;font-size:12px;color:var(--muted)">No conversations yet.</p>'
+    : msgThreads.map(t=>`
+        <div class="msg-thread-item ${msgActiveGuard===t.guard_id?'active':''}" onclick="openMessageThread('${t.guard_id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <strong class="mti-name">${escapeHtml(t.guard_name)}</strong>
+            ${t.unread>0?`<span class="msg-dot">${t.unread}</span>`:''}
+          </div>
+          <div class="mti-preview">${t.last_sender==='admin'?'You: ':''}${escapeHtml(t.last_body||'')}</div>
+        </div>`).join('');
+}
+function startNewMessageThread(){
+  const sel = document.getElementById('msg-new-guard');
+  if(!sel.value) return;
+  openMessageThread(sel.value);
+}
+async function openMessageThread(guardId){
+  msgActiveGuard = guardId;
+  const guard = allGuardsAdmin.find(g=>g.id===guardId);
+  document.getElementById('msg-admin-empty').classList.add('hidden');
+  document.getElementById('msg-admin-panel').classList.remove('hidden');
+  document.getElementById('msg-admin-guard-name').textContent = guard ? guard.name : 'Guard';
+  renderMsgThreadsList();
+  const box = document.getElementById('msg-admin-thread');
+  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  try{
+    const rows = await apiFetch(`/api/messages?guard_id=${guardId}`);
+    renderMsgThread(box, rows, 'admin');
+    if(rows.some(m=>m.sender==='guard' && !m.read_at)){
+      await apiFetch('/api/messages/read', {method:'POST', body: JSON.stringify({guard_id:guardId})});
+      loadMessageThreads();
+    }
+  }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load messages.</p>'; }
+}
+async function sendAdminMessage(){
+  const input = document.getElementById('msg-admin-input');
+  const body = input.value.trim();
+  if(!body || !msgActiveGuard) return;
+  try{
+    await apiFetch('/api/messages', {method:'POST', body: JSON.stringify({guard_id:msgActiveGuard, body})});
+    input.value='';
+    const box = document.getElementById('msg-admin-thread');
+    const rows = await apiFetch(`/api/messages?guard_id=${msgActiveGuard}`);
+    renderMsgThread(box, rows, 'admin');
+    loadMessageThreads();
+  }catch(e){ toast(e.message,'error'); }
+}
+function updateMsgTabBadge(){
+  const badge = document.getElementById('msg-tab-badge');
+  if(!badge) return;
+  const total = msgThreads.reduce((sum,t)=>sum+t.unread,0);
+  badge.textContent = total;
+  badge.classList.toggle('hidden', total===0);
 }
 
 // ── Live Activity ─────────────────────────────────────────────────────────────
