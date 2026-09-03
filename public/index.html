@@ -812,11 +812,13 @@ tr:hover td{background:#f8fafc}
             <button class="btn btn-ghost btn-sm" onclick="availShiftWeek(1)">›</button>
           </div>
         </div>
-        <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">At a glance: which active guards are working, on leave, or free each day this week.</p>
-        <div class="gd-status-toggle" style="padding:0 20px 12px;border-bottom:none">
-          <button class="gd-status-btn" id="avail-filter-working" onclick="setAvailFilter('working')">Guards Working</button>
-          <button class="gd-status-btn" id="avail-filter-free" onclick="setAvailFilter('free')">Free Guards</button>
+        <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">At a glance: which active guards are working, on leave, or free — click a cell to edit. Pick a date to check just that day.</p>
+        <div class="gd-status-toggle" style="padding:0 20px 12px;border-bottom:none;flex-wrap:wrap;align-items:center">
           <button class="gd-status-btn active" id="avail-filter-all" onclick="setAvailFilter('all')">All Guards</button>
+          <button class="gd-status-btn" id="avail-filter-working" onclick="setAvailFilter('working')">Working Guards</button>
+          <button class="gd-status-btn" id="avail-filter-free" onclick="setAvailFilter('free')">Free Guards</button>
+          <button class="gd-status-btn" id="avail-filter-leave" onclick="setAvailFilter('leave')">On Leave</button>
+          <select id="avail-date-filter" class="form-control" style="width:auto;font-size:12px;padding:6px 10px;margin-left:8px" onchange="setAvailDateFilter(this.value)"></select>
         </div>
         <div class="tbl-wrap">
           <table id="avail-table">
@@ -2346,21 +2348,25 @@ async function saveShift(){
     if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
     else   await apiFetch('/api/shifts',{method:'POST',body:JSON.stringify(body)});
     toast('Shift saved','success'); closeModal('shift-modal');
-    loadScheduleGrid();
+    refreshScheduleViews();
   }catch(e){ toast(e.message,'error'); }
+}
+function refreshScheduleViews(){
+  loadScheduleGrid();
+  if(guardsFull.length) loadAvailability();
 }
 async function cancelShift(id){
   if(!confirm('Cancel this shift? The guard will no longer see it on their roster.')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify({cancelled:1})});
-    toast('Shift cancelled','success'); closeModal('shift-modal'); loadScheduleGrid();
+    toast('Shift cancelled','success'); closeModal('shift-modal'); refreshScheduleViews();
   }catch(e){ toast(e.message,'error'); }
 }
 async function deleteShift(id){
   if(!confirm('Permanently delete this shift record?')) return;
   try{
     await apiFetch(`/api/shifts/${id}`,{method:'DELETE'});
-    toast('Shift deleted','success'); closeModal('shift-modal'); loadScheduleGrid();
+    toast('Shift deleted','success'); closeModal('shift-modal'); refreshScheduleViews();
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -2559,15 +2565,17 @@ let gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
 // ── Weekly Availability (who's working / on leave / free, at a glance) ─────
 let availWeekStart = mondayOf(new Date());
-let availFilter = 'all'; // 'working' | 'free' | 'all'
+let availFilter = 'all'; // 'working' | 'free' | 'leave' | 'all'
+let availDateFilter = ''; // '' = whole week, else a single ISO date within the current week
 let availShifts = [], availLeave = [];
-function availGoToday(){ availWeekStart = mondayOf(new Date()); loadAvailability(); }
-function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); loadAvailability(); }
+function availGoToday(){ availWeekStart = mondayOf(new Date()); availDateFilter=''; loadAvailability(); }
+function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); availDateFilter=''; loadAvailability(); }
 function setAvailFilter(mode){
   availFilter = mode;
-  ['working','free','all'].forEach(m=>document.getElementById(`avail-filter-${m}`).classList.toggle('active', m===mode));
+  ['working','free','leave','all'].forEach(m=>document.getElementById(`avail-filter-${m}`).classList.toggle('active', m===mode));
   renderAvailability();
 }
+function setAvailDateFilter(iso){ availDateFilter = iso; renderAvailability(); }
 async function loadAvailability(){
   if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
@@ -2581,6 +2589,8 @@ async function loadAvailability(){
   }catch(e){ toast(e.message,'error'); return; }
   renderAvailability();
 }
+function availIsWorking(g, iso){ return availShifts.some(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled); }
+function availIsOnLeave(g, iso){ return availLeave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date); }
 function renderAvailability(){
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
@@ -2588,26 +2598,66 @@ function renderAvailability(){
     `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
   document.querySelector('#avail-table thead').innerHTML =
     `<tr><th>Guard</th>${days.map((d,i)=>`<th>${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
+  const dateSel = document.getElementById('avail-date-filter');
+  if(!dateSel.dataset.weekOf || dateSel.dataset.weekOf !== dayISO[0]){
+    dateSel.dataset.weekOf = dayISO[0];
+    dateSel.innerHTML = `<option value="">All Week</option>` +
+      days.map((d,i)=>`<option value="${dayISO[i]}">${SCHED_DAY_NAMES[i]} ${d.getDate()}/${d.getMonth()+1}</option>`).join('');
+  }
+  dateSel.value = availDateFilter;
   const shifts = availShifts, leave = availLeave;
-  const isWorkingThisWeek = g => dayISO.some(iso => shifts.some(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled));
-  const isFreeAllWeek = g => dayISO.every(iso =>
-    !shifts.some(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled) &&
-    !leave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date));
+  const isWorkingThisWeek = g => dayISO.some(iso => availIsWorking(g, iso));
+  const isOnLeaveThisWeek = g => dayISO.some(iso => availIsOnLeave(g, iso));
+  const isFreeAllWeek = g => dayISO.every(iso => !availIsWorking(g, iso) && !availIsOnLeave(g, iso));
   let activeGuards = guardsFull.filter(g=>g.active).sort((a,b)=>a.name.localeCompare(b.name));
-  if(availFilter==='working') activeGuards = activeGuards.filter(isWorkingThisWeek);
-  else if(availFilter==='free') activeGuards = activeGuards.filter(isFreeAllWeek);
+  if(availDateFilter){
+    if(availFilter==='working') activeGuards = activeGuards.filter(g=>availIsWorking(g, availDateFilter));
+    else if(availFilter==='free') activeGuards = activeGuards.filter(g=>!availIsWorking(g, availDateFilter) && !availIsOnLeave(g, availDateFilter));
+    else if(availFilter==='leave') activeGuards = activeGuards.filter(g=>availIsOnLeave(g, availDateFilter));
+  } else {
+    if(availFilter==='working') activeGuards = activeGuards.filter(isWorkingThisWeek);
+    else if(availFilter==='free') activeGuards = activeGuards.filter(isFreeAllWeek);
+    else if(availFilter==='leave') activeGuards = activeGuards.filter(isOnLeaveThisWeek);
+  }
+  const emptyMsg = {working:'No guards working', free:'No free guards', leave:'No guards on leave', all:'No active guards'}[availFilter]
+    + (availDateFilter ? ` on ${availDateFilter}` : ' this week');
   document.getElementById('avail-tbody').innerHTML = activeGuards.length===0
-    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>${availFilter==='working'?'No guards working this week':availFilter==='free'?'No guards fully free this week':'No active guards'}</p></td></tr>`
+    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>${emptyMsg}</p></td></tr>`
     : activeGuards.map(g=>{
       const cells = dayISO.map(iso=>{
-        const onLeave = leave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
-        if(onLeave) return `<td><span class="badge badge-rejected" style="font-size:10px">On Leave</span></td>`;
+        const leaveRec = leave.find(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
+        if(leaveRec) return `<td class="sched-cell"><button class="sched-chip st-missed" onclick="availRemoveLeave('${leaveRec.id}','${g.name.replace(/'/g,"\\'")}')" title="Click to remove leave">
+            <div class="sc-time">On Leave</div><div class="sc-sub">Click to clear</div>
+          </button></td>`;
         const dayShifts = shifts.filter(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled);
-        if(!dayShifts.length) return `<td><span style="color:var(--green);font-size:12px;font-weight:600">Free</span></td>`;
-        return `<td>${dayShifts.map(sh=>`<strong style="color:var(--navy);font-size:12px">${sh.start_time}-${sh.end_time||'Required'}</strong><br><small style="color:var(--muted)">${sh.site_name}</small>`).join('<br>')}</td>`;
+        return `<td class="sched-cell">
+          <div style="display:flex;align-items:center;gap:4px;margin-bottom:${dayShifts.length?'4px':'0'}">
+            <button class="sched-add-btn" style="margin-bottom:0;flex-shrink:0" onclick="availAddShift('${g.id}','${iso}')" title="Add shift">+</button>
+            ${dayShifts.length===0 ? `<button class="btn btn-ghost btn-xs" style="flex:1;color:var(--green);font-weight:600" onclick="availMarkLeave('${g.id}','${g.name.replace(/'/g,"\\'")}','${iso}')">Free</button>` : ''}
+          </div>
+          ${dayShifts.map(sh=>`<button class="sched-chip" onclick='availEditShift(${JSON.stringify(sh)})'>
+              <div class="sc-time">${sh.start_time}-${sh.end_time||'Required'}</div>
+              <div class="sc-sub">${sh.site_name}</div>
+            </button>`).join('')}
+        </td>`;
       }).join('');
       return `<tr><td><strong>${g.name}</strong></td>${cells}</tr>`;
     }).join('');
+}
+function availAddShift(guardId, dateISO){ openShiftModalFor('guard', guardId, dateISO); }
+async function availEditShift(sh){ await editShift(sh); }
+async function availMarkLeave(guardId, guardName, dateISO){
+  if(!confirm(`Mark ${guardName} unavailable on ${dateISO}?`)) return;
+  try{
+    await apiFetch(`/api/guards/${guardId}/leave`,{method:'POST',
+      body:JSON.stringify({leave_type:'Fixed Leave',start_date:dateISO,end_date:dateISO,notes:'Marked from availability board'})});
+    toast('Marked unavailable','success'); loadAvailability();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function availRemoveLeave(leaveId, guardName){
+  if(!confirm(`Clear ${guardName}'s leave for this day?`)) return;
+  try{ await apiFetch(`/api/leave/${leaveId}`,{method:'DELETE'}); toast('Leave cleared','success'); loadAvailability(); }
+  catch(e){ toast(e.message,'error'); }
 }
 
 async function loadGuardsAdmin(){
