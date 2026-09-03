@@ -364,6 +364,18 @@ def init_db():
 
     # Seed a starter set of FAQ auto-replies once, so the feature is useful
     # out of the box — admin can edit, deactivate or add more from the app.
+    # Order matters: match_faq() fires the FIRST keyword hit by sort_order, so
+    # a narrow/specific question (e.g. a pay *error*) must sort before a
+    # broader one that shares vocabulary (a general pay-day question) or the
+    # broad one will always win.
+    PAY_ERROR_Q  = "There's an error with my pay"
+    PAY_ERROR_KW = 'pay error,wrong pay,underpaid,overpaid,pay issue,pay mistake,incorrect pay'
+    PAY_ERROR_A  = ("Sorry to hear that. Please reply here with: (1) how much you received, "
+                     "(2) how much you expected to receive, (3) your pay rate, (4) how many hours you worked, "
+                     "and (5) which site you worked at — the office will investigate and get back to you.")
+    OLD_PAYDAY_Q = 'When do I get paid?'
+    OLD_PAYDAY_A = ("Pay is processed from your approved shift submissions. "
+                     "Contact the office directly for payslip details.")
     FAQ_STARTERS = [
         ('How do I set my availability?', 'availability,day off,time off,leave,holiday',
          "You can set your own availability anytime from the Guard Portal menu → 'My Availability'. "
@@ -374,15 +386,50 @@ def init_db():
         ('How do I clock in or out?', 'clock in,clock out,clocking',
          "Open 'My Shifts' in the Guard Portal and use the Clock In / Clock Out button on your shift — "
          "you'll need location access turned on at the site."),
-        ('When do I get paid?', 'pay,paid,payslip,wage,salary',
-         "Pay is processed from your approved shift submissions. Contact the office directly for payslip details."),
+        (PAY_ERROR_Q, PAY_ERROR_KW, PAY_ERROR_A),
+        ('When is payment made?', 'pay day,payday,when do i get paid,when is pay,payment day,when is payment',
+         "Pay runs every Friday."),
         ('Can I swap a shift with someone?', 'swap,cover my shift,someone take my shift',
          "Shift swaps aren't self-service yet — message the office here with the date and we'll help arrange cover."),
+        ('When is the roster published?', 'roster,schedule published,new roster,when is roster',
+         "The roster is published every Thursday."),
+        ('How does someone apply for a job?', 'apply,job application,vacancy,hiring,want to apply,friend wants to apply',
+         "We don't have an online application link yet — message the office here and we'll help with the application process."),
+        ("I'm running late for my shift", "running late,late for shift,will be late",
+         "Call the office immediately and message us here so we can notify the site."),
+        ("I'm sick and can't make my shift", "sick,can't make my shift,calling in sick,unwell",
+         "Call the office as soon as possible, and set yourself Unavailable in My Availability so we know for future shifts too."),
+        ('How do I update my bank or contact details?', 'bank details,update my details,change my phone,change address,update bank',
+         "Contact the office directly to update your bank or contact details."),
+        ('I lost my security licence card', 'lost my licence,lost my card,licence missing,lost licence',
+         "Contact the office immediately — you may also need to lodge a police report for a replacement."),
+        ('Can I get more shifts or hours?', 'more shifts,more hours,extra shifts,pick up shifts',
+         "Let the office know you're after more hours, and make sure your Availability is up to date so we can offer you shifts."),
+        ('Which site am I working at?', 'which site,what site am i,where am i working,my site today',
+         'Check "My Shifts" in the Guard Portal — it shows the site, address and time for each upcoming shift.'),
     ]
     if conn.execute('SELECT COUNT(*) FROM faqs').fetchone()[0] == 0:
         for i, (q, kw, a) in enumerate(FAQ_STARTERS):
             conn.execute('INSERT INTO faqs (id,question,keywords,answer,sort_order) VALUES (?,?,?,?,?)',
                          (str(uuid.uuid4()), q, kw, a, i))
+        conn.commit()
+    else:
+        # Reconcile a DB seeded before this expanded FAQ set existed: repurpose
+        # the old generic pay-day row into the pay-error FAQ (only if an admin
+        # hasn't already edited it), then append any of the newer starters
+        # that aren't present yet, matched by exact question text so nothing
+        # is duplicated and no admin edit is ever overwritten.
+        old_payday = conn.execute(
+            'SELECT id FROM faqs WHERE question=? AND answer=?', (OLD_PAYDAY_Q, OLD_PAYDAY_A)).fetchone()
+        if old_payday and not conn.execute(
+                'SELECT 1 FROM faqs WHERE question=?', (PAY_ERROR_Q,)).fetchone():
+            conn.execute('UPDATE faqs SET question=?,keywords=?,answer=? WHERE id=?',
+                         (PAY_ERROR_Q, PAY_ERROR_KW, PAY_ERROR_A, old_payday[0]))
+        for q, kw, a in FAQ_STARTERS:
+            if not conn.execute('SELECT 1 FROM faqs WHERE question=?', (q,)).fetchone():
+                n = conn.execute('SELECT COUNT(*) FROM faqs').fetchone()[0]
+                conn.execute('INSERT INTO faqs (id,question,keywords,answer,sort_order) VALUES (?,?,?,?,?)',
+                             (str(uuid.uuid4()), q, kw, a, n))
         conn.commit()
 
     # ── Schema migration: add any missing columns from older databases ──────────
