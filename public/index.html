@@ -380,6 +380,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .sched-hidden-note button{background:none;border:none;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0}
 .sched-head-cell.is-today,.avail-today{background:var(--gold)!important;color:var(--navy)!important}
 #avail-table th.avail-today{color:var(--navy)!important}
+/* With only a couple of days on screen, pin the day columns to a sensible
+   width and let the guard column absorb the slack — otherwise one day stretches
+   across the whole table. With 4+ days the natural distribution is better, so
+   this only applies to the narrow case. */
+#avail-table.avail-few th:first-child,#avail-table.avail-few td:first-child{width:100%}
+#avail-table.avail-few th:not(:first-child),#avail-table.avail-few td:not(:first-child){width:190px}
 .sched-range-label{font-weight:700;color:var(--navy);font-size:14px;padding:0 6px}
 .sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
 .sched-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));background:#fff;min-width:900px}
@@ -401,15 +407,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .avail-cell{position:relative;padding:6px 22px 6px 6px;vertical-align:top}
 .avail-cell .sched-chip{margin-bottom:3px}
 .avail-cell .sc-edit{opacity:.6;font-size:10px}
-.avail-free{display:block;width:100%;padding:7px 4px;border-radius:7px;border:1.5px dashed var(--border);background:transparent;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
-.avail-free:hover{border-style:solid;border-color:var(--navy);background:var(--navy);color:#fff}
-.avail-free .afb-hover{display:none}
-.avail-free:hover .afb-idle{display:none}
-.avail-free:hover .afb-hover{display:inline}
+/* Both labels sit in the SAME grid cell and cross-fade. Swapping them with
+   display:none re-centred different-width text and flipped border-style, and
+   neither can be transitioned — that was the jump. Only colour/opacity move
+   now, so the box never changes size. */
+.avail-free{display:grid;place-items:center;width:100%;padding:7px 4px;border-radius:7px;
+  border:1.5px dashed var(--border);background:transparent;color:var(--green);font-size:12px;font-weight:700;
+  cursor:pointer;white-space:nowrap;
+  transition:background-color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.avail-free>span{grid-area:1/1;transition:opacity var(--dur-fast) var(--ease-out)}
+.avail-free:hover{border-color:var(--navy);background:var(--navy);color:#fff}
+.avail-free .afb-hover{opacity:0}
+.avail-free:hover .afb-idle{opacity:0}
+.avail-free:hover .afb-hover{opacity:1}
 .avail-leave{display:block;width:100%;text-align:left;background:var(--red);color:#fff;border:none;border-radius:6px;padding:5px 6px;font-size:11px;cursor:pointer;line-height:1.3;transition:transform var(--dur-fast) var(--ease-spring)}
 .avail-leave:hover{transform:translateY(-1px)}
 .avail-leave .sc-time{font-weight:700}
 .avail-leave .sc-sub{opacity:.9;font-size:10px;margin-top:1px}
+.avail-days{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 20px 12px}
+.avail-days-lbl{font-size:12px;font-weight:700;color:var(--muted);margin-right:2px}
+#avail-day-chips{display:flex;gap:6px;flex-wrap:wrap}
+.avail-day-btn{padding:5px 11px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.avail-day-btn:hover{border-color:var(--navy);color:var(--navy)}
+.avail-day-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.avail-day-btn.is-today{box-shadow:inset 0 -3px 0 var(--gold)}
 .avm-opt{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin-bottom:8px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;transition:all var(--dur-fast) var(--ease-out)}
 .avm-opt:hover{border-color:var(--navy);background:var(--bg)}
 .avm-opt input{margin-top:2px}
@@ -861,12 +883,16 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <button class="gd-status-btn" id="avail-filter-working" onclick="setAvailFilter('working')">Working Guards</button>
           <button class="gd-status-btn" id="avail-filter-free" onclick="setAvailFilter('free')">Free Guards</button>
           <button class="gd-status-btn" id="avail-filter-leave" onclick="setAvailFilter('leave')">On Leave</button>
-          <select id="avail-date-filter" class="form-control" style="width:auto;font-size:12px;padding:6px 10px;margin-left:8px" onchange="setAvailDateFilter(this.value)"></select>
-          <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="exportAvailability()" title="Download this week's board as an Excel file">⬇ Excel</button>
+          <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="exportAvailability()" title="Download the days you're viewing as an Excel file">⬇ Excel</button>
           <div class="search-bar" style="width:180px;margin-left:auto">
             <span>🔍</span>
             <input type="text" id="avail-search" placeholder="Find a guard..." oninput="renderAvailability()">
           </div>
+        </div>
+        <div class="avail-days" id="avail-days">
+          <span class="avail-days-lbl">Days:</span>
+          <button class="avail-day-btn active" id="avail-day-all" onclick="setAvailDays([])">All Week</button>
+          <span id="avail-day-chips"></span>
         </div>
         <div id="avail-count" style="padding:0 20px 10px;font-size:12px;color:var(--muted);font-weight:600"></div>
         <div class="tbl-wrap">
@@ -2747,16 +2773,22 @@ let gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 // ── Weekly Availability (who's working / on leave / free, at a glance) ─────
 let availWeekStart = mondayOf(new Date());
 let availFilter = 'all'; // 'working' | 'free' | 'leave' | 'all'
-let availDateFilter = ''; // '' = whole week, else a single ISO date within the current week
+// Which days of the shown week are in view. Empty = the whole week; otherwise
+// any combination, so you can look at just Sat+Sun, or a single day.
+let availDays = [];
 let availShifts = [], availLeave = [];
-function availGoToday(){ availWeekStart = mondayOf(new Date()); availDateFilter=''; loadAvailability(); }
-function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); availDateFilter=''; loadAvailability(); }
+function availGoToday(){ availWeekStart = mondayOf(new Date()); availDays=[]; loadAvailability(); }
+function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); availDays=[]; loadAvailability(); }
 function setAvailFilter(mode){
   availFilter = mode;
   ['working','free','leave','all'].forEach(m=>document.getElementById(`avail-filter-${m}`).classList.toggle('active', m===mode));
   renderAvailability();
 }
-function setAvailDateFilter(iso){ availDateFilter = iso; renderAvailability(); }
+function setAvailDays(list){ availDays = list; renderAvailability(); }
+function toggleAvailDay(iso){
+  availDays = availDays.includes(iso) ? availDays.filter(d=>d!==iso) : [...availDays, iso];
+  renderAvailability();
+}
 async function loadAvailability(){
   if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
@@ -2780,48 +2812,52 @@ function availIsOnLeave(g, iso){
 function renderAvailability(){
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
-  document.getElementById('avail-range-label').textContent =
-    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
   const todayISO = fmtISO(new Date());
+  // Day chips: pick any combination. None selected means the whole week.
+  document.getElementById('avail-day-chips').innerHTML = days.map((d,i)=>
+    `<button class="avail-day-btn${availDays.includes(dayISO[i])?' active':''}${dayISO[i]===todayISO?' is-today':''}"
+       onclick="toggleAvailDay('${dayISO[i]}')">${SCHED_DAY_NAMES[i]} ${d.getDate()}/${d.getMonth()+1}</button>`).join('');
+  document.getElementById('avail-day-all').classList.toggle('active', availDays.length===0);
+
+  // Everything below works off the chosen days: the columns shown, the
+  // Working/Free/On Leave filter, and the export all use the same scope.
+  const scopeISO = availDays.length ? dayISO.filter(d=>availDays.includes(d)) : dayISO;
+  const scopeIdx = scopeISO.map(d=>dayISO.indexOf(d));
+  document.getElementById('avail-range-label').textContent = availDays.length
+    ? (scopeISO.length===1
+        ? days[scopeIdx[0]].toLocaleDateString('en-AU',{weekday:'short',day:'2-digit',month:'short'})
+        : `${scopeISO.length} days selected`)
+    : `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  document.getElementById('avail-table').classList.toggle('avail-few', scopeISO.length<=3);
   document.querySelector('#avail-table thead').innerHTML =
-    `<tr><th>Guard</th>${days.map((d,i)=>`<th class="${dayISO[i]===todayISO?'avail-today':''}">${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
-  const dateSel = document.getElementById('avail-date-filter');
-  if(!dateSel.dataset.weekOf || dateSel.dataset.weekOf !== dayISO[0]){
-    dateSel.dataset.weekOf = dayISO[0];
-    dateSel.innerHTML = `<option value="">All Week</option>` +
-      days.map((d,i)=>`<option value="${dayISO[i]}">${SCHED_DAY_NAMES[i]} ${d.getDate()}/${d.getMonth()+1}</option>`).join('');
-  }
-  dateSel.value = availDateFilter;
+    `<tr><th>Guard</th>${scopeIdx.map(i=>`<th class="${dayISO[i]===todayISO?'avail-today':''}">${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${days[i].getDate()}/${days[i].getMonth()+1}</span></th>`).join('')}</tr>`;
   const shifts = availShifts, leave = availLeave;
-  const isWorkingThisWeek = g => dayISO.some(iso => availIsWorking(g, iso));
-  const isOnLeaveThisWeek = g => dayISO.some(iso => availIsOnLeave(g, iso));
-  const isFreeAllWeek = g => dayISO.every(iso => !availIsWorking(g, iso) && !availIsOnLeave(g, iso));
+  // "Working"/"On Leave" mean ANY day in scope; "Free" means EVERY day in
+  // scope, so picking Sat+Sun gives the guards free across that whole weekend.
   let activeGuards = guardsFull.filter(g=>g.active).sort((a,b)=>a.name.localeCompare(b.name));
-  if(availDateFilter){
-    if(availFilter==='working') activeGuards = activeGuards.filter(g=>availIsWorking(g, availDateFilter));
-    else if(availFilter==='free') activeGuards = activeGuards.filter(g=>!availIsWorking(g, availDateFilter) && !availIsOnLeave(g, availDateFilter));
-    else if(availFilter==='leave') activeGuards = activeGuards.filter(g=>availIsOnLeave(g, availDateFilter));
-  } else {
-    if(availFilter==='working') activeGuards = activeGuards.filter(isWorkingThisWeek);
-    else if(availFilter==='free') activeGuards = activeGuards.filter(isFreeAllWeek);
-    else if(availFilter==='leave') activeGuards = activeGuards.filter(isOnLeaveThisWeek);
-  }
+  if(availFilter==='working')    activeGuards = activeGuards.filter(g=>scopeISO.some(iso=>availIsWorking(g,iso)));
+  else if(availFilter==='leave') activeGuards = activeGuards.filter(g=>scopeISO.some(iso=>availIsOnLeave(g,iso)));
+  else if(availFilter==='free')  activeGuards = activeGuards.filter(g=>scopeISO.every(iso=>!availIsWorking(g,iso) && !availIsOnLeave(g,iso)));
+
   const totalInFilter = activeGuards.length;
   const q = document.getElementById('avail-search').value.trim().toLowerCase();
   if(q) activeGuards = activeGuards.filter(g=>g.name.toLowerCase().includes(q));
+  const scopeLabel = !availDays.length ? 'this week'
+    : scopeISO.length===1 ? `on ${days[scopeIdx[0]].toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'})}`
+    : `across the ${scopeISO.length} selected days`;
   document.getElementById('avail-count').textContent = q
     ? `${activeGuards.length} of ${totalInFilter} guard${totalInFilter===1?'':'s'} matching “${q}”`
-    : `${totalInFilter} guard${totalInFilter===1?'':'s'}`;
+    : `${totalInFilter} guard${totalInFilter===1?'':'s'} ${scopeLabel}`;
 
   const emptyMsg = q
     ? `No guard matching “${q}”`
     : {working:'No guards working', free:'No free guards', leave:'No guards on leave', all:'No active guards'}[availFilter]
-      + (availDateFilter ? ` on ${availDateFilter}` : ' this week');
+      + ' ' + scopeLabel;
   document.getElementById('avail-tbody').innerHTML = activeGuards.length===0
-    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>${emptyMsg}</p></td></tr>`
+    ? `<tr><td colspan="${scopeISO.length+1}" class="empty-state"><div class="ei">👮</div><p>${emptyMsg}</p></td></tr>`
     : activeGuards.map(g=>{
       const gn = g.name.replace(/'/g,"\\'");
-      const cells = dayISO.map(iso=>{
+      const cells = scopeISO.map(iso=>{
         const leaveRec = leave.find(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
         const clockBtn = `<button class="avail-mini" onclick="openAvailModal('${g.id}','${gn}','${iso}')" title="Set availability for this day">🕒</button>`;
         // A leave record carrying available_from is a partial day: busy until
@@ -2909,8 +2945,9 @@ async function downloadFile(url, filename){
 }
 function exportAvailability(){
   const p = new URLSearchParams({date_from: fmtISO(availWeekStart), filter: availFilter});
-  if(availDateFilter) p.set('date', availDateFilter);
-  downloadFile('/api/availability/export?'+p, `BOS_Availability_${fmtISO(availWeekStart)}.xlsx`);
+  if(availDays.length) p.set('days', [...availDays].sort().join(','));
+  const stamp = availDays.length===1 ? availDays[0] : fmtISO(availWeekStart);
+  downloadFile('/api/availability/export?'+p, `BOS_Availability_${stamp}.xlsx`);
 }
 async function availRemoveLeave(leaveId, guardName){
   if(!confirm(`Clear ${guardName}'s leave for this day?`)) return;
