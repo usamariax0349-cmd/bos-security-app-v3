@@ -587,25 +587,24 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div class="guard-subtitle">Guard Portal</div>
     </div>
 
-    <!-- Step 0: Name -->
+    <!-- Step 0: Guard login -->
     <div class="guard-card" id="step-0">
-      <div class="step-title">Who are you?</div>
-      <div class="form-group" id="guard-search-wrap">
-        <label class="form-label">Your Name</label>
-        <div class="search-wrap" id="guard-search-container">
-          <input type="text" id="guard-input" class="form-control" placeholder="Search your name..." autocomplete="off"
-                 oninput="filterGuards(this.value)" onfocus="filterGuards(this.value)" onblur="setTimeout(()=>closeGuardDD(),200)">
-          <div id="guard-dropdown" class="search-dropdown hidden"></div>
-        </div>
+      <div class="step-title">Guard Login</div>
+      <div id="glogin-err" style="display:none;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="glogin-email" class="form-control" placeholder="you@example.com" autocomplete="email"
+               onkeydown="if(event.key==='Enter')document.getElementById('glogin-pass').focus()">
       </div>
-      <div id="guard-pill" class="hidden" style="margin-bottom:16px">
-        <div class="selected-pill">
-          <span id="guard-pill-name"></span>
-          <button onclick="clearGuard()" title="Not you?">✕</button>
-        </div>
-        <span style="font-size:12px;color:rgba(255,255,255,.4);margin-left:10px">Not you? Click ✕</span>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="glogin-pass" class="form-control" placeholder="••••••••" autocomplete="current-password"
+               onkeydown="if(event.key==='Enter')guardDoLogin()">
       </div>
-      <button class="nav-btn nav-next" onclick="showModeMenu()" style="width:100%;margin-top:8px">Next →</button>
+      <button class="nav-btn nav-next" onclick="guardDoLogin()" style="width:100%;margin-top:8px">Login →</button>
+      <p style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
+        No account yet, or forgot your password? Contact the office.
+      </p>
     </div>
 
     <!-- Mode menu -->
@@ -633,7 +632,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <span><div class="mt">Messages<span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms">Chat directly with the office</div></span>
         </button>
       </div>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="backToGuardSelect()">← Back</button>
+      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
     </div>
 
     <!-- My Shifts (roster + clock in/out) -->
@@ -1675,6 +1674,37 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div>
 
+<!-- Guard first-login password setup — same idea, separate flow/session -->
+<div id="guard-firstpw-modal" class="modal-overlay hidden" style="z-index:9999">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header" style="background:var(--navy);color:#fff;border-radius:12px 12px 0 0">
+      <span class="modal-title" style="color:#fff">🔐 Set Your Password</span>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:18px">
+        Welcome! For your security, you must create a personal password before continuing.
+        Your temporary password will no longer work after this step.
+      </p>
+      <div class="form-group">
+        <label class="form-label">New Password <span style="color:var(--red)">*</span></label>
+        <input type="password" id="gfp-new" class="form-control" placeholder="Min 6 characters"
+               onkeydown="if(event.key==='Enter')guardSubmitFirstPassword()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password <span style="color:var(--red)">*</span></label>
+        <input type="password" id="gfp-confirm" class="form-control" placeholder="Repeat your password"
+               onkeydown="if(event.key==='Enter')guardSubmitFirstPassword()">
+      </div>
+      <div id="gfp-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="width:100%" onclick="guardSubmitFirstPassword()">
+        Set Password &amp; Continue →
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Change password modal -->
 <div id="changepw-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -1694,6 +1724,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 <script>
 // ── State ──────────────────────────────────────────────────────────────────────
 let authToken = localStorage.getItem('sg_token') || null;
+let guardAuthToken = localStorage.getItem('sg_guard_token') || null;
 let currentRole = null;
 let guardsData = [], sitesData = [], allGuardsAdmin = [], allSitesAdmin = [];
 let selectedGuard = null;
@@ -1737,6 +1768,15 @@ async function apiFetch(url, opts={}) {
   if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`HTTP ${res.status}`); }
   const ct = res.headers.get('content-type')||'';
   if(ct.includes('pdf')||ct.includes('csv')||ct.includes('spreadsheetml')||ct.includes('octet-stream')) return res;
+  return res.json();
+}
+// Guard Portal calls carry the guard's own token — a separate privilege
+// domain from authToken (admin/client), so one can never be used as the other.
+async function guardApiFetch(url, opts={}) {
+  const headers = {'Content-Type':'application/json', ...(opts.headers||{})};
+  if(guardAuthToken) headers['X-Auth-Token'] = guardAuthToken;
+  const res = await fetch(url, {...opts, headers});
+  if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e.error||`HTTP ${res.status}`); }
   return res.json();
 }
 
@@ -1880,7 +1920,7 @@ async function init(){
       .forEach(el=>el.textContent=cfg.company_name);
     document.title = cfg.company_name;
   }catch(e){}
-  loadGuardsAndSites();
+  loadSitesForPortal();
   // Try logo
   const li = document.getElementById('guard-logo');
   li.src = '/logo?' + Date.now();
@@ -1909,24 +1949,27 @@ async function init(){
     }catch(e){ authToken=null; localStorage.removeItem('sg_token'); }
   }
   showGuard();
-  // Check remembered guard
-  const gid = localStorage.getItem('sg_guard_id');
-  const gname = localStorage.getItem('sg_guard_name');
-  if(gid && gname){
-    selectedGuard = {id:gid, name:gname};
-    document.getElementById('guard-pill').classList.remove('hidden');
-    document.getElementById('guard-pill-name').textContent = gname;
-    document.getElementById('guard-search-wrap').style.display='none';
-    checkReminders(gid);
-    checkUnreadMessages(gid);
+  // Guard auto-login check — separate token/session domain from admin/client
+  if(guardAuthToken){
+    try{
+      const me = await guardApiFetch('/api/guard/me');
+      if(me.must_change_password){
+        document.getElementById('gfp-err').style.display='none';
+        ['gfp-new','gfp-confirm'].forEach(id=>document.getElementById(id).value='');
+        openModal('guard-firstpw-modal');
+        return;
+      }
+      selectedGuard = {id:me.id, name:me.name};
+      showModeMenu();
+      checkReminders();
+      checkUnreadMessages();
+    }catch(e){ guardAuthToken=null; localStorage.removeItem('sg_guard_token'); }
   }
 }
 
 // ── Guard Portal ───────────────────────────────────────────────────────────────
-async function loadGuardsAndSites(){
-  try{
-    [guardsData, sitesData] = await Promise.all([apiFetch('/api/guards'), apiFetch('/api/sites')]);
-  }catch(e){ return; }
+async function loadSitesForPortal(){
+  try{ sitesData = await apiFetch('/api/sites'); }catch(e){ return; }
 }
 
 const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages'];
@@ -1935,10 +1978,9 @@ function showGuardCard(id){
   document.getElementById(id).classList.remove('hidden');
 }
 function showModeMenu(){
-  if(!selectedGuard){ toast('Please select your name','error'); return; }
+  if(!selectedGuard){ toast('Please log in first','error'); return; }
   showGuardCard('step-menu');
 }
-function backToGuardSelect(){ showGuardCard('step-0'); }
 function startShiftFlow(){
   showGuardCard('step-myshifts');
   loadMyShifts();
@@ -2014,7 +2056,7 @@ async function loadMyShifts(){
   const listEl = document.getElementById('myshifts-list');
   listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
   try{
-    myShiftsData = await apiFetch(`/api/shifts/mine?guard_id=${selectedGuard.id}`);
+    myShiftsData = await guardApiFetch('/api/guard/shifts');
     renderMyShiftsList();
   }catch(e){
     listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Could not load your shifts.</p>`;
@@ -2059,8 +2101,8 @@ async function loadGuardAvailability(){
   document.getElementById('gavail-days').innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
   try{
     const [avail, shifts] = await Promise.all([
-      apiFetch(`/api/guard-availability?guard_id=${selectedGuard.id}&date_from=${dayISO[0]}&date_to=${dayISO[6]}`),
-      apiFetch(`/api/shifts/mine?guard_id=${selectedGuard.id}`)
+      guardApiFetch(`/api/guard/availability?date_from=${dayISO[0]}&date_to=${dayISO[6]}`),
+      guardApiFetch('/api/guard/shifts')
     ]);
     gaLeave = avail.leave; gaConfirmedAt = avail.confirmed_at;
     gaShifts = shifts.filter(sh=>!sh.cancelled && dayISO.includes(sh.shift_date));
@@ -2115,8 +2157,8 @@ async function gaeSave(){
   const from = document.getElementById('gae-from').value;
   if(mode==='partial' && !from){ toast('Pick the time you become free','error'); return; }
   try{
-    await apiFetch('/api/guard-availability',{method:'POST',body:JSON.stringify({
-      guard_id: selectedGuard.id, date: gaEditDate, mode, available_from: mode==='partial' ? from : ''
+    await guardApiFetch('/api/guard/availability',{method:'POST',body:JSON.stringify({
+      date: gaEditDate, mode, available_from: mode==='partial' ? from : ''
     })});
     toast('Availability updated','success');
     showGuardCard('step-availability');
@@ -2126,7 +2168,7 @@ async function gaeSave(){
 async function gaConfirmNoChanges(){
   if(!selectedGuard) return;
   try{
-    await apiFetch('/api/guard-availability/confirm',{method:'POST',body:JSON.stringify({guard_id:selectedGuard.id})});
+    await guardApiFetch('/api/guard/availability/confirm',{method:'POST'});
     toast('Thanks — availability confirmed','success');
     loadGuardAvailability();
   }catch(e){ toast(e.message,'error'); }
@@ -2138,8 +2180,8 @@ function clockIn(shiftId){
   statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
   navigator.geolocation.getCurrentPosition(async pos=>{
     try{
-      await apiFetch(`/api/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify({
-        guard_id:selectedGuard.id, lat:pos.coords.latitude, lng:pos.coords.longitude
+      await guardApiFetch(`/api/guard/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify({
+        lat:pos.coords.latitude, lng:pos.coords.longitude
       })});
       statusEl.classList.add('hidden');
       toast('Clocked in ✓','success');
@@ -2186,12 +2228,12 @@ async function confirmClockOut(){
   statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
   navigator.geolocation.getCurrentPosition(async pos=>{
     const body = {
-      guard_id:selectedGuard.id, lat:pos.coords.latitude, lng:pos.coords.longitude,
+      lat:pos.coords.latitude, lng:pos.coords.longitude,
       notes:document.getElementById('co-notes').value
     };
     if(photoB64){ body.photo_b64=photoB64; body.photo_ext=photoExt; }
     try{
-      await apiFetch(`/api/shifts/${clockOutShiftId}/clock-out`,{method:'POST',body:JSON.stringify(body)});
+      await guardApiFetch(`/api/guard/shifts/${clockOutShiftId}/clock-out`,{method:'POST',body:JSON.stringify(body)});
       document.getElementById('success-title').textContent='Shift Completed!';
       document.getElementById('success-sub').textContent='Your hours have been recorded and are pending review.';
       showGuardCard('step-success');
@@ -2206,40 +2248,55 @@ async function confirmClockOut(){
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
 }
 
-// Guard search
-function filterGuards(q){
-  const dd = document.getElementById('guard-dropdown');
-  if(!q){ dd.classList.add('hidden'); return; }
-  const ql = q.toLowerCase();
-  const matches = guardsData.filter(g=>g.name.toLowerCase().includes(ql)).slice(0,20);
-  if(!matches.length){ dd.classList.add('hidden'); return; }
-  dd.innerHTML = matches.map(g=>`<div class="search-option" onmousedown="selectGuardPortal('${g.id}','${g.name.replace(/'/g,"\\'")}')">
-    ${g.name.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),m=>`<mark>${m}</mark>`)}</div>`).join('');
-  dd.classList.remove('hidden');
+// ── Guard auth ─────────────────────────────────────────────────────────────────
+async function guardDoLogin(){
+  const email = document.getElementById('glogin-email').value.trim();
+  const pass = document.getElementById('glogin-pass').value;
+  const errEl = document.getElementById('glogin-err');
+  errEl.style.display = 'none';
+  if(!email || !pass){ errEl.textContent='Email and password are required'; errEl.style.display='block'; return; }
+  try{
+    const res = await fetch('/api/guard/login', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password: pass})});
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.error || 'Login failed');
+    guardAuthToken = d.token;
+    localStorage.setItem('sg_guard_token', d.token);
+    if(d.force_password_change){
+      document.getElementById('gfp-err').style.display='none';
+      ['gfp-new','gfp-confirm'].forEach(id=>document.getElementById(id).value='');
+      openModal('guard-firstpw-modal');
+      return;
+    }
+    selectedGuard = {id:d.id, name:d.name};
+    document.getElementById('glogin-email').value=''; document.getElementById('glogin-pass').value='';
+    showModeMenu();
+    checkReminders();
+    checkUnreadMessages();
+  }catch(e){ errEl.textContent = e.message; errEl.style.display='block'; }
 }
-function closeGuardDD(){ document.getElementById('guard-dropdown').classList.add('hidden'); }
-// Renamed from selectGuard: that name collided with the admin Guards
-// master-detail's selectGuard(id) added later in the file — JS function
-// declarations don't scope per-section, so the later one silently replaced
-// this one, and the Guard Portal's name picker stopped working for anyone
-// without an already-remembered guard in localStorage.
-function selectGuardPortal(id, name){
-  selectedGuard = {id, name};
-  localStorage.setItem('sg_guard_id', id);
-  localStorage.setItem('sg_guard_name', name);
-  document.getElementById('guard-pill').classList.remove('hidden');
-  document.getElementById('guard-pill-name').textContent = name;
-  document.getElementById('guard-search-wrap').style.display='none';
-  document.getElementById('guard-dropdown').classList.add('hidden');
-  checkReminders(id);
-  checkUnreadMessages(id);
+async function guardSubmitFirstPassword(){
+  const np = document.getElementById('gfp-new').value;
+  const cp = document.getElementById('gfp-confirm').value;
+  const errEl = document.getElementById('gfp-err');
+  errEl.style.display='none';
+  if(np.length<6){ errEl.textContent='Password must be at least 6 characters'; errEl.style.display='block'; return; }
+  if(np!==cp){ errEl.textContent='Passwords do not match'; errEl.style.display='block'; return; }
+  try{
+    const d = await guardApiFetch('/api/guard/setup-password', {method:'POST',
+      body: JSON.stringify({new_password:np, confirm_password:cp})});
+    selectedGuard = {id:d.id, name:d.name};
+    closeModal('guard-firstpw-modal');
+    showModeMenu();
+    checkReminders();
+    checkUnreadMessages();
+  }catch(e){ errEl.textContent = e.message; errEl.style.display='block'; }
 }
-function clearGuard(){
-  selectedGuard = null;
-  localStorage.removeItem('sg_guard_id'); localStorage.removeItem('sg_guard_name');
-  document.getElementById('guard-pill').classList.add('hidden');
-  document.getElementById('guard-search-wrap').style.display='';
-  document.getElementById('guard-input').value='';
+async function guardLogout(){
+  try{ await guardApiFetch('/api/guard/logout', {method:'POST'}); }catch(e){}
+  guardAuthToken = null; selectedGuard = null;
+  localStorage.removeItem('sg_guard_token');
+  showGuardCard('step-0');
 }
 
 // ── Patrol Checkpoints ────────────────────────────────────────────────────────
@@ -2299,13 +2356,12 @@ function renderPatrolList(){
   }
 }
 function scanCheckpoint(cpId){
-  if(!selectedGuard){ toast('Please select your name first','error'); return; }
+  if(!selectedGuard){ toast('Please log in first','error'); return; }
   if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
     try{
-      const d = await apiFetch('/api/checkpoints/scan',{method:'POST',body:JSON.stringify({
-        checkpoint_id:cpId, guard_id:selectedGuard.id,
-        lat:pos.coords.latitude, lng:pos.coords.longitude
+      const d = await guardApiFetch('/api/guard/checkpoints/scan',{method:'POST',body:JSON.stringify({
+        checkpoint_id:cpId, lat:pos.coords.latitude, lng:pos.coords.longitude
       })});
       patrolScanned.add(cpId);
       renderPatrolList();
@@ -2366,19 +2422,19 @@ function handleIncidentPhoto(input, src){
   reader.readAsDataURL(file);
 }
 async function submitIncident(){
-  if(!selectedGuard){ toast('Please select your name first','error'); return; }
+  if(!selectedGuard){ toast('Please log in first','error'); return; }
   if(!incidentSite){ toast('Please select a site','error'); return; }
   const btn = document.getElementById('incident-submit-btn');
   btn.disabled=true; btn.textContent='Submitting…';
   const body = {
-    guard_id:selectedGuard.id, site_id:incidentSite.id,
+    site_id:incidentSite.id,
     type:document.getElementById('incident-type').value,
     description:document.getElementById('incident-desc').value,
   };
   if(incidentGeo){ body.lat=incidentGeo.lat; body.lng=incidentGeo.lng; }
   if(incidentPhotoB64){ body.photo_b64=incidentPhotoB64; body.photo_ext=incidentPhotoExt; }
   try{
-    await apiFetch('/api/incidents',{method:'POST',body:JSON.stringify(body)});
+    await guardApiFetch('/api/guard/incidents',{method:'POST',body:JSON.stringify(body)});
     showGuardCard('step-incident-success');
   }catch(e){ toast(e.message,'error'); }
   btn.disabled=false; btn.textContent='🚨 Report Incident';
@@ -2395,9 +2451,9 @@ function resetIncidentForm(){
 }
 
 // Reminders
-async function checkReminders(gid){
+async function checkReminders(){
   try{
-    const rows = await apiFetch(`/api/reminders?guard_id=${gid}`);
+    const rows = await guardApiFetch('/api/guard/reminders');
     if(!rows.length) return;
     pendingReminder = rows[0];
     document.getElementById('reminder-text').textContent = rows[0].message;
@@ -2406,7 +2462,7 @@ async function checkReminders(gid){
 }
 async function dismissReminder(){
   if(pendingReminder){
-    try{ await apiFetch(`/api/reminders/${pendingReminder.id}`,{method:'PUT',body:'{}'}); }catch(e){}
+    try{ await guardApiFetch('/api/guard/reminders/seen',{method:'POST',body:JSON.stringify({id:pendingReminder.id})}); }catch(e){}
     pendingReminder=null;
   }
   document.getElementById('reminder-overlay').classList.add('hidden');
@@ -2432,9 +2488,9 @@ function renderMsgThread(box, rows, viewerRole){
   }).join('');
   box.scrollTop = box.scrollHeight;
 }
-async function checkUnreadMessages(gid){
+async function checkUnreadMessages(){
   try{
-    const rows = await apiFetch(`/api/guard-messages?guard_id=${gid}`);
+    const rows = await guardApiFetch('/api/guard/messages');
     const unread = rows.filter(m=>m.sender==='admin' && !m.read_at).length;
     document.getElementById('msg-unread-dot')?.classList.toggle('hidden', unread===0);
   }catch(e){}
@@ -2443,10 +2499,10 @@ async function loadGuardMessages(){
   const box = document.getElementById('msg-thread');
   box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
   try{
-    const rows = await apiFetch(`/api/guard-messages?guard_id=${selectedGuard.id}`);
+    const rows = await guardApiFetch('/api/guard/messages');
     renderMsgThread(box, rows, 'guard');
     if(rows.some(m=>m.sender==='admin' && !m.read_at)){
-      await apiFetch('/api/guard-messages/read', {method:'POST', body: JSON.stringify({guard_id:selectedGuard.id})});
+      await guardApiFetch('/api/guard/messages/read', {method:'POST'});
       document.getElementById('msg-unread-dot')?.classList.add('hidden');
     }
   }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load messages.</p>'; }
@@ -2456,7 +2512,7 @@ async function sendGuardMessage(){
   const body = input.value.trim();
   if(!body) return;
   try{
-    await apiFetch('/api/guard-messages', {method:'POST', body: JSON.stringify({guard_id:selectedGuard.id, body})});
+    await guardApiFetch('/api/guard/messages', {method:'POST', body: JSON.stringify({body})});
     input.value='';
     loadGuardMessages();
   }catch(e){ toast('Could not send message','error'); }
@@ -3407,11 +3463,20 @@ function selectGuard(id){
 function renderGuardDetail(){
   const g = currentGuard();
   if(!g) return;
+  const loginStatus = !g.email
+    ? '<span style="color:var(--amber)">⚠ No email on file — can&#39;t log in to the Guard Portal</span>'
+    : g.must_change_password
+      ? '<span style="color:var(--muted)">Guard Portal: password not yet set</span>'
+      : `<span style="color:var(--green)">Guard Portal: active${g.last_login?' · last login '+fmtRelativeDays(g.last_login):''}</span>`;
   document.getElementById('gd-detail-panel').innerHTML = `
     <div class="gd-header">
       <h2>👮 ${g.name}</h2>
-      <button class="btn ${g.active?'btn-ghost':'btn-green'} btn-sm" onclick="toggleGuardActive('${g.id}',${g.active})">${g.active?'Deactivate':'Activate'}</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="resetGuardPassword('${g.id}','${g.name.replace(/'/g,"\\'")}')">🔑 Reset Portal Password</button>
+        <button class="btn ${g.active?'btn-ghost':'btn-green'} btn-sm" onclick="toggleGuardActive('${g.id}',${g.active})">${g.active?'Deactivate':'Activate'}</button>
+      </div>
     </div>
+    <div style="font-size:12px;margin:-8px 0 12px">${loginStatus}</div>
     <div class="gd-subtabs">
       <button class="gd-subtab-btn" data-gdtab="details" onclick="showGuardSubtab('details')">Employee Details</button>
       <button class="gd-subtab-btn" data-gdtab="sites" onclick="showGuardSubtab('sites')">Sites</button>
@@ -3474,7 +3539,7 @@ async function saveGuardDetails(){
     const g = await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify(body)});
     const idx = guardsFull.findIndex(x=>x.id===id); if(idx>=0) guardsFull[idx] = g;
     toast('Guard saved','success');
-    renderGuardsList(); loadGuardsAndSites();
+    renderGuardsList(); loadSitesForPortal();
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -3724,7 +3789,7 @@ async function saveGuard(){
   try{
     const g = await apiFetch('/api/guards',{method:'POST',body:JSON.stringify(body)});
     toast('Guard added','success'); closeModal('guard-modal');
-    await loadGuardsAdmin(); loadGuardsAndSites();
+    await loadGuardsAdmin(); loadSitesForPortal();
     selectGuard(g.id);
   }catch(e){ toast(e.message,'error'); }
 }
@@ -3739,7 +3804,17 @@ async function toggleGuardActive(id, current){
     selectedGuardId = id;
     renderGuardsList();
     renderGuardDetail();
-    loadGuardsAndSites();
+    loadSitesForPortal();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function resetGuardPassword(id, name){
+  if(!confirm(`Set a new temporary Guard Portal password for ${name}? Their current password (if any) will stop working immediately.`)) return;
+  try{
+    const d = await apiFetch(`/api/guards/${id}/reset-password`,{method:'POST'});
+    guardsFull = await apiFetch('/api/guards/all');
+    renderGuardDetail();
+    const emailNote = d.emailed ? ' It has also been emailed to them.' : ' Share it with them directly — it was not emailed.';
+    alert(`Temporary password for ${name}:\n\n${d.temp_password}\n\nThey'll be asked to set their own password on first login.${emailNote}`);
   }catch(e){ toast(e.message,'error'); }
 }
 
@@ -3814,7 +3889,7 @@ async function saveSite(){
     if(id) await apiFetch(`/api/sites/${id}`,{method:'PUT',body:JSON.stringify(body)});
     else   await apiFetch('/api/sites',{method:'POST',body:JSON.stringify(body)});
     toast('Site saved','success'); closeModal('site-modal');
-    loadSitesAdmin(); loadGuardsAndSites();
+    loadSitesAdmin(); loadSitesForPortal();
   }catch(e){ toast(e.message,'error'); }
 }
 async function toggleSiteActive(id, current){

@@ -49,7 +49,8 @@ SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER)
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOADS_PATH, exist_ok=True)
 
-sessions = {}   # token → {admin_id, role, name, email}
+sessions = {}         # token → {admin_id, role, name, email}
+guard_sessions = {}   # token → {guard_id, name, email} — separate privilege domain from admin sessions
 
 # ─── Password Hashing ─────────────────────────────────────────────────────────
 def hash_password(password, salt=None):
@@ -477,6 +478,11 @@ def init_db():
         # button) — never by an admin edit. Lets the admin board show whether
         # a guard's availability is fresh or stale.
         ("guards", "availability_confirmed_at", "ALTER TABLE guards ADD COLUMN availability_confirmed_at TEXT"),
+        # Guard Portal login — mirrors the admin auth columns exactly.
+        ("guards", "password_hash",        "ALTER TABLE guards ADD COLUMN password_hash TEXT"),
+        ("guards", "salt",                 "ALTER TABLE guards ADD COLUMN salt TEXT"),
+        ("guards", "must_change_password", "ALTER TABLE guards ADD COLUMN must_change_password INTEGER DEFAULT 0"),
+        ("guards", "last_login",           "ALTER TABLE guards ADD COLUMN last_login TEXT"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -622,6 +628,39 @@ def init_db():
         print(f'  Superadmin created: {DEFAULT_ADMIN_EMAIL}')
     conn.commit()
 
+    # Case-insensitive unique email per guard, like admins_email — but only
+    # among guards who actually have one on file (most don't yet), so this
+    # never blocks on the many existing blank-email rows. Wrapped defensively:
+    # if any two guards already share an email (in any case), creating the
+    # index would throw and we'd rather log that for admin to clean up than
+    # crash startup over it. Runs down here, after every guard-seeding step
+    # above, so it sees the full roster rather than whatever existed when
+    # schema migrations ran.
+    try:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS guards_email ON guards(lower(email)) WHERE email != ''")
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        print(f'  WARNING: guards_email unique index not created — duplicate guard emails exist: {e}')
+
+    # One-time bootstrap: every guard predates password logins, so give each
+    # active one without a password a random temp password now rather than
+    # locking 100+ guards out the moment this ships. Printed to the startup
+    # log (not emailed — most guards have no email on file yet) so admin can
+    # hand them out; admin can also reset any individual guard's password
+    # later from the Guards tab, which does the same thing on demand.
+    needs_password = conn.execute(
+        "SELECT id,name,email FROM guards WHERE active=1 AND (password_hash IS NULL OR password_hash='')").fetchall()
+    if needs_password:
+        print(f'  Guard login rollout: generating temp passwords for {len(needs_password)} guard(s) —')
+        for gid, gname, gemail in needs_password:
+            temp_pw = secrets.token_urlsafe(6)
+            h, salt = hash_password(temp_pw)
+            conn.execute('UPDATE guards SET password_hash=?,salt=?,must_change_password=1 WHERE id=?',
+                         (h, salt, gid))
+            email_note = gemail or '(no email on file — add one before this guard can log in)'
+            print(f'    {gname:<30} {email_note:<40} temp password: {temp_pw}')
+        conn.commit()
+
     conn.close()
 
     # expiring_items()/check_expiry_reminders() read rows by column name (via
@@ -640,6 +679,18 @@ def get_db():
 
 def R(row):  return dict(row) if row else None
 def RL(rows): return [dict(r) for r in rows]
+
+# Guard rows are frequently sent to the admin browser wholesale (SELECT *) —
+# strip the password material before that happens, the same way admins.
+# password_hash/salt never leave the server for the admins table.
+def no_secrets(g):
+    if g:
+        g.pop('password_hash', None); g.pop('salt', None)
+    return g
+
+def no_secrets_list(rows):
+    for g in rows: no_secrets(g)
+    return rows
 
 def audit(conn, session, action, details=''):
     conn.execute('INSERT INTO audit_log (id,admin_id,admin_name,action,details) VALUES (?,?,?,?,?)',
@@ -1237,6 +1288,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.err('Please set your password before continuing', 403); return None
         return s
 
+    def require_guard(self):
+        gs = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+        if not gs: self.err('Unauthorized', 401); return None
+        return gs
+
     def client_site_ids(self, admin_id):
         db = get_db()
         ids = [r['site_id'] for r in db.execute(
@@ -1302,21 +1358,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/api/guards':
             db = get_db()
-            self.send_json(RL(db.execute('SELECT * FROM guards WHERE active=1 ORDER BY name').fetchall()))
+            self.send_json(no_secrets_list(RL(db.execute('SELECT * FROM guards WHERE active=1 ORDER BY name').fetchall())))
             db.close(); return
 
         if path == '/api/sites':
             db = get_db()
             self.send_json(RL(db.execute('SELECT * FROM sites WHERE active=1 ORDER BY client_name,name').fetchall()))
-            db.close(); return
-
-        if path == '/api/reminders':
-            gid = qs.get('guard_id',[None])[0]
-            if not gid: self.err('guard_id required'); return
-            db = get_db()
-            self.send_json(RL(db.execute(
-                "SELECT * FROM reminders WHERE guard_id=? AND seen_at IS NULL ORDER BY created_at DESC",
-                (gid,)).fetchall()))
             db.close(); return
 
         if path == '/api/checkpoints':
@@ -1390,71 +1437,109 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ORDER BY sub.shift_date DESC LIMIT 200''', site_ids).fetchall())
             db.close(); self.send_json(rows); return
 
-        if path == '/api/submissions/mine':
-            gid = qs.get('guard_id',[None])[0]
-            if not gid: self.err('guard_id required'); return
-            db = get_db()
-            rows = RL(db.execute('''
-                SELECT sub.shift_date, sub.start_time, sub.end_time, sub.total_hours,
-                       sub.status, sub.submitted_at, s.name as site_name, s.client_name
-                FROM submissions sub
-                JOIN sites s ON s.id=sub.site_id
-                WHERE sub.guard_id=?
-                ORDER BY sub.submitted_at DESC LIMIT 8
-            ''', (gid,)).fetchall())
-            db.close(); self.send_json(rows); return
-
-        # Guard's assigned shifts (roster) — no auth needed
-        if path == '/api/shifts/mine':
-            gid = qs.get('guard_id',[None])[0]
-            if not gid: self.err('guard_id required'); return
-            db = get_db()
-            rows = RL(db.execute('''
-                SELECT sh.*, s.name as site_name, s.client_name, s.address,
-                       s.lat as site_lat, s.lng as site_lng, s.geofence_radius
-                FROM shifts sh
-                JOIN sites s ON s.id=sh.site_id
-                WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day')
-                      AND sh.cancelled=0 AND sh.published=1
-                ORDER BY sh.shift_date ASC, sh.start_time ASC LIMIT 30
-            ''', (gid,)).fetchall())
-            db.close(); self.send_json(with_shift_status(rows)); return
-
-        # Guard's own availability for a date range — no auth needed. Returns
-        # just their leave/partial records plus when they last confirmed, so
-        # the Guard Portal doesn't need admin's /api/leave (which lists every
-        # guard) or an auth token it doesn't have.
-        if path == '/api/guard-availability':
-            gid = qs.get('guard_id',[None])[0]
-            date_from = qs.get('date_from',[None])[0]
-            date_to   = qs.get('date_to',[None])[0]
-            if not gid or not date_from or not date_to:
-                self.err('guard_id, date_from and date_to required'); return
-            db = get_db()
-            guard = R(db.execute('SELECT availability_confirmed_at FROM guards WHERE id=?', (gid,)).fetchone())
-            if not guard: db.close(); self.err('Guard not found', 404); return
-            leave = RL(db.execute('''SELECT * FROM guard_leave WHERE guard_id=?
-                                     AND start_date<=? AND end_date>=?
-                                     ORDER BY start_date''',
-                                  (gid, date_to, date_from)).fetchall())
-            db.close()
-            self.send_json({'confirmed_at': guard['availability_confirmed_at'], 'leave': leave}); return
-
-        # Guard's own message thread with the office — no auth needed.
-        if path == '/api/guard-messages':
-            gid = qs.get('guard_id',[None])[0]
-            if not gid: self.err('guard_id required'); return
-            db = get_db()
-            rows = RL(db.execute(
-                'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gid,)).fetchall())
-            db.close(); self.send_json(rows); return
-
         # /api/me is available to any authenticated role, including 'client'
         if path == '/api/me':
             s0 = self.get_session()
             if not s0: self.err('Unauthorized', 401); return
             self.send_json({'id':s0['admin_id'],'name':s0['name'],'email':s0['email'],'role':s0['role'],
                             'must_change_password': s0.get('must_change_password', False)}); return
+
+        # Available even mid-forced-password-change, like /api/me for admins
+        if path == '/api/guard/me':
+            gs0 = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+            if not gs0: self.err('Unauthorized', 401); return
+            self.send_json({'id':gs0['guard_id'],'name':gs0['name'],'email':gs0['email'],
+                            'must_change_password': gs0.get('must_change_password', False)}); return
+
+        # ── Guard-authenticated: every /api/guard/* GET route lives inside this
+        # block so a request for anything else (admin routes included) skips
+        # it entirely rather than being incorrectly gated by require_guard() ──
+        if path.startswith('/api/guard/'):
+            gsx = self.require_guard()
+            if gsx is None: return
+            if gsx.get('must_change_password'):
+                self.err('Please set your password before continuing', 403); return
+
+            if path == '/api/guard/shifts':
+                db = get_db()
+                rows = RL(db.execute('''
+                    SELECT sh.*, s.name as site_name, s.client_name, s.address,
+                           s.lat as site_lat, s.lng as site_lng, s.geofence_radius
+                    FROM shifts sh
+                    JOIN sites s ON s.id=sh.site_id
+                    WHERE sh.guard_id=? AND sh.shift_date >= date('now','-1 day')
+                          AND sh.cancelled=0 AND sh.published=1
+                    ORDER BY sh.shift_date ASC, sh.start_time ASC LIMIT 30
+                ''', (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(with_shift_status(rows)); return
+
+            if path == '/api/guard/submissions':
+                db = get_db()
+                rows = RL(db.execute('''
+                    SELECT sub.shift_date, sub.start_time, sub.end_time, sub.total_hours,
+                           sub.status, sub.submitted_at, s.name as site_name, s.client_name
+                    FROM submissions sub
+                    JOIN sites s ON s.id=sub.site_id
+                    WHERE sub.guard_id=?
+                    ORDER BY sub.submitted_at DESC LIMIT 8
+                ''', (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(rows); return
+
+            if path == '/api/guard/incidents':
+                db = get_db()
+                rows = RL(db.execute('''
+                    SELECT i.*, s.name as site_name
+                    FROM incidents i JOIN sites s ON s.id=i.site_id
+                    WHERE i.guard_id=? ORDER BY i.occurred_at DESC LIMIT 20
+                ''', (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(rows); return
+
+            # Own availability for a date range — mirrors the old no-auth version,
+            # just scoped to the session's guard_id instead of a client-supplied one.
+            if path == '/api/guard/availability':
+                date_from = qs.get('date_from',[None])[0]
+                date_to   = qs.get('date_to',[None])[0]
+                if not date_from or not date_to:
+                    self.err('date_from and date_to required'); return
+                db = get_db()
+                guard = R(db.execute('SELECT availability_confirmed_at FROM guards WHERE id=?',
+                                     (gsx['guard_id'],)).fetchone())
+                leave = RL(db.execute('''SELECT * FROM guard_leave WHERE guard_id=?
+                                         AND start_date<=? AND end_date>=?
+                                         ORDER BY start_date''',
+                                      (gsx['guard_id'], date_to, date_from)).fetchall())
+                db.close()
+                self.send_json({'confirmed_at': guard['availability_confirmed_at'] if guard else None,
+                                'leave': leave}); return
+
+            if path == '/api/guard/messages':
+                db = get_db()
+                rows = RL(db.execute(
+                    'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(rows); return
+
+            if path == '/api/guard/compliance':
+                db = get_db()
+                rows = RL(db.execute('''
+                    SELECT ci.id as item_id, ci.name,
+                           COALESCE(gc.checked,0) as checked, COALESCE(gc.reference_no,'') as reference_no,
+                           gc.expiry_date, COALESCE(gc.reminder_days,60) as reminder_days,
+                           COALESCE(gc.critical,0) as critical,
+                           COALESCE(gc.show_to_customer,0) as show_to_customer
+                    FROM compliance_items ci
+                    LEFT JOIN guard_compliance gc ON gc.item_id=ci.id AND gc.guard_id=?
+                    ORDER BY ci.sort_order
+                ''', (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(rows); return
+
+            if path == '/api/guard/reminders':
+                db = get_db()
+                rows = RL(db.execute(
+                    "SELECT * FROM reminders WHERE guard_id=? AND seen_at IS NULL ORDER BY created_at DESC",
+                    (gsx['guard_id'],)).fetchall())
+                db.close(); self.send_json(rows); return
+
+            self.send_response(404); self.end_headers(); return
 
         # ── Admin-only below ──
         s = self.require_admin()
@@ -1466,7 +1551,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/api/guards/all':
             db = get_db()
-            rows = RL(db.execute('SELECT * FROM guards ORDER BY active DESC, name').fetchall())
+            rows = no_secrets_list(RL(db.execute('SELECT * FROM guards ORDER BY active DESC, name').fetchall()))
             db.close(); self.send_json(rows); return
 
         m = re.match(r'^/api/guards/([^/]+)/site-prefs$', path)
@@ -1916,9 +2001,80 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 db = get_db(); audit(db, s, 'LOGOUT'); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
-        # Guard submits shift — no auth needed
-        if path == '/api/submissions':
-            for f in ['guard_id','site_id','shift_date','start_time','end_time','total_hours']:
+        if path == '/api/guard/login':
+            db = get_db()
+            email_in = data.get('email','').strip().lower()
+            row = R(db.execute('SELECT * FROM guards WHERE lower(email)=? AND active=1',
+                               (email_in,)).fetchone())
+            db.close()
+            if not row or not row.get('password_hash') or \
+               not verify_password(data.get('password',''), row['password_hash'], row['salt']):
+                self.err('Invalid email or password', 401); return
+            token = str(uuid.uuid4())
+            must_change = bool(row.get('must_change_password', 0))
+            guard_sessions[token] = {'guard_id':row['id'],'name':row['name'],'email':row['email'],
+                                      'must_change_password': must_change}
+            if must_change:
+                self.send_json({'force_password_change': True, 'token': token,
+                                'name': row['name']}); return
+            db = get_db()
+            db.execute('UPDATE guards SET last_login=? WHERE id=?',
+                       (datetime.now().isoformat(), row['id']))
+            db.commit(); db.close()
+            self.send_json({'token':token,'id':row['id'],'name':row['name'],'company':COMPANY_NAME}); return
+
+        if path == '/api/guard/logout':
+            guard_sessions.pop(self.headers.get('X-Auth-Token',''), None)
+            self.send_json({'ok':True}); return
+
+        # First-time / forced password setup — mirrors /api/setup-password but
+        # on the guards table and guard_sessions, a separate privilege domain
+        if path == '/api/guard/setup-password':
+            gs0 = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+            if not gs0: self.err('Unauthorized', 401); return
+            if not gs0.get('must_change_password'):
+                self.err('No password change required for this session', 400); return
+            new_pw  = data.get('new_password', '')
+            conf_pw = data.get('confirm_password', '')
+            if len(new_pw) < 6:
+                self.err('Password must be at least 6 characters', 400); return
+            if new_pw != conf_pw:
+                self.err('Passwords do not match', 400); return
+            h, salt = hash_password(new_pw)
+            db = get_db()
+            db.execute('''UPDATE guards SET password_hash=?, salt=?, must_change_password=0, last_login=?
+                          WHERE id=?''', (h, salt, datetime.now().isoformat(), gs0['guard_id']))
+            db.commit(); db.close()
+            gs0['must_change_password'] = False
+            self.send_json({'token': self.headers.get('X-Auth-Token',''),
+                            'id': gs0['guard_id'], 'name': gs0['name'], 'company': COMPANY_NAME}); return
+
+        # ── Guard-authenticated below — but only for /api/guard/* paths, so a
+        # request for anything else (admin routes included) is left alone to
+        # fall through to /api/setup-password and Admin-only below, instead
+        # of being incorrectly gated by require_guard() ──
+        guard_path = path.startswith('/api/guard/')
+        if guard_path:
+            gsx = self.require_guard()
+            if gsx is None: return
+            if gsx.get('must_change_password'):
+                self.err('Please set your password before continuing', 403); return
+
+        if path == '/api/guard/change-password':
+            current = data.get('current_password','')
+            new_pw  = data.get('new_password','')
+            if not current or not new_pw: self.err('current and new password required'); return
+            db = get_db()
+            row = R(db.execute('SELECT * FROM guards WHERE id=?',(gsx['guard_id'],)).fetchone())
+            if not verify_password(current, row['password_hash'], row['salt']):
+                db.close(); self.err('Current password incorrect', 401); return
+            h, salt = hash_password(new_pw)
+            db.execute('UPDATE guards SET password_hash=?,salt=? WHERE id=?', (h, salt, gsx['guard_id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        if path == '/api/guard/submissions':
+            for f in ['site_id','shift_date','start_time','end_time','total_hours']:
                 if not data.get(f): self.err(f'{f} required'); return
             db = get_db()
             site = R(db.execute('SELECT lat,lng,geofence_radius,name FROM sites WHERE id=?',
@@ -1947,15 +2103,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 (id,guard_id,site_id,shift_date,start_time,end_time,total_hours,notes,photo_filename,
                  lat,lng,distance_m,location_verified)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (sid,data['guard_id'],data['site_id'],data['shift_date'],
+                (sid,gsx['guard_id'],data['site_id'],data['shift_date'],
                  data['start_time'],data['end_time'],float(data['total_hours']),
                  data.get('notes',''), photo, lat, lng, dist, location_verified))
             db.commit(); db.close()
             self.send_json({'id':sid,'message':'Shift submitted successfully!'}, 201); return
 
-        # Guard checks in at a patrol checkpoint — no auth needed, GPS-gated
-        if path == '/api/checkpoints/scan':
-            for f in ['checkpoint_id','guard_id','lat','lng']:
+        # Guard checks in at a patrol checkpoint, GPS-gated
+        if path == '/api/guard/checkpoints/scan':
+            for f in ['checkpoint_id','lat','lng']:
                 if data.get(f) is None: self.err(f'{f} required'); return
             db = get_db()
             cp = R(db.execute('SELECT * FROM checkpoints WHERE id=? AND active=1',
@@ -1973,13 +2129,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('''INSERT INTO checkpoint_scans
                 (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m)
                 VALUES (?,?,?,?,?,?,?,?)''',
-                (scan_id, cp['id'], cp['name'], data['guard_id'], cp['site_id'], lat, lng, dist))
+                (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist))
             db.commit(); db.close()
             self.send_json({'ok':True,'id':scan_id,'distance_m':round(dist,1)}, 201); return
 
-        # Guard reports an incident — no auth needed
-        if path == '/api/incidents':
-            for f in ['guard_id','site_id','type']:
+        if path == '/api/guard/incidents':
+            for f in ['site_id','type']:
                 if not data.get(f): self.err(f'{f} required'); return
             photo = None
             if data.get('photo_b64') and data.get('photo_ext'):
@@ -1989,66 +2144,56 @@ class Handler(http.server.BaseHTTPRequestHandler):
             iid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO incidents (id,guard_id,site_id,type,description,photo_filename,lat,lng)
                           VALUES (?,?,?,?,?,?,?,?)''',
-                       (iid, data['guard_id'], data['site_id'], data['type'],
+                       (iid, gsx['guard_id'], data['site_id'], data['type'],
                         data.get('description',''), photo, data.get('lat'), data.get('lng')))
             db.commit(); db.close()
             self.send_json({'id':iid,'message':'Incident reported.'}, 201); return
 
-        # Guard sets their own availability for one day — no auth needed.
         # Mirrors the admin "Set Availability" modal's three states, but only
         # ever touches this guard's own record for this one date (never a
         # multi-day admin-created block on a different date it might overlap).
-        if path == '/api/guard-availability':
-            for f in ['guard_id','date','mode']:
-                if not data.get(f): self.err(f'{f} required'); return
+        if path == '/api/guard/availability':
+            if not data.get('date') or not data.get('mode'):
+                self.err('date and mode required'); return
             if data['mode'] not in ('free','partial','off'):
                 self.err("mode must be 'free', 'partial', or 'off'"); return
             if data['mode']=='partial' and not data.get('available_from'):
                 self.err('available_from required for a partial day'); return
             db = get_db()
-            guard = R(db.execute('SELECT id,name FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
-            if not guard: db.close(); self.err('Guard not found', 404); return
             date = data['date']
             # Same simplification the admin editor already makes: the record(s)
             # covering this date are replaced wholesale, not split around it.
             db.execute('DELETE FROM guard_leave WHERE guard_id=? AND start_date<=? AND end_date>=?',
-                       (guard['id'], date, date))
+                       (gsx['guard_id'], date, date))
             if data['mode'] != 'free':
                 db.execute('''INSERT INTO guard_leave (id,guard_id,leave_type,start_date,end_date,notes,available_from)
                               VALUES (?,?,?,?,?,?,?)''',
-                           (str(uuid.uuid4()), guard['id'],
+                           (str(uuid.uuid4()), gsx['guard_id'],
                             'Partial Availability' if data['mode']=='partial' else 'Fixed Leave',
                             date, date, 'Set by guard from the Guard Portal',
                             data.get('available_from','') if data['mode']=='partial' else ''))
             db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
-                       (datetime.now().isoformat(), guard['id']))
+                       (datetime.now().isoformat(), gsx['guard_id']))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
-        # Guard confirms their availability needs no changes this week — no
-        # auth needed. Just refreshes the "last updated" signal the admin
-        # board uses to flag stale data, without writing a leave record.
-        if path == '/api/guard-availability/confirm':
-            if not data.get('guard_id'): self.err('guard_id required'); return
+        # Just refreshes the "last updated" signal the admin board uses to
+        # flag stale data, without writing a leave record.
+        if path == '/api/guard/availability/confirm':
             db = get_db()
-            guard = R(db.execute('SELECT id FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
-            if not guard: db.close(); self.err('Guard not found', 404); return
             db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
-                       (datetime.now().isoformat(), guard['id']))
+                       (datetime.now().isoformat(), gsx['guard_id']))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
-        # Guard sends a message to the office — no auth needed.
-        if path == '/api/guard-messages':
-            if not data.get('guard_id') or not (data.get('body') or '').strip():
-                self.err('guard_id and body required'); return
+        if path == '/api/guard/messages':
+            if not (data.get('body') or '').strip():
+                self.err('body required'); return
             db = get_db()
-            guard = R(db.execute('SELECT id,name FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
-            if not guard: db.close(); self.err('Guard not found', 404); return
             body = data['body'].strip()
             mid = str(uuid.uuid4())
             db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
-                       (mid, guard['id'], 'guard', guard['name'], body))
+                       (mid, gsx['guard_id'], 'guard', gsx['name'], body))
             # FAQ auto-responder: if the message matches a known question,
             # answer instantly and mark it handled instead of leaving it for
             # admin to triage.
@@ -2057,23 +2202,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 now = datetime.now().isoformat()
                 db.execute('UPDATE messages SET read_at=? WHERE id=?', (now, mid))
                 db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
-                           (str(uuid.uuid4()), guard['id'], 'admin', 'FAQ Auto-Reply', faq['answer']))
+                           (str(uuid.uuid4()), gsx['guard_id'], 'admin', 'FAQ Auto-Reply', faq['answer']))
                 audit(db, {'admin_id':'','name':'FAQ Auto-Reply'}, 'FAQ_AUTO_REPLY',
-                      f"to {guard['name']}: matched \"{faq['question']}\"")
+                      f"to {gsx['name']}: matched \"{faq['question']}\"")
             db.commit(); db.close()
             self.send_json({'id':mid,'ok':True,'auto_replied':bool(faq)}, 201); return
 
-        # Guard marks the office's messages in their thread as read — no auth needed.
-        if path == '/api/guard-messages/read':
-            if not data.get('guard_id'): self.err('guard_id required'); return
+        if path == '/api/guard/messages/read':
             db = get_db()
             db.execute("UPDATE messages SET read_at=? WHERE guard_id=? AND sender='admin' AND read_at IS NULL",
-                       (datetime.now().isoformat(), data['guard_id']))
+                       (datetime.now().isoformat(), gsx['guard_id']))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
-        # Guard clocks in / out of a scheduled shift — no auth needed, GPS-gated
-        m_ci = re.match(r'^/api/shifts/([^/]+)/clock-in$', path)
+        if path == '/api/guard/reminders/seen':
+            rid = data.get('id')
+            if rid:
+                db = get_db()
+                db.execute("UPDATE reminders SET seen_at=? WHERE id=? AND guard_id=?",
+                           (datetime.now().isoformat(), rid, gsx['guard_id']))
+                db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        # Clock in / out of a scheduled shift, GPS-gated. The shift must
+        # actually belong to this session's guard — never trusted from the body.
+        m_ci = re.match(r'^/api/guard/shifts/([^/]+)/clock-in$', path)
         if m_ci:
             db = get_db()
             sh = R(db.execute('''SELECT sh.*, s.lat as site_lat, s.lng as site_lng,
@@ -2081,8 +2234,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   FROM shifts sh JOIN sites s ON s.id=sh.site_id WHERE sh.id=?''',
                               (m_ci.group(1),)).fetchone())
             if not sh: db.close(); self.err('Shift not found', 404); return
+            if sh['guard_id'] != gsx['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
             if sh['cancelled']: db.close(); self.err('This shift has been cancelled', 400); return
-            if data.get('guard_id') != sh['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
             if sh['clock_in_at']: db.close(); self.err('Already clocked in to this shift', 400); return
             lat = lng = dist = None
             verified = 0
@@ -2105,7 +2258,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 WHERE sh.id=?''', (m_ci.group(1),)).fetchone())])[0]
             db.close(); self.send_json(row); return
 
-        m_co = re.match(r'^/api/shifts/([^/]+)/clock-out$', path)
+        m_co = re.match(r'^/api/guard/shifts/([^/]+)/clock-out$', path)
         if m_co:
             db = get_db()
             sh = R(db.execute('''SELECT sh.*, s.lat as site_lat, s.lng as site_lng,
@@ -2113,7 +2266,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   FROM shifts sh JOIN sites s ON s.id=sh.site_id WHERE sh.id=?''',
                               (m_co.group(1),)).fetchone())
             if not sh: db.close(); self.err('Shift not found', 404); return
-            if data.get('guard_id') != sh['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
+            if sh['guard_id'] != gsx['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
             if not sh['clock_in_at']: db.close(); self.err('You have not clocked in to this shift yet', 400); return
             if sh['clock_out_at']: db.close(); self.err('Already clocked out of this shift', 400); return
             lat = lng = dist = None
@@ -2155,14 +2308,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 WHERE sh.id=?''', (m_co.group(1),)).fetchone())])[0]
             db.close(); self.send_json({**row, 'submission_id': sub_id, 'total_hours': total_hours}); return
 
-        # Reminder seen — no auth
-        if path == '/api/reminders/seen':
-            rid = data.get('id')
-            if rid:
-                db = get_db()
-                db.execute("UPDATE reminders SET seen_at=? WHERE id=?", (datetime.now().isoformat(),rid))
-                db.commit(); db.close()
-            self.send_json({'ok':True}); return
+        if guard_path:
+            self.send_response(404); self.end_headers(); return
 
         # ── First-login password setup — available to any authenticated role ────
         if path == '/api/setup-password':
@@ -2230,15 +2377,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not s2: return
             if not data.get('name'): self.err('Name required'); return
             gid = str(uuid.uuid4()); db = get_db()
-            db.execute('''INSERT INTO guards (id,name,license_number,base_rate,phone,email,notes)
-                          VALUES (?,?,?,?,?,?,?)''',
-                       (gid,data['name'],data.get('license_number',''),
-                        float(data.get('base_rate',0)),data.get('phone',''),
-                        data.get('email',''),data.get('notes','')))
+            try:
+                db.execute('''INSERT INTO guards (id,name,license_number,base_rate,phone,email,notes)
+                              VALUES (?,?,?,?,?,?,?)''',
+                           (gid,data['name'],data.get('license_number',''),
+                            float(data.get('base_rate',0)),data.get('phone',''),
+                            data.get('email',''),data.get('notes','')))
+            except sqlite3.IntegrityError:
+                db.close(); self.err('Another guard already has that email address', 409); return
             db.commit()
             audit(db, s, 'GUARD_CREATE', data['name']); db.commit()
-            g = R(db.execute('SELECT * FROM guards WHERE id=?',(gid,)).fetchone()); db.close()
+            g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(gid,)).fetchone())); db.close()
             self.send_json(g, 201); return
+
+        # Set/reset a guard's Guard Portal password — same idea as inviting an
+        # admin: generate a temp password, force them to replace it on first
+        # login, and hand the plaintext back once here (never stored) so it
+        # can be emailed and/or shown to the admin to pass along by hand —
+        # most guards don't have an email on file yet.
+        m = re.match(r'^/api/guards/([^/]+)/reset-password$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name,email FROM guards WHERE id=?', (m.group(1),)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            temp_pw = secrets.token_urlsafe(6)
+            h, salt = hash_password(temp_pw)
+            db.execute('UPDATE guards SET password_hash=?,salt=?,must_change_password=1 WHERE id=?',
+                       (h, salt, guard['id']))
+            audit(db, s2, 'GUARD_PASSWORD_RESET', guard['name']); db.commit(); db.close()
+            emailed = False
+            if guard.get('email'):
+                emailed = send_email(
+                    guard['email'],
+                    f"Your {COMPANY_NAME} Guard Portal Password",
+                    f"Hi {guard['name']},\n\n"
+                    f"A temporary password has been set for your Guard Portal account.\n\n"
+                    f"Login URL:          {APP_URL}\n"
+                    f"Email:              {guard['email']}\n"
+                    f"Temporary password: {temp_pw}\n\n"
+                    f"IMPORTANT: You will be prompted to set your own password the first time you log in. "
+                    f"Your temporary password will no longer work after that.\n\n"
+                    f"— {COMPANY_NAME}"
+                )
+            self.send_json({'ok':True,'temp_password':temp_pw,'emailed':emailed}); return
 
         m = re.match(r'^/api/guards/([^/]+)/site-pref$', path)
         if m:
@@ -2573,14 +2756,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         data = self.read_json()
 
-        # Reminder seen — no auth
-        m = re.match(r'^/api/reminders/([^/]+)$', path)
-        if m:
-            db = get_db()
-            db.execute("UPDATE reminders SET seen_at=? WHERE id=?",
-                       (datetime.now().isoformat(), m.group(1)))
-            db.commit(); db.close(); self.send_json({'ok':True}); return
-
         s = self.require_admin()
         if s is None: return
         if s.get('must_change_password'):
@@ -2655,9 +2830,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if f in data: updates.append(f'{f}=?'); params.append(int(data[f]))
             if updates:
                 params.append(m.group(1))
-                db.execute(f"UPDATE guards SET {','.join(updates)} WHERE id=?", params)
+                try:
+                    db.execute(f"UPDATE guards SET {','.join(updates)} WHERE id=?", params)
+                except sqlite3.IntegrityError:
+                    db.close(); self.err('Another guard already has that email address', 409); return
                 audit(db, s, 'GUARD_UPDATE', m.group(1)); db.commit()
-            g = R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone())
+            g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone()))
             db.close(); self.send_json(g); return
 
         m = re.match(r'^/api/guards/([^/]+)/compliance/([^/]+)$', path)
