@@ -49,8 +49,81 @@ SMTP_FROM = os.environ.get('SMTP_FROM', SMTP_USER)
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.makedirs(UPLOADS_PATH, exist_ok=True)
 
-sessions = {}         # token → {admin_id, role, name, email}
-guard_sessions = {}   # token → {guard_id, name, email} — separate privilege domain from admin sessions
+sessions = {}         # token → {admin_id, role, name, email, created_at, last_seen, ...}
+guard_sessions = {}   # token → {guard_id, name, email, created_at, last_seen, ...} — separate privilege domain from admin sessions
+
+# ─── Session expiry ───────────────────────────────────────────────────────────
+# Every session used to live in memory forever until an explicit logout or a
+# server restart — a leaked token (lost phone, shared computer) stayed valid
+# indefinitely. SESSION_IDLE_TIMEOUT expires a session that's gone quiet for a
+# day; SESSION_ABSOLUTE_TIMEOUT caps a session at 30 days even if it's in
+# constant use, forcing an eventual re-login either way.
+SESSION_IDLE_TIMEOUT     = 24 * 3600
+SESSION_ABSOLUTE_TIMEOUT = 30 * 86400
+
+def live_session(store, token):
+    """Look up `token` in `store` (sessions or guard_sessions), evicting and
+    returning None if it's expired, else refreshing last_seen and returning it."""
+    s = store.get(token)
+    if not s: return None
+    now = time.time()
+    created  = s.get('created_at', now)
+    lastseen = s.get('last_seen', created)
+    if now - lastseen > SESSION_IDLE_TIMEOUT or now - created > SESSION_ABSOLUTE_TIMEOUT:
+        store.pop(token, None)
+        return None
+    s['last_seen'] = now
+    return s
+
+# ─── Login rate limiting ──────────────────────────────────────────────────────
+# In-memory and per-IP (via X-Forwarded-For, since Railway's proxy means
+# client_address is never the real caller) rather than per-account, so a
+# failed-login flood can't be used to lock a real user out of their own
+# account. Resets on restart — the goal is slowing down casual/scripted
+# brute force, not maintaining a durable ban list.
+LOGIN_MAX_ATTEMPTS  = 10
+LOGIN_WINDOW_SECONDS = 15 * 60
+_login_failures = {}   # ip → [timestamps of recent failed attempts]
+
+def login_rate_limited(ip):
+    now = time.time()
+    attempts = [t for t in _login_failures.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
+    _login_failures[ip] = attempts
+    return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+def record_login_failure(ip):
+    _login_failures.setdefault(ip, []).append(time.time())
+
+def record_login_success(ip):
+    _login_failures.pop(ip, None)
+
+# ─── Photo uploads ────────────────────────────────────────────────────────────
+ALLOWED_PHOTO_EXTS = {'jpg','jpeg','png','gif','webp'}
+MAX_PHOTO_B64_CHARS = 8 * 1024 * 1024  # ~6MB decoded — generous for a phone camera photo
+
+def save_uploaded_photo(data):
+    """Validate and write a client-submitted photo_b64/photo_ext pair, returning
+    the saved filename (or None if no photo was sent). Raises ValueError with a
+    user-facing message on anything invalid.
+
+    The extension is never trusted as-is: unlike /api/logo (which already
+    whitelists), the incident/submission/clock-out upload paths used to build
+    the write path directly from data['photo_ext'] with no check at all —
+    a value like '../../../etc/whatever' would land in the filesystem write
+    path unvalidated. There's also no size limit until now, so a large
+    repeated payload could fill the disk.
+    """
+    if not data.get('photo_b64') or not data.get('photo_ext'):
+        return None
+    ext = str(data['photo_ext']).lower().lstrip('.')
+    if ext not in ALLOWED_PHOTO_EXTS:
+        raise ValueError('Unsupported photo type')
+    if len(data['photo_b64']) > MAX_PHOTO_B64_CHARS:
+        raise ValueError('Photo is too large')
+    photo = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(UPLOADS_PATH, photo), 'wb') as f:
+        f.write(base64.b64decode(data['photo_b64']))
+    return photo
 
 # ─── Password Hashing ─────────────────────────────────────────────────────────
 def hash_password(password, salt=None):
@@ -1252,11 +1325,25 @@ REPORTS = {
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
 
+    def security_headers(self):
+        # Cheap defense-in-depth that costs nothing functionally: this app has
+        # no legitimate reason to be framed by another site, and browsers
+        # should never guess a response's content-type from its bytes. A full
+        # script-src CSP isn't attempted here — the frontend leans on inline
+        # onclick= handlers throughout, so a strict CSP would break the app
+        # wholesale without a much larger refactor (moving every handler to
+        # addEventListener). HSTS is safe to send unconditionally since this
+        # app should only ever be reached over HTTPS in production.
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+
     def send_json(self, data, status=200):
         b = json.dumps(data).encode()
         self.send_response(status)
         self.send_header('Content-Type','application/json')
         self.send_header('Content-Length', len(b))
+        self.security_headers()
         self.end_headers(); self.wfile.write(b)
 
     def err(self, msg, status=400): self.send_json({'error': msg}, status)
@@ -1265,8 +1352,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get('Content-Length', 0))
         return json.loads(self.rfile.read(n)) if n else {}
 
+    def client_ip(self):
+        # Railway (and any reverse proxy) terminates the real connection, so
+        # client_address is the proxy's own address for every request — the
+        # actual caller's IP is forwarded in this header instead.
+        xff = self.headers.get('X-Forwarded-For')
+        return xff.split(',')[0].strip() if xff else self.client_address[0]
+
     def get_session(self):
-        return sessions.get(self.headers.get('X-Auth-Token',''))
+        return live_session(sessions, self.headers.get('X-Auth-Token',''))
 
     def require_admin(self, min_role=None):
         s = self.get_session()
@@ -1288,8 +1382,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.err('Please set your password before continuing', 403); return None
         return s
 
+    def get_guard_session(self):
+        return live_session(guard_sessions, self.headers.get('X-Auth-Token',''))
+
     def require_guard(self):
-        gs = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+        gs = self.get_guard_session()
         if not gs: self.err('Unauthorized', 401); return None
         return gs
 
@@ -1306,6 +1403,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', ct)
         self.send_header('Content-Length', len(data))
+        self.security_headers()
         self.end_headers(); self.wfile.write(data)
 
     def send_download(self, data, ct, fname):
@@ -1313,6 +1411,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-Type', ct)
         self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
         self.send_header('Content-Length', len(data))
+        self.security_headers()
         self.end_headers(); self.wfile.write(data)
 
     # ── GET ────────────────────────────────────────────────────────────────────
@@ -1446,7 +1545,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         # Available even mid-forced-password-change, like /api/me for admins
         if path == '/api/guard/me':
-            gs0 = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+            gs0 = self.get_guard_session()
             if not gs0: self.err('Unauthorized', 401); return
             self.send_json({'id':gs0['guard_id'],'name':gs0['name'],'email':gs0['email'],
                             'must_change_password': gs0.get('must_change_password', False)}); return
@@ -1961,6 +2060,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data = self.read_json()
 
         if path == '/api/login':
+            ip = self.client_ip()
+            if login_rate_limited(ip):
+                self.err('Too many failed login attempts. Please try again in a few minutes.', 429); return
             db  = get_db()
             email_in = data.get('email','').strip().lower()
             row = R(db.execute('SELECT * FROM admins WHERE email=? AND active=1',
@@ -1971,19 +2073,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pw_ok = verify_password(data.get('password',''), row['password_hash'], row['salt'])
                 print(f"  LOGIN: password_check={'PASS' if pw_ok else 'FAIL'} role={row.get('role')}")
                 if not pw_ok:
+                    record_login_failure(ip)
                     self.err('Invalid email or password', 401); return
             else:
-                # Show all admin emails in DB for diagnosis
-                db2 = get_db()
-                all_emails = [r['email'] for r in db2.execute('SELECT email FROM admins').fetchall()]
-                db2.close()
-                print(f"  LOGIN: admins in DB = {all_emails}")
+                record_login_failure(ip)
                 self.err('Invalid email or password', 401); return
+            record_login_success(ip)
             token = str(uuid.uuid4())
             must_change = bool(row.get('must_change_password', 0))
+            now = time.time()
             sessions[token] = {'admin_id':row['id'],'name':row['name'],
                                 'email':row['email'],'role':row['role'],
-                                'must_change_password': must_change}
+                                'must_change_password': must_change,
+                                'created_at': now, 'last_seen': now}
             # First-time login: force password change before granting full access
             if must_change:
                 self.send_json({'force_password_change': True, 'token': token,
@@ -2002,6 +2104,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'ok':True}); return
 
         if path == '/api/guard/login':
+            ip = self.client_ip()
+            if login_rate_limited(ip):
+                self.err('Too many failed login attempts. Please try again in a few minutes.', 429); return
             db = get_db()
             email_in = data.get('email','').strip().lower()
             row = R(db.execute('SELECT * FROM guards WHERE lower(email)=? AND active=1',
@@ -2009,11 +2114,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.close()
             if not row or not row.get('password_hash') or \
                not verify_password(data.get('password',''), row['password_hash'], row['salt']):
+                record_login_failure(ip)
                 self.err('Invalid email or password', 401); return
+            record_login_success(ip)
             token = str(uuid.uuid4())
             must_change = bool(row.get('must_change_password', 0))
+            now = time.time()
             guard_sessions[token] = {'guard_id':row['id'],'name':row['name'],'email':row['email'],
-                                      'must_change_password': must_change}
+                                      'must_change_password': must_change,
+                                      'created_at': now, 'last_seen': now}
             if must_change:
                 self.send_json({'force_password_change': True, 'token': token,
                                 'name': row['name']}); return
@@ -2030,7 +2139,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # First-time / forced password setup — mirrors /api/setup-password but
         # on the guards table and guard_sessions, a separate privilege domain
         if path == '/api/guard/setup-password':
-            gs0 = guard_sessions.get(self.headers.get('X-Auth-Token',''))
+            gs0 = self.get_guard_session()
             if not gs0: self.err('Unauthorized', 401); return
             if not gs0.get('must_change_password'):
                 self.err('No password change required for this session', 400); return
@@ -2093,11 +2202,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self.err(f"You must be within {radius}m of {site['name']} to sign in. "
                              f"You are currently {int(dist)}m away — move closer and try again.", 403); return
                 location_verified = 1
-            photo = None
-            if data.get('photo_b64') and data.get('photo_ext'):
-                photo = f"{uuid.uuid4()}.{data['photo_ext']}"
-                with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
-                    f.write(base64.b64decode(data['photo_b64']))
+            try:
+                photo = save_uploaded_photo(data)
+            except ValueError as e:
+                db.close(); self.err(str(e)); return
             sid = str(uuid.uuid4())
             db.execute('''INSERT INTO submissions
                 (id,guard_id,site_id,shift_date,start_time,end_time,total_hours,notes,photo_filename,
@@ -2136,11 +2244,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == '/api/guard/incidents':
             for f in ['site_id','type']:
                 if not data.get(f): self.err(f'{f} required'); return
-            photo = None
-            if data.get('photo_b64') and data.get('photo_ext'):
-                photo = f"{uuid.uuid4()}.{data['photo_ext']}"
-                with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
-                    f.write(base64.b64decode(data['photo_b64']))
+            try:
+                photo = save_uploaded_photo(data)
+            except ValueError as e:
+                self.err(str(e)); return
             iid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO incidents (id,guard_id,site_id,type,description,photo_filename,lat,lng)
                           VALUES (?,?,?,?,?,?,?,?)''',
@@ -2285,11 +2392,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             now = datetime.now()
             clock_in_dt = datetime.fromisoformat(sh['clock_in_at'])
             total_hours = round((now - clock_in_dt).total_seconds() / 3600, 2)
-            photo = None
-            if data.get('photo_b64') and data.get('photo_ext'):
-                photo = f"{uuid.uuid4()}.{data['photo_ext']}"
-                with open(os.path.join(UPLOADS_PATH, photo),'wb') as f:
-                    f.write(base64.b64decode(data['photo_b64']))
+            try:
+                photo = save_uploaded_photo(data)
+            except ValueError as e:
+                db.close(); self.err(str(e)); return
             sub_id = str(uuid.uuid4())
             location_verified = 1 if (sh['clock_in_verified'] and verified) else 0
             db.execute('''INSERT INTO submissions
@@ -3044,10 +3150,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(404); self.end_headers()
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin','*')
-        self.send_header('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS')
-        self.send_header('Access-Control-Allow-Headers','Content-Type,X-Auth-Token')
+        # The frontend is served from this same server, so it never makes a
+        # cross-origin request and never needs CORS headers — the previous
+        # wildcard Access-Control-Allow-Origin was broader than the app
+        # actually requires. (In practice it was already inert: none of the
+        # real GET/POST/PUT/DELETE responses ever sent that header either, so
+        # a genuinely cross-origin caller could pass preflight but still never
+        # read a response — this just removes the unnecessary opening cleanly.)
+        self.send_response(204)
+        self.security_headers()
         self.end_headers()
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
