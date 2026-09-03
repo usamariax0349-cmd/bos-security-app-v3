@@ -173,8 +173,10 @@ tr:hover td{background:#f8fafc}
 .step-dot.done{background:var(--gold)}
 
 /* Cards */
-.stat-card{background:#fff;border-radius:var(--r);padding:20px;box-shadow:var(--sh);display:flex;align-items:center;gap:16px;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
+.stat-card{background:#fff;border-radius:var(--r);padding:20px;box-shadow:var(--sh);display:flex;align-items:center;gap:16px;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);width:100%;text-align:left;border:none;font:inherit}
 .stat-card:hover{transform:translateY(-2px);box-shadow:var(--sh-md)}
+button.stat-card{cursor:pointer}
+button.stat-card:hover .stat-lbl{color:var(--navy)}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
 .stat-val{font-size:28px;font-weight:800;color:var(--navy);line-height:1}
 .stat-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
@@ -361,7 +363,10 @@ tr:hover td{background:#f8fafc}
 /* ════════════════════════════════════════
    SCHEDULE (week grid)
 ════════════════════════════════════════ */
-.sched-layout{display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:start}
+/* minmax(0,1fr) — without it the 1fr track can't shrink below the grid's
+   min-width, so the wide roster pushes the whole page sideways instead of
+   scrolling inside .sched-grid-wrap. */
+.sched-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px;align-items:start}
 .sched-unpub-count{text-align:center;font-size:12px;color:var(--muted);font-weight:600;margin-top:10px}
 .sched-by-toggle{display:flex;gap:6px;margin-top:8px}
 .sched-by-btn{flex:1;padding:8px;border-radius:7px;border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all var(--dur-fast) var(--ease-out)}
@@ -370,6 +375,11 @@ tr:hover td{background:#f8fafc}
 .sched-report-row:last-child{border-bottom:none}
 .sched-report-row strong{color:var(--navy);font-size:15px}
 .sched-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.sched-check{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+.sched-hidden-note{font-size:12px;color:var(--muted);padding:8px 2px 0}
+.sched-hidden-note button{background:none;border:none;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0}
+.sched-head-cell.is-today,.avail-today{background:var(--gold)!important;color:var(--navy)!important}
+#avail-table th.avail-today{color:var(--navy)!important}
 .sched-range-label{font-weight:700;color:var(--navy);font-size:14px;padding:0 6px}
 .sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
 .sched-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));background:#fff;min-width:900px}
@@ -406,7 +416,7 @@ tr:hover td{background:#f8fafc}
 .sched-totals-row .sched-row-label{background:var(--navy);color:#fff}
 .sched-totals-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:8px 10px;text-align:center;font-weight:700;color:var(--navy);background:var(--bg);font-size:13px}
 @media(max-width:900px){
-  .sched-layout{grid-template-columns:1fr}
+  .sched-layout{grid-template-columns:minmax(0,1fr)}
 }
 
 /* ════════════════════════════════════════
@@ -729,11 +739,11 @@ tr:hover td{background:#f8fafc}
     <!-- DASHBOARD -->
     <div id="tab-dashboard" class="tab-content active">
       <div class="stats-grid" id="stats-grid">
-        <div class="stat-card"><div class="stat-icon" style="background:#fef3c7">⏳</div><div><div class="stat-val" id="s-pending">—</div><div class="stat-lbl">Pending Review</div></div></div>
-        <div class="stat-card"><div class="stat-icon" style="background:#dcfce7">✅</div><div><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Approved Today</div></div></div>
-        <div class="stat-card"><div class="stat-icon" style="background:#dbeafe">👮</div><div><div class="stat-val" id="s-guards">—</div><div class="stat-lbl">Active Guards</div></div></div>
-        <div class="stat-card"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></div>
-        <div class="stat-card"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></div>
+        <button class="stat-card" onclick="dashGoSubmissions('pending')" title="See the submissions waiting on you"><div class="stat-icon" style="background:#fef3c7">⏳</div><div><div class="stat-val" id="s-pending">—</div><div class="stat-lbl">Pending Review</div></div></button>
+        <button class="stat-card" onclick="dashGoSubmissions('approved')" title="See approved submissions"><div class="stat-icon" style="background:#dcfce7">✅</div><div><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Approved Today</div></div></button>
+        <button class="stat-card" onclick="dashGoTab('guards')" title="Open the guard list"><div class="stat-icon" style="background:#dbeafe">👮</div><div><div class="stat-val" id="s-guards">—</div><div class="stat-lbl">Active Guards</div></div></button>
+        <button class="stat-card" onclick="dashGoTab('sites')" title="Open the site list"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></button>
+        <button class="stat-card" onclick="dashGoBilling('invoices')" title="Open invoices"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></button>
       </div>
       <div class="section" style="margin-bottom:20px">
         <div class="section-head">
@@ -750,7 +760,7 @@ tr:hover td{background:#f8fafc}
       </div>
       <div class="section">
         <div class="section-head"><span class="section-title">Recent Submissions</span>
-          <button class="btn btn-primary btn-sm" onclick="showTab('submissions')">View All</button>
+          <button class="btn btn-primary btn-sm" onclick="dashGoSubmissions('')">View All</button>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -805,12 +815,21 @@ tr:hover td{background:#f8fafc}
             <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(-1)">‹</button>
             <span class="sched-range-label" id="sched-range-label"></span>
             <button class="btn btn-ghost btn-sm" onclick="schedShiftWeek(1)">›</button>
+            <div class="search-bar" style="width:190px">
+              <span>🔍</span>
+              <input type="text" id="sched-search" placeholder="Find site or guard..." oninput="renderScheduleGrid()">
+            </div>
+            <label class="sched-check" title="Hide sites and guards with nothing rostered this week">
+              <input type="checkbox" id="sched-only-booked" checked onchange="renderScheduleGrid()">
+              Only rows with shifts
+            </label>
             <span style="flex:1"></span>
             <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
           </div>
           <div class="sched-grid-wrap">
             <div class="sched-grid" id="sched-grid"></div>
           </div>
+          <div class="sched-hidden-note" id="sched-hidden-note"></div>
         </div>
       </div>
     </div>
@@ -835,7 +854,12 @@ tr:hover td{background:#f8fafc}
           <button class="gd-status-btn" id="avail-filter-free" onclick="setAvailFilter('free')">Free Guards</button>
           <button class="gd-status-btn" id="avail-filter-leave" onclick="setAvailFilter('leave')">On Leave</button>
           <select id="avail-date-filter" class="form-control" style="width:auto;font-size:12px;padding:6px 10px;margin-left:8px" onchange="setAvailDateFilter(this.value)"></select>
+          <div class="search-bar" style="width:180px;margin-left:auto">
+            <span>🔍</span>
+            <input type="text" id="avail-search" placeholder="Find a guard..." oninput="renderAvailability()">
+          </div>
         </div>
+        <div id="avail-count" style="padding:0 20px 10px;font-size:12px;color:var(--muted);font-weight:600"></div>
         <div class="tbl-wrap">
           <table id="avail-table">
             <thead></thead>
@@ -1699,8 +1723,29 @@ function haversineM(lat1,lng1,lat2,lng2){
   const a=Math.sin(dp/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dl/2)**2;
   return 2*R*Math.asin(Math.sqrt(a));
 }
+// Leaflet comes from a CDN. If it's blocked, offline or just slow, every map
+// call used to throw "L is not defined" as a red toast in the middle of an
+// unrelated task. Fall back to a chainable no-op so the rest of the page keeps
+// working and the map panel explains itself instead.
+const LEAFLET_OK = (typeof L !== 'undefined');
+if(!LEAFLET_OK){
+  const stub = {};
+  ['addTo','bindTooltip','clearLayers','setView','invalidateSize','fitBounds','pad','remove']
+    .forEach(m => stub[m] = () => stub);
+  window.L = {
+    map:()=>Object.assign(Object.create(stub), stub, {_group:stub}),
+    tileLayer:()=>stub, layerGroup:()=>stub, circle:()=>stub,
+    marker:()=>stub, circleMarker:()=>stub, latLngBounds:()=>stub,
+  };
+}
 function getMap(elId, center, zoom){
-  document.getElementById(elId).classList.remove('hidden');
+  const el = document.getElementById(elId);
+  el.classList.remove('hidden');
+  if(!LEAFLET_OK){
+    el.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;
+      min-height:120px;padding:20px;text-align:center;color:var(--muted);font-size:13px">
+      🗺️ Map unavailable — couldn't reach the map service. Everything else on this page still works.</div>`;
+  }
   if(!_maps[elId]){
     _maps[elId] = L.map(elId, {attributionControl:false, zoomControl:true});
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_maps[elId]);
@@ -2158,7 +2203,9 @@ async function loadDashboard(){
     document.getElementById('s-guards').textContent  = d.total_guards;
     document.getElementById('s-sites').textContent   = d.total_sites;
     document.getElementById('s-rev').textContent     = fmtMoney(d.revenue_month);
-    document.getElementById('dash-tbody').innerHTML  = d.recent.map(r=>`<tr>
+    document.getElementById('dash-tbody').innerHTML = d.recent.length===0
+      ? `<tr><td colspan="6" class="empty-state"><div class="ei">📋</div><p>No submissions yet — they appear here once guards clock out</p></td></tr>`
+      : d.recent.map(r=>`<tr>
       <td>${r.shift_date}</td>
       <td><strong>${r.guard_name}</strong></td>
       <td>${r.site_name}<br><small style="color:var(--muted)">${r.client_name}</small></td>
@@ -2258,14 +2305,27 @@ function renderScheduleGrid(){
 
   const cellShifts = (rowId, dISO) => scheduleData.filter(sh =>
     sh.shift_date===dISO && (schedBy==='sites' ? sh.site_id===rowId : sh.guard_id===rowId));
+  const rowHasShifts = row => scheduleData.some(sh =>
+    schedBy==='sites' ? sh.site_id===row.id : sh.guard_id===row.id);
+
+  // With 60+ sites and 100+ guards on the books, most rows are empty in any
+  // given week. Search always looks across everything; the toggle just hides
+  // the rows with nothing rostered so the actual roster is readable.
+  const q = document.getElementById('sched-search').value.trim().toLowerCase();
+  const onlyBooked = document.getElementById('sched-only-booked').checked;
+  const beforeFilter = rows.length;
+  if(q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+  else if(onlyBooked) rows = rows.filter(rowHasShifts);
+  const hiddenCount = beforeFilter - rows.length;
 
   let html = `<div class="sched-head-cell"></div>` + days.map((d,i)=>
-    `<div class="sched-head-cell">${SCHED_DAY_NAMES[i]}<div class="shd">${d.toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</div></div>`
+    `<div class="sched-head-cell${dayISO[i]===fmtISO(new Date())?' is-today':''}">${SCHED_DAY_NAMES[i]}<div class="shd">${d.toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</div></div>`
   ).join('');
 
   if(!rows.length){
     html += `<div class="sched-row-label" style="grid-column:1/-1;justify-content:center;color:var(--muted)">
-      ${schedBy==='sites'?'No sites':'No guards'} to schedule${customer?' for this customer':''}</div>`;
+      ${q ? `No ${schedBy==='sites'?'site':'guard'} matching “${q}”`
+          : `Nothing rostered this week${customer?' for this customer':''}`}</div>`;
   }
   rows.forEach(row=>{
     html += `<div class="sched-row-label">${row.name}</div>`;
@@ -2291,6 +2351,10 @@ function renderScheduleGrid(){
     html += `<div class="sched-totals-cell">${hrs?hrs.toFixed(2):'0'} hrs</div>`;
   });
   document.getElementById('sched-grid').innerHTML = html;
+  document.getElementById('sched-hidden-note').innerHTML = (!q && onlyBooked && hiddenCount)
+    ? `${hiddenCount} ${schedBy==='sites'?'site':'guard'}${hiddenCount===1?'':'s'} with nothing rostered
+       ${hiddenCount===1?'is':'are'} hidden — <button onclick="schedShowAllRows()">show all</button>`
+    : '';
 
   const unpub = scheduleData.filter(sh=>!sh.published).length;
   document.getElementById('sched-unpub-count').textContent = `${unpub} Shift${unpub===1?'':'s'} Unpublished`;
@@ -2298,6 +2362,10 @@ function renderScheduleGrid(){
   document.getElementById('sr-unpub').textContent = unpub;
   document.getElementById('sr-hours').textContent =
     scheduleData.reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0).toFixed(2);
+}
+function schedShowAllRows(){
+  document.getElementById('sched-only-booked').checked = false;
+  renderScheduleGrid();
 }
 async function publishSchedule(){
   const unpub = scheduleData.filter(sh=>!sh.published).length;
@@ -2388,6 +2456,32 @@ async function deleteShift(id){
 
 // ── Billing (Submissions / Rates / Invoices, grouped under one tab) ────────────
 let billingSubtab = 'submissions';
+// ── Dashboard drill-downs ─────────────────────────────────────────────────────
+// The stat cards are shortcuts into the tab that explains the number. They only
+// navigate where the current role is actually allowed to go, so a manager
+// clicking "Revenue" doesn't land on a sub-tab their role hides.
+function dashTabVisible(name){
+  const el = document.querySelector(`.tab-btn[data-tab="${name}"], .tab-dropdown-item[data-tab="${name}"]`);
+  return el && el.style.display !== 'none';
+}
+function dashGoTab(name){
+  if(!dashTabVisible(name)){ toast('Your role does not have access to that section','info'); return; }
+  showTab(name);
+}
+function dashGoSubmissions(status){
+  if(!dashTabVisible('invoices')){ toast('Your role does not have access to that section','info'); return; }
+  showTab('invoices');
+  showBillingSubtab('submissions');
+  const sel = document.getElementById('f-status');
+  if(sel){ sel.value = status; loadSubmissions(); }
+}
+function dashGoBilling(sub){
+  if(!dashTabVisible('invoices')){ toast('Your role does not have access to that section','info'); return; }
+  const btn = document.querySelector(`#billing-subtabs [data-billtab="${sub}"]`);
+  showTab('invoices');
+  // Rates/Invoices are hidden from manager and viewer — fall back to Submissions.
+  showBillingSubtab(btn && !btn.classList.contains('hidden') ? sub : 'submissions');
+}
 function showBillingSubtab(name){
   billingSubtab = name;
   document.querySelectorAll('#billing-subtabs .gd-subtab-btn').forEach(el=>el.classList.toggle('active', el.dataset.billtab===name));
@@ -2612,8 +2706,9 @@ function renderAvailability(){
   const dayISO = days.map(fmtISO);
   document.getElementById('avail-range-label').textContent =
     `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  const todayISO = fmtISO(new Date());
   document.querySelector('#avail-table thead').innerHTML =
-    `<tr><th>Guard</th>${days.map((d,i)=>`<th>${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
+    `<tr><th>Guard</th>${days.map((d,i)=>`<th class="${dayISO[i]===todayISO?'avail-today':''}">${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
   const dateSel = document.getElementById('avail-date-filter');
   if(!dateSel.dataset.weekOf || dateSel.dataset.weekOf !== dayISO[0]){
     dateSel.dataset.weekOf = dayISO[0];
@@ -2635,8 +2730,17 @@ function renderAvailability(){
     else if(availFilter==='free') activeGuards = activeGuards.filter(isFreeAllWeek);
     else if(availFilter==='leave') activeGuards = activeGuards.filter(isOnLeaveThisWeek);
   }
-  const emptyMsg = {working:'No guards working', free:'No free guards', leave:'No guards on leave', all:'No active guards'}[availFilter]
-    + (availDateFilter ? ` on ${availDateFilter}` : ' this week');
+  const totalInFilter = activeGuards.length;
+  const q = document.getElementById('avail-search').value.trim().toLowerCase();
+  if(q) activeGuards = activeGuards.filter(g=>g.name.toLowerCase().includes(q));
+  document.getElementById('avail-count').textContent = q
+    ? `${activeGuards.length} of ${totalInFilter} guard${totalInFilter===1?'':'s'} matching “${q}”`
+    : `${totalInFilter} guard${totalInFilter===1?'':'s'}`;
+
+  const emptyMsg = q
+    ? `No guard matching “${q}”`
+    : {working:'No guards working', free:'No free guards', leave:'No guards on leave', all:'No active guards'}[availFilter]
+      + (availDateFilter ? ` on ${availDateFilter}` : ' this week');
   document.getElementById('avail-tbody').innerHTML = activeGuards.length===0
     ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>${emptyMsg}</p></td></tr>`
     : activeGuards.map(g=>{
