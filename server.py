@@ -518,6 +518,35 @@ def audit(conn, session, action, details=''):
                  (str(uuid.uuid4()), session.get('admin_id',''), session.get('name',''),
                   action, details))
 
+def delete_submissions(conn, ids, session):
+    """Delete submissions and everything that hangs off them.
+
+    A submission is the pay record behind an invoice line, so removing one is
+    not just a row delete:
+      - the guard's photo would otherwise be orphaned in uploads/
+      - shifts.submission_id would point at a row that no longer exists
+      - the audit entry has to name what went, since the row itself is gone
+    Returns the number actually deleted.
+    """
+    deleted = 0
+    for sid in ids:
+        row = R(conn.execute('''SELECT sub.*, g.name as guard_name, s.name as site_name
+                                FROM submissions sub
+                                JOIN guards g ON g.id=sub.guard_id
+                                JOIN sites  s ON s.id=sub.site_id
+                                WHERE sub.id=?''', (sid,)).fetchone())
+        if not row: continue
+        if row.get('photo_filename'):
+            try: os.remove(os.path.join(UPLOADS_PATH, row['photo_filename']))
+            except OSError: pass  # already gone, or never written — not worth failing the delete
+        conn.execute('UPDATE shifts SET submission_id=NULL WHERE submission_id=?', (sid,))
+        conn.execute('DELETE FROM submissions WHERE id=?', (sid,))
+        audit(conn, session, 'SUBMISSION_DELETE',
+              f"{row['guard_name']} @ {row['site_name']} {row['shift_date']} "
+              f"{row['total_hours']}h ({row['status']})")
+        deleted += 1
+    return deleted
+
 # ─── Invoice helpers ──────────────────────────────────────────────────────────
 def invoice_query(qs):
     params, where = [], ["sub.status='approved'"]
@@ -1912,8 +1941,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s2 = self.require_admin('manager')
             if not s2: return
             ids = data.get('ids',[]); action = data.get('action'); note = data.get('note','')
-            if not ids or action not in ('approve','reject'):
+            if not ids or action not in ('approve','reject','delete'):
                 self.err('ids and action required'); return
+            if action == 'delete':
+                # Same bar as the single delete — administrator and up.
+                s3 = self.require_admin('administrator')
+                if not s3: return
+                db = get_db()
+                n = delete_submissions(db, ids, s)
+                db.commit(); db.close()
+                self.send_json({'ok':True,'deleted':n}); return
             status = 'approved' if action == 'approve' else 'rejected'
             db = get_db()
             for sid in ids:
@@ -2247,6 +2284,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('DELETE FROM shifts WHERE id=?', (m.group(1),))
             audit(db, s, 'SHIFT_DELETE', m.group(1)); db.commit(); db.close()
             self.send_json({'ok':True}); return
+        m = re.match(r'^/api/submissions/([^/]+)$', path)
+        if m:
+            # Administrator and up only: submissions are the pay/invoice record,
+            # so removing one is a heavier action than the approve/reject a
+            # manager can do.
+            s2 = self.require_admin('administrator')
+            if not s2: return
+            db = get_db()
+            deleted = delete_submissions(db, [m.group(1)], s)
+            db.commit(); db.close()
+            if not deleted: self.err('Submission not found', 404); return
+            self.send_json({'ok':True,'deleted':deleted}); return
         self.send_response(404); self.end_headers()
 
     def do_OPTIONS(self):

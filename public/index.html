@@ -941,6 +941,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <span class="bulk-count" id="bulk-count-lbl">0 selected</span>
             <button class="btn btn-green btn-sm" onclick="bulkAction('approve')">✓ Approve All</button>
             <button class="btn btn-red btn-sm" onclick="bulkAction('reject')">✗ Reject All</button>
+            <button class="btn btn-red btn-sm hidden" id="bulk-delete-btn" onclick="bulkDelete()">🗑 Delete All</button>
             <button class="btn btn-ghost btn-sm" onclick="clearBulk()">Clear</button>
           </div>
           <div class="tbl-wrap">
@@ -2533,6 +2534,7 @@ function renderSubsTable(){
       <td style="white-space:nowrap">
         <button class="btn btn-xs btn-primary" onclick="openReview('${r.id}')">${currentRole==='viewer'?'View':'Review'}</button>
         ${(currentRole!=='viewer'&&r.status==='pending')?`<button class="btn btn-xs btn-green" onclick="quickAction('${r.id}','approved')">✓</button><button class="btn btn-xs btn-red" onclick="quickAction('${r.id}','rejected')">✗</button>`:''}
+        ${canDeleteSubmissions()?`<button class="btn btn-xs btn-red" title="Delete this submission permanently" onclick='deleteSubmission(${JSON.stringify(r)})'>🗑</button>`:''}
       </td>
     </tr>`).join('');
 }
@@ -2549,7 +2551,43 @@ function updateBulkBar(){
   if(bulkSelected.size>0){
     bar.classList.remove('hidden');
     document.getElementById('bulk-count-lbl').textContent=`${bulkSelected.size} selected`;
+    document.getElementById('bulk-delete-btn').classList.toggle('hidden', !canDeleteSubmissions());
   } else { bar.classList.add('hidden'); }
+}
+// Deleting a submission removes a pay record, so it sits above the approve /
+// reject that a manager can do. Mirrors require_admin('administrator') server-side.
+function canDeleteSubmissions(){
+  return currentRole==='administrator' || currentRole==='superadmin';
+}
+// Approved submissions are what invoices are built from, so say so plainly
+// rather than letting someone quietly change a past invoice total.
+function subDeleteWarning(rows){
+  const approved = rows.filter(r=>r.status==='approved').length;
+  return approved
+    ? `\n\n⚠️ ${approved} of these ${approved===1?'is':'are'} APPROVED and may already be invoiced. `
+      + `Deleting ${approved===1?'it':'them'} will change invoice totals for that period.`
+    : '';
+}
+async function deleteSubmission(r){
+  if(!confirm(`Permanently delete this submission?\n\n${r.guard_name} — ${r.site_name}\n`
+    + `${r.shift_date}, ${r.total_hours}h (${r.status})${subDeleteWarning([r])}\n\nThis cannot be undone.`)) return;
+  try{
+    await apiFetch(`/api/submissions/${r.id}`,{method:'DELETE'});
+    toast('Submission deleted','success');
+    clearBulk(); loadSubmissions(); loadDashboard();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function bulkDelete(){
+  if(!bulkSelected.size){ toast('Nothing selected','error'); return; }
+  const rows = subsData.filter(r=>bulkSelected.has(r.id));
+  if(!confirm(`Permanently delete ${rows.length} submission${rows.length===1?'':'s'}?`
+    + subDeleteWarning(rows) + `\n\nThis cannot be undone.`)) return;
+  try{
+    const d = await apiFetch('/api/submissions/bulk',{method:'POST',
+      body:JSON.stringify({ids:[...bulkSelected],action:'delete'})});
+    toast(`${d.deleted} submission${d.deleted===1?'':'s'} deleted`,'success');
+    clearBulk(); loadSubmissions(); loadDashboard();
+  }catch(e){ toast(e.message,'error'); }
 }
 function clearBulk(){
   bulkSelected.clear(); updateBulkBar();
