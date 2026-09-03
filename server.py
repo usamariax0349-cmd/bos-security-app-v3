@@ -654,6 +654,40 @@ def check_expiry_reminders(conn):
     if sent: conn.commit()
     return sent
 
+AVAIL_STALE_DAYS = 14  # matches the threshold the admin board already uses for its freshness flag
+
+def guard_availability_status(conn, guard_id, date):
+    """What the guard said about one date, for the Add/Edit Shift modal and
+    the server-side conflict check on save. Three real states, not two:
+    a leave record says 'off' or 'partial' outright; no record could mean
+    the guard confirmed they're free, OR it could mean they've simply never
+    told the app anything — those must not be conflated, so 'unknown' covers
+    both no-confirmation-ever and a confirmation stale enough not to trust.
+    Returns {status, available_from, confirmed_at}."""
+    leave = R(conn.execute('''SELECT available_from FROM guard_leave
+                              WHERE guard_id=? AND start_date<=? AND end_date>=?
+                              LIMIT 1''', (guard_id, date, date)).fetchone())
+    guard = R(conn.execute('SELECT availability_confirmed_at FROM guards WHERE id=?', (guard_id,)).fetchone())
+    confirmed_at = guard['availability_confirmed_at'] if guard else None
+    if leave:
+        return {'status': 'partial' if leave['available_from'] else 'off',
+                'available_from': leave['available_from'] or None, 'confirmed_at': confirmed_at}
+    if confirmed_at:
+        days_since = (datetime.now() - datetime.fromisoformat(confirmed_at)).days
+        if days_since <= AVAIL_STALE_DAYS:
+            return {'status': 'free_confirmed', 'available_from': None, 'confirmed_at': confirmed_at}
+    return {'status': 'unknown', 'available_from': None, 'confirmed_at': confirmed_at}
+
+def availability_conflict(conn, guard_id, date, start_time):
+    """None if no conflict, else a short human string describing it — used
+    both for the audit trail on save and to build the modal's warning."""
+    a = guard_availability_status(conn, guard_id, date)
+    if a['status'] == 'off':
+        return 'guard said Unavailable this day'
+    if a['status'] == 'partial' and start_time < a['available_from']:
+        return f"guard said Free from {a['available_from']}, shift starts {start_time}"
+    return None
+
 # ─── Invoice helpers ──────────────────────────────────────────────────────────
 def invoice_query(qs):
     params, where = [], ["sub.status='approved'"]
@@ -1410,6 +1444,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             rows = expiring_items(db, within_days=int(within) if within else None)
             db.close(); self.send_json(rows); return
 
+        m = re.match(r'^/api/guards/([^/]+)/availability-status$', path)
+        if m:
+            date = qs.get('date',[None])[0]
+            if not date: self.err('date required'); return
+            db = get_db()
+            status = guard_availability_status(db, m.group(1), date)
+            db.close(); self.send_json(status); return
+
         if path == '/api/submissions':
             db = get_db(); where=[]; params=[]
             s = sessions.get(self.headers.get('X-Auth-Token',''), {})
@@ -2143,8 +2185,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (shid, data['guard_id'], data['site_id'], data['shift_date'],
                         data['start_time'], data.get('end_time',''), data.get('position',''),
                         data.get('notes',''), s['name']))
+            # Independent of whatever the modal warned about — a direct API
+            # call wouldn't have shown that dialog at all — so this is the
+            # authoritative record of the conflict, not just an echo of the UI.
+            conflict = availability_conflict(db, data['guard_id'], data['shift_date'], data['start_time'])
             audit(db, s, 'SHIFT_CREATE',
-                  f"{data['shift_date']} {data['start_time']}-{data.get('end_time') or 'Required'}"); db.commit()
+                  f"{data['shift_date']} {data['start_time']}-{data.get('end_time') or 'Required'}"
+                  + (f" (⚠ {conflict})" if conflict else '')); db.commit()
             row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (shid,)).fetchone())])[0]
@@ -2444,7 +2491,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if updates:
                 params.append(m.group(1))
                 db.execute(f"UPDATE shifts SET {','.join(updates)} WHERE id=?", params)
-                audit(db, s, 'SHIFT_UPDATE', m.group(1)); db.commit()
+                note = ''
+                # Skip the check on a plain cancellation — "cancelled this
+                # shift (⚠ conflict)" isn't meaningful once it's cancelled.
+                if data.get('cancelled') != 1:
+                    row0 = R(db.execute('SELECT guard_id,shift_date,start_time FROM shifts WHERE id=?',
+                                        (m.group(1),)).fetchone())
+                    if row0:
+                        conflict = availability_conflict(db, row0['guard_id'], row0['shift_date'], row0['start_time'])
+                        if conflict: note = f' (⚠ {conflict})'
+                audit(db, s, 'SHIFT_UPDATE', m.group(1) + note); db.commit()
             row = R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (m.group(1),)).fetchone())
