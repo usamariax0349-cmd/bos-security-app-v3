@@ -363,6 +363,11 @@ def init_db():
         # the guard is tied up until that time and free afterwards ("free after
         # 6pm"). Empty/NULL keeps the original meaning — unavailable all day.
         ("guard_leave", "available_from",   "ALTER TABLE guard_leave ADD COLUMN available_from TEXT DEFAULT ''"),
+        # Set only when the GUARD themselves last touched their availability
+        # from the Guard Portal (per-day edit or the "confirm, no changes"
+        # button) — never by an admin edit. Lets the admin board show whether
+        # a guard's availability is fresh or stale.
+        ("guards", "availability_confirmed_at", "ALTER TABLE guards ADD COLUMN availability_confirmed_at TEXT"),
     ]
     existing_cols = {}
     for table, col, sql in migrations:
@@ -1165,6 +1170,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ''', (gid,)).fetchall())
             db.close(); self.send_json(with_shift_status(rows)); return
 
+        # Guard's own availability for a date range — no auth needed. Returns
+        # just their leave/partial records plus when they last confirmed, so
+        # the Guard Portal doesn't need admin's /api/leave (which lists every
+        # guard) or an auth token it doesn't have.
+        if path == '/api/guard-availability':
+            gid = qs.get('guard_id',[None])[0]
+            date_from = qs.get('date_from',[None])[0]
+            date_to   = qs.get('date_to',[None])[0]
+            if not gid or not date_from or not date_to:
+                self.err('guard_id, date_from and date_to required'); return
+            db = get_db()
+            guard = R(db.execute('SELECT availability_confirmed_at FROM guards WHERE id=?', (gid,)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            leave = RL(db.execute('''SELECT * FROM guard_leave WHERE guard_id=?
+                                     AND start_date<=? AND end_date>=?
+                                     ORDER BY start_date''',
+                                  (gid, date_to, date_from)).fetchall())
+            db.close()
+            self.send_json({'confirmed_at': guard['availability_confirmed_at'], 'leave': leave}); return
+
         # /api/me is available to any authenticated role, including 'client'
         if path == '/api/me':
             s0 = self.get_session()
@@ -1653,6 +1678,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         data.get('description',''), photo, data.get('lat'), data.get('lng')))
             db.commit(); db.close()
             self.send_json({'id':iid,'message':'Incident reported.'}, 201); return
+
+        # Guard sets their own availability for one day — no auth needed.
+        # Mirrors the admin "Set Availability" modal's three states, but only
+        # ever touches this guard's own record for this one date (never a
+        # multi-day admin-created block on a different date it might overlap).
+        if path == '/api/guard-availability':
+            for f in ['guard_id','date','mode']:
+                if not data.get(f): self.err(f'{f} required'); return
+            if data['mode'] not in ('free','partial','off'):
+                self.err("mode must be 'free', 'partial', or 'off'"); return
+            if data['mode']=='partial' and not data.get('available_from'):
+                self.err('available_from required for a partial day'); return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            date = data['date']
+            # Same simplification the admin editor already makes: the record(s)
+            # covering this date are replaced wholesale, not split around it.
+            db.execute('DELETE FROM guard_leave WHERE guard_id=? AND start_date<=? AND end_date>=?',
+                       (guard['id'], date, date))
+            if data['mode'] != 'free':
+                db.execute('''INSERT INTO guard_leave (id,guard_id,leave_type,start_date,end_date,notes,available_from)
+                              VALUES (?,?,?,?,?,?,?)''',
+                           (str(uuid.uuid4()), guard['id'],
+                            'Partial Availability' if data['mode']=='partial' else 'Fixed Leave',
+                            date, date, 'Set by guard from the Guard Portal',
+                            data.get('available_from','') if data['mode']=='partial' else ''))
+            db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
+                       (datetime.now().isoformat(), guard['id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        # Guard confirms their availability needs no changes this week — no
+        # auth needed. Just refreshes the "last updated" signal the admin
+        # board uses to flag stale data, without writing a leave record.
+        if path == '/api/guard-availability/confirm':
+            if not data.get('guard_id'): self.err('guard_id required'); return
+            db = get_db()
+            guard = R(db.execute('SELECT id FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
+                       (datetime.now().isoformat(), guard['id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         # Guard clocks in / out of a scheduled shift — no auth needed, GPS-gated
         m_ci = re.match(r'^/api/shifts/([^/]+)/clock-in$', path)
