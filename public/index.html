@@ -453,6 +453,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .avm-opt:hover{border-color:var(--navy);background:var(--bg)}
 .avm-opt input{margin-top:2px}
 .avm-opt small{color:var(--muted);font-size:11px}
+.shm-avail-line{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:8px 10px;border-radius:7px;margin:-6px 0 14px}
+.shm-avail-line.st-off{background:rgba(239,68,68,.1);color:var(--red)}
+.shm-avail-line.st-partial{background:rgba(201,168,76,.12);color:#92720f}
+.shm-avail-line.st-free{background:rgba(34,197,94,.1);color:#15803d}
+.shm-avail-line.st-unknown{background:var(--bg);color:var(--muted)}
 .avail-partial{display:block;width:100%;text-align:left;background:var(--gold);color:var(--navy);border:none;border-radius:6px;padding:5px 6px;font-size:11px;cursor:pointer;line-height:1.3;transition:transform var(--dur-fast) var(--ease-spring)}
 .avail-partial:hover{transform:translateY(-1px)}
 .avail-partial .sc-time{font-weight:700}
@@ -1341,13 +1346,14 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="modal-body">
       <input type="hidden" id="shm-id">
       <div class="form-group"><label class="form-label">Guard *</label>
-        <select id="shm-guard" class="form-control"></select>
+        <select id="shm-guard" class="form-control" onchange="updateShiftAvailInfo()"></select>
       </div>
       <div class="form-group"><label class="form-label">Site *</label>
         <select id="shm-site" class="form-control"></select>
       </div>
       <div class="form-group"><label class="form-label">Position (optional)</label><input id="shm-position" class="form-control" placeholder="e.g. Static Guard, Mobile Patrol"></div>
-      <div class="form-group"><label class="form-label">Date *</label><input type="date" id="shm-date" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Date *</label><input type="date" id="shm-date" class="form-control" onchange="updateShiftAvailInfo()"></div>
+      <div id="shm-avail-info" class="hidden"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Start Time *</label><input type="time" id="shm-start" class="form-control"></div>
         <div class="form-group"><label class="form-label">End Time <span style="font-weight:400;color:var(--muted)">(blank = Required/open-ended)</span></label><input type="time" id="shm-end" class="form-control"></div>
@@ -2639,6 +2645,7 @@ async function openShiftModal(presets={}){
   if(presets.site_id)  document.getElementById('shm-site').value  = presets.site_id;
   if(presets.guard_id) document.getElementById('shm-guard').value = presets.guard_id;
   openModal('shift-modal');
+  updateShiftAvailInfo();
 }
 function openShiftModalFor(kind, id, dateISO, startTime){
   const preset = kind==='site' ? {site_id:id, date:dateISO} : {guard_id:id, date:dateISO};
@@ -2658,6 +2665,33 @@ async function editShift(sh){
   document.getElementById('shm-notes').value=sh.notes||'';
   document.getElementById('shm-delete-btn').classList.remove('hidden');
   document.getElementById('shm-cancelshift-btn').classList.toggle('hidden', sh.status!=='scheduled');
+  updateShiftAvailInfo();
+}
+// The guard's stated availability for the selected guard/date, shown right
+// above the time fields and reused by saveShift()'s conflict check so the
+// two never disagree. Cleared to null while a fetch is in flight so a stale
+// answer from a fast-changing guard/date pair can't be used by mistake.
+let shmAvailStatus = null;
+async function updateShiftAvailInfo(){
+  const box = document.getElementById('shm-avail-info');
+  const guardId = document.getElementById('shm-guard').value;
+  const date = document.getElementById('shm-date').value;
+  shmAvailStatus = null;
+  if(!guardId || !date){ box.classList.add('hidden'); return; }
+  try{
+    const a = await apiFetch(`/api/guards/${guardId}/availability-status?date=${date}`);
+    shmAvailStatus = a;
+    const LABEL = {
+      off:            {cls:'st-off',     icon:'🔴', text:'Guard said: Unavailable this day'},
+      partial:        {cls:'st-partial', icon:'🟡', text:`Guard said: Free from ${a.available_from}`},
+      free_confirmed: {cls:'st-free',    icon:'🟢', text:`Guard confirmed: Available all day (as of ${fmtRelativeDays(a.confirmed_at)})`},
+      unknown:        {cls:'st-unknown', icon:'⚪', text: a.confirmed_at
+                          ? `Guard's availability is stale (last updated ${fmtRelativeDays(a.confirmed_at)}) — treat as unconfirmed`
+                          : "Guard hasn't submitted availability yet"},
+    }[a.status];
+    box.className = `shm-avail-line ${LABEL.cls}`;
+    box.innerHTML = `<span>${LABEL.icon}</span><span>${LABEL.text}</span>`;
+  }catch(e){ box.classList.add('hidden'); }
 }
 async function saveShift(){
   const id = document.getElementById('shm-id').value;
@@ -2678,6 +2712,18 @@ async function saveShift(){
     if(!confirm(`⚠️ ${g.name}'s security licence expired on ${g.license_expiry} — before this shift's date. `
       + `Schedule them anyway?`)) return;
   }
+  // Re-fetch rather than trust shmAvailStatus: if the admin changed guard/date
+  // and hit Save before that fetch resolved, the cached value could still be
+  // for the PREVIOUS selection. The server checks this independently too on
+  // save (for the audit log) — this is only for the confirm-before-you-send
+  // prompt, so it has to be current.
+  try{
+    const a = await apiFetch(`/api/guards/${body.guard_id}/availability-status?date=${body.shift_date}`);
+    const conflict = a.status==='off' ? 'said they are Unavailable this day'
+      : (a.status==='partial' && body.start_time < a.available_from) ? `said they're free from ${a.available_from}, this shift starts ${body.start_time}`
+      : null;
+    if(conflict && !confirm(`⚠️ ${g ? g.name : 'This guard'} ${conflict}. Schedule them anyway?`)) return;
+  }catch(e){ /* availability lookup failing shouldn't block the save */ }
   try{
     if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
     else   await apiFetch('/api/shifts',{method:'POST',body:JSON.stringify(body)});
