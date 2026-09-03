@@ -352,6 +352,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .msg-thread-item.active{background:rgba(201,168,76,.12)}
 .msg-thread-item .mti-name{font-size:13px}
 .msg-thread-item .mti-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.faq-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.faq-row:last-child{border-bottom:none}
+.faq-row.inactive{opacity:.5}
+.faq-q{font-size:13px;font-weight:700}
+.faq-kw{font-size:11px;color:var(--muted);margin-top:2px}
+.faq-a{font-size:12px;color:var(--text);margin-top:4px}
 .cp-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .cp-row.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08)}
 .cp-name{font-weight:700;color:#fff;font-size:14px}
@@ -1232,7 +1238,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <div style="display:flex;min-height:560px">
           <div style="width:280px;flex-shrink:0;border-right:1.5px solid var(--border);overflow-y:auto;max-height:640px">
             <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
-              <div class="section-title" style="margin-bottom:10px">Conversations</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span class="section-title">Conversations</span>
+                <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:4px 8px" onclick="openFaqModal()">🤖 FAQ Replies</button>
+              </div>
               <select id="msg-new-guard" class="form-control" style="font-size:12px;margin-bottom:8px"></select>
               <button class="btn btn-ghost btn-sm" style="width:100%" onclick="startNewMessageThread()">+ New Conversation</button>
             </div>
@@ -1604,6 +1613,33 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('admin-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveAdmin()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- FAQ auto-reply manager -->
+<div id="faq-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header"><span class="modal-title">🤖 FAQ Auto-Replies</span><button class="modal-close" onclick="closeModal('faq-modal')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+        When a guard's message contains one of a FAQ's keywords, they get this answer instantly — no need to wait on the office.
+      </p>
+      <input type="hidden" id="faq-id">
+      <div class="form-group"><label class="form-label">Question (label only)</label>
+        <input id="faq-question" class="form-control" placeholder="e.g. How do I set my availability?"></div>
+      <div class="form-group"><label class="form-label">Keywords (comma-separated, matched anywhere in the message)</label>
+        <input id="faq-keywords" class="form-control" placeholder="e.g. availability, day off, leave"></div>
+      <div class="form-group"><label class="form-label">Answer sent to the guard</label>
+        <textarea id="faq-answer" class="form-control" rows="3"></textarea></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-primary btn-sm" id="faq-save-btn" onclick="saveFaq()">+ Add FAQ</button>
+        <button class="btn btn-ghost btn-sm hidden" id="faq-cancel-btn" onclick="resetFaqForm()">Cancel Edit</button>
+      </div>
+      <div id="faq-list" style="border-top:1px solid var(--border);padding-top:12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('faq-modal')">Close</button>
     </div>
   </div>
 </div>
@@ -2387,9 +2423,10 @@ function renderMsgThread(box, rows, viewerRole){
   }
   box.innerHTML = rows.map(m=>{
     const mine = m.sender===viewerRole;
+    const isAuto = m.sender_name==='FAQ Auto-Reply';
     const who = m.sender==='admin' ? (m.sender_name||'Office') : (m.sender_name||'Guard');
     return `<div class="msg-bubble ${mine?'mine':'theirs'}">
-      <div>${escapeHtml(m.body)}</div>
+      <div>${isAuto?'🤖 ':''}${escapeHtml(m.body)}</div>
       <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}${fmtDateTime(m.created_at)}</div>
     </div>`;
   }).join('');
@@ -4177,6 +4214,75 @@ function updateMsgTabBadge(){
   const total = msgThreads.reduce((sum,t)=>sum+t.unread,0);
   badge.textContent = total;
   badge.classList.toggle('hidden', total===0);
+}
+
+// ── FAQ auto-replies (admin) ──────────────────────────────────────────────────
+let faqsData = [];
+async function openFaqModal(){
+  openModal('faq-modal');
+  resetFaqForm();
+  await loadFaqs();
+}
+async function loadFaqs(){
+  try{ faqsData = await apiFetch('/api/faqs'); renderFaqList(); }
+  catch(e){ toast(e.message,'error'); }
+}
+function renderFaqList(){
+  const box = document.getElementById('faq-list');
+  box.innerHTML = faqsData.length===0
+    ? '<p style="font-size:12px;color:var(--muted)">No FAQs yet — add one above.</p>'
+    : faqsData.map(f=>`
+        <div class="faq-row ${f.active?'':'inactive'}">
+          <div style="flex:1;min-width:0">
+            <div class="faq-q">${escapeHtml(f.question)}</div>
+            <div class="faq-kw">Keywords: ${escapeHtml(f.keywords)}</div>
+            <div class="faq-a">${escapeHtml(f.answer)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            <button class="btn btn-xs btn-ghost" onclick='editFaq(${JSON.stringify(f)})'>Edit</button>
+            <button class="btn btn-xs btn-ghost" onclick="toggleFaqActive('${f.id}',${f.active})">${f.active?'Deactivate':'Activate'}</button>
+            <button class="btn btn-xs btn-red" onclick="deleteFaq('${f.id}')">Delete</button>
+          </div>
+        </div>`).join('');
+}
+function editFaq(f){
+  document.getElementById('faq-id').value = f.id;
+  document.getElementById('faq-question').value = f.question;
+  document.getElementById('faq-keywords').value = f.keywords;
+  document.getElementById('faq-answer').value = f.answer;
+  document.getElementById('faq-save-btn').textContent = 'Save Changes';
+  document.getElementById('faq-cancel-btn').classList.remove('hidden');
+}
+function resetFaqForm(){
+  document.getElementById('faq-id').value = '';
+  document.getElementById('faq-question').value = '';
+  document.getElementById('faq-keywords').value = '';
+  document.getElementById('faq-answer').value = '';
+  document.getElementById('faq-save-btn').textContent = '+ Add FAQ';
+  document.getElementById('faq-cancel-btn').classList.add('hidden');
+}
+async function saveFaq(){
+  const id = document.getElementById('faq-id').value;
+  const question = document.getElementById('faq-question').value.trim();
+  const keywords = document.getElementById('faq-keywords').value.trim();
+  const answer = document.getElementById('faq-answer').value.trim();
+  if(!question || !keywords || !answer){ toast('Question, keywords and answer are all required','error'); return; }
+  try{
+    if(id) await apiFetch(`/api/faqs/${id}`, {method:'PUT', body: JSON.stringify({question,keywords,answer})});
+    else await apiFetch('/api/faqs', {method:'POST', body: JSON.stringify({question,keywords,answer})});
+    resetFaqForm();
+    loadFaqs();
+    toast('FAQ saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function toggleFaqActive(id, active){
+  try{ await apiFetch(`/api/faqs/${id}`, {method:'PUT', body: JSON.stringify({active: active?0:1})}); loadFaqs(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function deleteFaq(id){
+  if(!confirm('Delete this FAQ auto-reply?')) return;
+  try{ await apiFetch(`/api/faqs/${id}`, {method:'DELETE'}); loadFaqs(); }
+  catch(e){ toast(e.message,'error'); }
 }
 
 // ── Live Activity ─────────────────────────────────────────────────────────────

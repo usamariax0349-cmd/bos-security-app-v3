@@ -335,6 +335,19 @@ def init_db():
             created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
             read_at     TEXT
         );
+
+        -- Keyword-matched canned answers. When a guard's message matches one,
+        -- the FAQ auto-responder replies instantly instead of waiting on
+        -- admin, and marks the guard's message as already handled.
+        CREATE TABLE IF NOT EXISTS faqs (
+            id         TEXT PRIMARY KEY,
+            question   TEXT NOT NULL,
+            keywords   TEXT NOT NULL,   -- comma-separated, matched case-insensitively as substrings
+            answer     TEXT NOT NULL,
+            active     INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     conn.commit()
 
@@ -347,6 +360,29 @@ def init_db():
         for i, name in enumerate(COMPLIANCE_CATALOG):
             conn.execute('INSERT INTO compliance_items (id,name,sort_order) VALUES (?,?,?)',
                          (str(uuid.uuid4()), name, i))
+        conn.commit()
+
+    # Seed a starter set of FAQ auto-replies once, so the feature is useful
+    # out of the box — admin can edit, deactivate or add more from the app.
+    FAQ_STARTERS = [
+        ('How do I set my availability?', 'availability,day off,time off,leave,holiday',
+         "You can set your own availability anytime from the Guard Portal menu → 'My Availability'. "
+         "Pick free, partial or unavailable for any day and the office sees it instantly."),
+        ('How do I report an incident?', 'incident,report,emergency',
+         "Use the Guard Portal menu → 'Report Incident' to log it with photos and your location. "
+         "For anything urgent, please call the office directly."),
+        ('How do I clock in or out?', 'clock in,clock out,clocking',
+         "Open 'My Shifts' in the Guard Portal and use the Clock In / Clock Out button on your shift — "
+         "you'll need location access turned on at the site."),
+        ('When do I get paid?', 'pay,paid,payslip,wage,salary',
+         "Pay is processed from your approved shift submissions. Contact the office directly for payslip details."),
+        ('Can I swap a shift with someone?', 'swap,cover my shift,someone take my shift',
+         "Shift swaps aren't self-service yet — message the office here with the date and we'll help arrange cover."),
+    ]
+    if conn.execute('SELECT COUNT(*) FROM faqs').fetchone()[0] == 0:
+        for i, (q, kw, a) in enumerate(FAQ_STARTERS):
+            conn.execute('INSERT INTO faqs (id,question,keywords,answer,sort_order) VALUES (?,?,?,?,?)',
+                         (str(uuid.uuid4()), q, kw, a, i))
         conn.commit()
 
     # ── Schema migration: add any missing columns from older databases ──────────
@@ -700,6 +736,18 @@ def availability_conflict(conn, guard_id, date, start_time):
         return 'guard said Unavailable this day'
     if a['status'] == 'partial' and start_time < a['available_from']:
         return f"guard said Free from {a['available_from']}, shift starts {start_time}"
+    return None
+
+def match_faq(conn, body):
+    """First active FAQ (by sort_order) whose keyword list has a hit in body,
+    matched case-insensitively as a plain substring. None if nothing matches."""
+    text = (body or '').lower()
+    faqs = RL(conn.execute('SELECT * FROM faqs WHERE active=1 ORDER BY sort_order').fetchall())
+    for faq in faqs:
+        for kw in faq['keywords'].split(','):
+            kw = kw.strip().lower()
+            if kw and kw in text:
+                return faq
     return None
 
 # ─── Invoice helpers ──────────────────────────────────────────────────────────
@@ -1668,6 +1716,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gid,)).fetchall())
             db.close(); self.send_json(rows); return
 
+        if path == '/api/faqs':
+            db = get_db()
+            rows = RL(db.execute('SELECT * FROM faqs ORDER BY sort_order').fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/admins':
             s2 = self.require_admin('administrator')
             if not s2: return
@@ -1945,11 +1998,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             guard = R(db.execute('SELECT id,name FROM guards WHERE id=? AND active=1', (data['guard_id'],)).fetchone())
             if not guard: db.close(); self.err('Guard not found', 404); return
+            body = data['body'].strip()
             mid = str(uuid.uuid4())
             db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
-                       (mid, guard['id'], 'guard', guard['name'], data['body'].strip()))
+                       (mid, guard['id'], 'guard', guard['name'], body))
+            # FAQ auto-responder: if the message matches a known question,
+            # answer instantly and mark it handled instead of leaving it for
+            # admin to triage.
+            faq = match_faq(db, body)
+            if faq:
+                now = datetime.now().isoformat()
+                db.execute('UPDATE messages SET read_at=? WHERE id=?', (now, mid))
+                db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
+                           (str(uuid.uuid4()), guard['id'], 'admin', 'FAQ Auto-Reply', faq['answer']))
+                audit(db, {'admin_id':'','name':'FAQ Auto-Reply'}, 'FAQ_AUTO_REPLY',
+                      f"to {guard['name']}: matched \"{faq['question']}\"")
             db.commit(); db.close()
-            self.send_json({'id':mid,'ok':True}, 201); return
+            self.send_json({'id':mid,'ok':True,'auto_replied':bool(faq)}, 201); return
 
         # Guard marks the office's messages in their thread as read — no auth needed.
         if path == '/api/guard-messages/read':
@@ -2345,6 +2410,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        if path == '/api/faqs':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            for f in ['question','keywords','answer']:
+                if not (data.get(f) or '').strip(): self.err(f'{f} required'); return
+            db = get_db()
+            fid = str(uuid.uuid4())
+            n = db.execute('SELECT COUNT(*) FROM faqs').fetchone()[0]
+            db.execute('INSERT INTO faqs (id,question,keywords,answer,sort_order) VALUES (?,?,?,?,?)',
+                       (fid, data['question'].strip(), data['keywords'].strip(), data['answer'].strip(), n))
+            audit(db, s2, 'FAQ_CREATE', data['question'].strip()); db.commit(); db.close()
+            self.send_json({'id':fid,'ok':True}, 201); return
+
         if path == '/api/submissions/bulk':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -2460,6 +2538,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if s is None: return
         if s.get('must_change_password'):
             self.err('Please set your password before continuing', 403); return
+
+        m = re.match(r'^/api/faqs/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            existing = R(db.execute('SELECT id FROM faqs WHERE id=?', (m.group(1),)).fetchone())
+            if not existing: db.close(); self.err('FAQ not found', 404); return
+            updates = []; params = []
+            for field in ('question','keywords','answer'):
+                if field in data:
+                    updates.append(f'{field}=?'); params.append(data[field])
+            if 'active' in data:
+                updates.append('active=?'); params.append(1 if data['active'] else 0)
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE faqs SET {','.join(updates)} WHERE id=?", params)
+                audit(db, s2, 'FAQ_UPDATE', m.group(1)); db.commit()
+            db.close(); self.send_json({'ok':True}); return
 
         m = re.match(r'^/api/submissions/([^/]+)$', path)
         if m:
@@ -2694,6 +2791,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('DELETE FROM guard_leave WHERE id=?', (m.group(1),))
             audit(db, s, 'LEAVE_DELETE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+        m = re.match(r'^/api/faqs/([^/]+)$', path)
+        if m:
+            db = get_db()
+            db.execute('DELETE FROM faqs WHERE id=?', (m.group(1),))
+            audit(db, s, 'FAQ_DELETE', m.group(1)); db.commit(); db.close()
             self.send_json({'ok':True}); return
         m = re.match(r'^/api/shifts/([^/]+)$', path)
         if m:
