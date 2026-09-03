@@ -825,6 +825,19 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="stat-card" onclick="dashGoTab('sites')" title="Open the site list"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></button>
         <button class="stat-card" onclick="dashGoBilling('invoices')" title="Open invoices"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></button>
       </div>
+      <div class="section hidden" id="dash-expiring-section" style="margin-bottom:20px;border-left:3px solid var(--red)">
+        <div class="section-head">
+          <span class="section-title">⚠️ Licences &amp; Compliance Expiring Soon</span>
+          <span id="dash-expiring-count" style="font-size:12px;color:var(--muted);font-weight:600"></span>
+          <button class="btn btn-primary btn-sm" onclick="dashGoLicensesReport()">Download Report</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Guard</th><th>Item</th><th>Expiry Date</th><th>Status</th></tr></thead>
+            <tbody id="dash-expiring-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="section" style="margin-bottom:20px">
         <div class="section-head">
           <span class="section-title">Live Operations</span>
@@ -2419,8 +2432,32 @@ async function loadDashboard(){
       <td><span class="badge badge-${r.status}">${r.status}</span></td>
       <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.submitted_at)}</td>
     </tr>`).join('');
+    const exp = d.expiring_licenses || [];
+    document.getElementById('dash-expiring-section').classList.toggle('hidden', exp.length===0);
+    document.getElementById('dash-expiring-count').textContent = `${exp.length} item${exp.length===1?'':'s'}`;
+    document.getElementById('dash-expiring-tbody').innerHTML = exp.map(r=>`<tr>
+      <td><a href="#" onclick="dashGoGuardCompliance('${r.guard_id}');return false">${r.guard_name}</a></td>
+      <td>${r.item_name}</td>
+      <td>${r.expiry_date}</td>
+      <td><span class="badge badge-${r.days_left<0?'rejected':r.days_left<=3?'rejected':'pending'}">
+        ${r.days_left<0?`Expired ${-r.days_left}d ago`:r.days_left===0?'Expires today':`${r.days_left}d left`}</span></td>
+    </tr>`).join('');
   }catch(e){ console.error(e); }
   loadLiveOps();
+}
+async function dashGoGuardCompliance(guardId){
+  if(!dashTabVisible('guards')){ toast('Your role does not have access to that section','info'); return; }
+  showTab('guards');
+  // showTab('guards') kicks off loadGuardsAdmin() but doesn't wait for it —
+  // guardsFull would still be empty (or stale) the instant selectGuard runs
+  // without this await, so the profile panel would come up blank.
+  await loadGuardsAdmin();
+  selectGuard(guardId);
+  showGuardSubtab('compliance');
+}
+function dashGoLicensesReport(){
+  if(!dashTabVisible('reports')){ toast('Your role does not have access to that section','info'); return; }
+  downloadFile('/api/reports/run?report=licenses_expiring&format=csv', 'BOS_Licences_Expiring.csv');
 }
 
 // ── Live Operations (today's roster, real-time status) ─────────────────────────
@@ -2635,6 +2672,11 @@ async function saveShift(){
   };
   if(!body.guard_id||!body.site_id||!body.shift_date||!body.start_time){
     toast('All required fields must be filled','error'); return;
+  }
+  const g = allGuardsAdmin.find(x=>x.id===body.guard_id);
+  if(g && !g.no_license_required && g.license_expiry && g.license_expiry < body.shift_date){
+    if(!confirm(`⚠️ ${g.name}'s security licence expired on ${g.license_expiry} — before this shift's date. `
+      + `Schedule them anyway?`)) return;
   }
   try{
     if(id) await apiFetch(`/api/shifts/${id}`,{method:'PUT',body:JSON.stringify(body)});
@@ -3128,6 +3170,16 @@ function setGuardStatusFilter(active){
   document.getElementById('g-status-inactive').classList.toggle('active', active===0);
   renderGuardsList();
 }
+// Mirrors the server's expiring_items() rule for the single guard-level
+// licence field: expired always flags, "expiring soon" respects each
+// guard's own configurable reminder window (license_reminder_days).
+function licenseFlag(g){
+  if(g.no_license_required || !g.license_expiry) return {icon:'', title:''};
+  const days = Math.floor((new Date(g.license_expiry+'T00:00:00') - new Date()) / 86400000);
+  if(days<0) return {icon:'🔴', title:`Licence expired ${g.license_expiry}`};
+  if(days<=(g.license_reminder_days||60)) return {icon:'🟡', title:`Licence expires in ${days}d (${g.license_expiry})`};
+  return {icon:'✓', title:`Licence on file, valid to ${g.license_expiry}`};
+}
 function renderGuardsList(){
   const q = (document.getElementById('g-search').value||'').toLowerCase();
   let d = guardsFull.filter(g=>g.active===guardStatusFilter);
@@ -3135,10 +3187,13 @@ function renderGuardsList(){
   const wrap = document.getElementById('guards-list');
   wrap.innerHTML = d.length===0
     ? `<div class="empty-state"><div class="ei">👮</div><p>No guards found</p></div>`
-    : d.map(g=>`<div class="gd-list-item ${g.id===selectedGuardId?'active':''}" onclick="selectGuard('${g.id}')">
-        <span class="gdn">${g.name}</span>
-        <span class="gdc" title="Licence on file">${g.license_number?'✓':''}</span>
-      </div>`).join('');
+    : d.map(g=>{
+        const lf = licenseFlag(g);
+        return `<div class="gd-list-item ${g.id===selectedGuardId?'active':''}" onclick="selectGuard('${g.id}')">
+          <span class="gdn">${g.name}</span>
+          <span class="gdc" title="${lf.title}">${lf.icon || (g.license_number?'✓':'')}</span>
+        </div>`;
+      }).join('');
   if(selectedGuardId && !d.some(g=>g.id===selectedGuardId)){
     selectedGuardId = null;
     document.getElementById('gd-detail-panel').innerHTML =
