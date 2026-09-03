@@ -1336,19 +1336,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             date_from = qs.get('date_from',[None])[0]
             if not date_from: self.err('date_from required'); return
             only = qs.get('filter',['all'])[0]
-            day_filter = qs.get('date',[''])[0]
             start = datetime.strptime(date_from, '%Y-%m-%d')
-            days = [(start + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+            week = [(start + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
+            # days=ISO,ISO limits the export to the days selected on the board.
+            picked = [d for d in qs.get('days',[''])[0].split(',') if d in week]
+            days = picked or week
             db = get_db()
             guards = RL(db.execute('SELECT id,name FROM guards WHERE active=1 ORDER BY name').fetchall())
+            # Query the full week — `days` may be a subset, so days[6] isn't safe.
             shifts = RL(db.execute('''SELECT sh.*, s.name as site_name FROM shifts sh
                                       JOIN sites s ON s.id=sh.site_id
                                       WHERE sh.shift_date>=? AND sh.shift_date<=?
                                         AND COALESCE(sh.cancelled,0)=0''',
-                                   (days[0], days[6])).fetchall())
+                                   (week[0], week[6])).fetchall())
             leave = RL(db.execute('''SELECT * FROM guard_leave
                                      WHERE start_date<=? AND end_date>=?''',
-                                  (days[6], days[0])).fetchall())
+                                  (week[6], week[0])).fetchall())
             db.close()
 
             def day_shifts(gid, d):
@@ -1370,19 +1373,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if lv: return f"Free from {lv['available_from']}" if lv.get('available_from') else 'On Leave'
                 return 'Free'
 
-            scope = [day_filter] if day_filter in days else days
+            # Same rule as the board: working/on-leave means ANY day in scope,
+            # free means EVERY day in scope.
             def keep(g):
-                if only == 'working': return any(day_shifts(g['id'], d) for d in scope)
-                if only == 'leave':   return any(day_full_leave(g['id'], d) for d in scope)
+                if only == 'working': return any(day_shifts(g['id'], d) for d in days)
+                if only == 'leave':   return any(day_full_leave(g['id'], d) for d in days)
                 if only == 'free':
-                    return all(not day_shifts(g['id'], d) and not day_full_leave(g['id'], d) for d in scope)
+                    return all(not day_shifts(g['id'], d) and not day_full_leave(g['id'], d) for d in days)
                 return True
 
             rows = [[g['name']] + [cell(g['id'], d) for d in days] for g in guards if keep(g)]
-            headers = ['Guard'] + [f"{DAY_NAMES[i]} {d[8:10]}/{d[5:7]}" for i, d in enumerate(days)]
+            # Weekday comes from the date, not the loop index — `days` can be a
+            # subset, so index 0 isn't necessarily Monday.
+            headers = ['Guard'] + [f"{DAY_NAMES[datetime.strptime(d,'%Y-%m-%d').weekday()]} {d[8:10]}/{d[5:7]}"
+                                   for d in days]
             out = rows_to_xlsx(headers, rows, 'Availability')
             audit_db = get_db(); audit(audit_db, s, 'AVAILABILITY_EXPORT',
-                                      f'{days[0]}~{days[6]} ({only})'); audit_db.commit(); audit_db.close()
+                                      f'{days[0]}~{days[-1]} ({len(days)}d, {only})')
+            audit_db.commit(); audit_db.close()
             self.send_download(out, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                f'BOS_Availability_{days[0]}.xlsx'); return
 
