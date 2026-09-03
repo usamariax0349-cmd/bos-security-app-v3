@@ -813,6 +813,11 @@ tr:hover td{background:#f8fafc}
           </div>
         </div>
         <p style="padding:0 20px 12px;font-size:12px;color:var(--muted)">At a glance: which active guards are working, on leave, or free each day this week.</p>
+        <div class="gd-status-toggle" style="padding:0 20px 12px;border-bottom:none">
+          <button class="gd-status-btn" id="avail-filter-working" onclick="setAvailFilter('working')">Guards Working</button>
+          <button class="gd-status-btn" id="avail-filter-free" onclick="setAvailFilter('free')">Free Guards</button>
+          <button class="gd-status-btn active" id="avail-filter-all" onclick="setAvailFilter('all')">All Guards</button>
+        </div>
         <div class="tbl-wrap">
           <table id="avail-table">
             <thead></thead>
@@ -1204,7 +1209,7 @@ tr:hover td{background:#f8fafc}
       <div class="form-group"><label class="form-label">Date *</label><input type="date" id="shm-date" class="form-control"></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Start Time *</label><input type="time" id="shm-start" class="form-control"></div>
-        <div class="form-group"><label class="form-label">End Time *</label><input type="time" id="shm-end" class="form-control"></div>
+        <div class="form-group"><label class="form-label">End Time <span style="font-weight:400;color:var(--muted)">(blank = Required/open-ended)</span></label><input type="time" id="shm-end" class="form-control"></div>
       </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea id="shm-notes" class="form-control" rows="2"></textarea></div>
     </div>
@@ -1737,7 +1742,7 @@ function renderMyShiftsList(){
     return `<div class="cp-row ${sh.status==='completed'?'done':''}">
       <div>
         <div class="cp-name">${sh.site_name}${sh.position?' · '+sh.position:''}</div>
-        <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time}
+        <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time||'Required'}
           <span class="badge badge-${st.badge}" style="margin-left:6px">${st.label}</span>
         </div>
       </div>
@@ -2173,7 +2178,7 @@ async function loadLiveOps(){
           <td>${sh.position||'—'}</td>
           <td><span class="badge" style="${st.style}">${st.label}</span></td>
           <td style="font-size:12px">${sh.start_time}${sh.clock_in_at?` <small style="color:var(--muted)">(actual ${sh.clock_in_at.slice(11,16)})</small>`:''}</td>
-          <td style="font-size:12px">${sh.end_time}${sh.clock_out_at?` <small style="color:var(--muted)">(actual ${sh.clock_out_at.slice(11,16)})</small>`:''}</td>
+          <td style="font-size:12px">${sh.end_time||'Required'}${sh.clock_out_at?` <small style="color:var(--muted)">(actual ${sh.clock_out_at.slice(11,16)})</small>`:''}</td>
           <td style="font-size:12px">${verif}</td>
         </tr>`;
       }).join('');
@@ -2190,6 +2195,7 @@ function mondayOf(d){
 }
 function fmtISO(d){ const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 function shiftHours(start,end){
+  if(!end) return 0; // open-ended ("Required") shift — actual hours come from the real clock-out
   const [sh,sm]=start.split(':').map(Number), [eh,em]=end.split(':').map(Number);
   let mins = (eh*60+em)-(sh*60+sm); if(mins<=0) mins+=24*60;
   return mins/60;
@@ -2253,7 +2259,7 @@ function renderScheduleGrid(){
           const other = schedBy==='sites' ? sh.guard_name : sh.site_name;
           const cls = ['sched-chip', sh.status?`st-${sh.status}`:'', sh.published?'':'unpub'].filter(Boolean).join(' ');
           return `<button class="${cls}" onclick='editShift(${JSON.stringify(sh)})'>
-            <div class="sc-time">${sh.start_time}-${sh.end_time}</div>
+            <div class="sc-time">${sh.start_time}-${sh.end_time||'Required'}</div>
             <div class="sc-sub">${other}</div>
           </button>`;
         }).join('')}
@@ -2333,7 +2339,7 @@ async function saveShift(){
     end_time: document.getElementById('shm-end').value,
     notes: document.getElementById('shm-notes').value,
   };
-  if(!body.guard_id||!body.site_id||!body.shift_date||!body.start_time||!body.end_time){
+  if(!body.guard_id||!body.site_id||!body.shift_date||!body.start_time){
     toast('All required fields must be filled','error'); return;
   }
   try{
@@ -2553,34 +2559,52 @@ let gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
 // ── Weekly Availability (who's working / on leave / free, at a glance) ─────
 let availWeekStart = mondayOf(new Date());
+let availFilter = 'all'; // 'working' | 'free' | 'all'
+let availShifts = [], availLeave = [];
 function availGoToday(){ availWeekStart = mondayOf(new Date()); loadAvailability(); }
 function availShiftWeek(delta){ availWeekStart = new Date(availWeekStart.getTime()+delta*7*86400000); loadAvailability(); }
+function setAvailFilter(mode){
+  availFilter = mode;
+  ['working','free','all'].forEach(m=>document.getElementById(`avail-filter-${m}`).classList.toggle('active', m===mode));
+  renderAvailability();
+}
 async function loadAvailability(){
+  if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
+  const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
+  const dayISO = days.map(fmtISO);
+  const from = dayISO[0], to = dayISO[6];
+  try{
+    [availShifts, availLeave] = await Promise.all([
+      apiFetch(`/api/shifts?date_from=${from}&date_to=${to}`),
+      apiFetch(`/api/leave?date_from=${from}&date_to=${to}`)
+    ]);
+  }catch(e){ toast(e.message,'error'); return; }
+  renderAvailability();
+}
+function renderAvailability(){
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
   document.getElementById('avail-range-label').textContent =
     `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
   document.querySelector('#avail-table thead').innerHTML =
     `<tr><th>Guard</th>${days.map((d,i)=>`<th>${SCHED_DAY_NAMES[i]} <span style="font-weight:400;opacity:.7">${d.getDate()}/${d.getMonth()+1}</span></th>`).join('')}</tr>`;
-  if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
-  const from = dayISO[0], to = dayISO[6];
-  let shifts = [], leave = [];
-  try{
-    [shifts, leave] = await Promise.all([
-      apiFetch(`/api/shifts?date_from=${from}&date_to=${to}`),
-      apiFetch(`/api/leave?date_from=${from}&date_to=${to}`)
-    ]);
-  }catch(e){ toast(e.message,'error'); return; }
-  const activeGuards = guardsFull.filter(g=>g.active).sort((a,b)=>a.name.localeCompare(b.name));
+  const shifts = availShifts, leave = availLeave;
+  const isWorkingThisWeek = g => dayISO.some(iso => shifts.some(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled));
+  const isFreeAllWeek = g => dayISO.every(iso =>
+    !shifts.some(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled) &&
+    !leave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date));
+  let activeGuards = guardsFull.filter(g=>g.active).sort((a,b)=>a.name.localeCompare(b.name));
+  if(availFilter==='working') activeGuards = activeGuards.filter(isWorkingThisWeek);
+  else if(availFilter==='free') activeGuards = activeGuards.filter(isFreeAllWeek);
   document.getElementById('avail-tbody').innerHTML = activeGuards.length===0
-    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>No active guards</p></td></tr>`
+    ? `<tr><td colspan="8" class="empty-state"><div class="ei">👮</div><p>${availFilter==='working'?'No guards working this week':availFilter==='free'?'No guards fully free this week':'No active guards'}</p></td></tr>`
     : activeGuards.map(g=>{
       const cells = dayISO.map(iso=>{
         const onLeave = leave.some(l=>l.guard_id===g.id && iso>=l.start_date && iso<=l.end_date);
         if(onLeave) return `<td><span class="badge badge-rejected" style="font-size:10px">On Leave</span></td>`;
         const dayShifts = shifts.filter(sh=>sh.guard_id===g.id && sh.shift_date===iso && !sh.cancelled);
         if(!dayShifts.length) return `<td><span style="color:var(--green);font-size:12px;font-weight:600">Free</span></td>`;
-        return `<td>${dayShifts.map(sh=>`<strong style="color:var(--navy);font-size:12px">${sh.start_time}-${sh.end_time}</strong><br><small style="color:var(--muted)">${sh.site_name}</small>`).join('<br>')}</td>`;
+        return `<td>${dayShifts.map(sh=>`<strong style="color:var(--navy);font-size:12px">${sh.start_time}-${sh.end_time||'Required'}</strong><br><small style="color:var(--muted)">${sh.site_name}</small>`).join('<br>')}</td>`;
       }).join('');
       return `<tr><td><strong>${g.name}</strong></td>${cells}</tr>`;
     }).join('');
@@ -2915,7 +2939,7 @@ async function renderGuardCalendarTab(){
     const dayShifts = shifts.filter(sh=>sh.shift_date===iso);
     html += `<div class="gd-cal-cell ${inMonth?'':'other-month'}">
       <div class="gcd">${d.getDate()}</div>
-      ${dayShifts.map(sh=>`<div class="gd-cal-shift">${sh.start_time}-${sh.end_time}<br>${sh.site_name}</div>`).join('')}
+      ${dayShifts.map(sh=>`<div class="gd-cal-shift">${sh.start_time}-${sh.end_time||'Required'}<br>${sh.site_name}</div>`).join('')}
     </div>`;
   }
   document.getElementById('gd-cal-grid').innerHTML = html;
