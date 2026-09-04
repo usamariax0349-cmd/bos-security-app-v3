@@ -1368,6 +1368,16 @@ REPORTS = {
         'desc':'Generate a listing of all admin actions','fn':report_audit},
 }
 
+# ─── Server ───────────────────────────────────────────────────────────────────
+# Threaded so one slow request (a big PDF/Excel export, say) doesn't stall
+# every other admin and guard hitting the API at the same time — each request
+# already opens its own sqlite3 connection via get_db(), so concurrent
+# handling is safe as-is. The default TCP listen backlog (5) is also too
+# small for a burst of near-simultaneous connections (seen locally under
+# load testing as occasional connection resets), so it's raised here.
+class Server(http.server.ThreadingHTTPServer):
+    request_queue_size = 128
+
 # ─── Handler ──────────────────────────────────────────────────────────────────
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -3260,6 +3270,6 @@ if __name__ == '__main__':
     print(f"  Admin email:    {DEFAULT_ADMIN_EMAIL}")
     print(f"  Admin password: {DEFAULT_ADMIN_PASSWORD}")
     print(f"\n  Press Ctrl+C to stop\n{'='*55}\n")
-    with http.server.HTTPServer(('', PORT), Handler) as srv:
+    with Server(('', PORT), Handler) as srv:
         try: srv.serve_forever()
         except KeyboardInterrupt: print('\nStopped.')
