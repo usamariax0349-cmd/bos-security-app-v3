@@ -603,16 +603,30 @@ def init_db():
         ("guards", "salt",                 "ALTER TABLE guards ADD COLUMN salt TEXT"),
         ("guards", "must_change_password", "ALTER TABLE guards ADD COLUMN must_change_password INTEGER DEFAULT 0"),
         ("guards", "last_login",           "ALTER TABLE guards ADD COLUMN last_login TEXT"),
+        # Missed clock-in escalation — dedupes the alert email per shift so a
+        # repeat check never re-sends for the same miss (see check_missed_clockins).
+        ("shifts", "missed_alert_sent_at", "ALTER TABLE shifts ADD COLUMN missed_alert_sent_at TEXT"),
     ]
     existing_cols = {}
+    newly_added = set()
     for table, col, sql in migrations:
         if table not in existing_cols:
             existing_cols[table] = {r[1] for r in conn.execute(f'PRAGMA table_info({table})').fetchall()}
         if col not in existing_cols[table]:
             conn.execute(sql)
             existing_cols[table].add(col)
+            newly_added.add((table, col))
             print(f'  Migrated: added {table}.{col}')
     conn.commit()
+
+    # Backfill: on the deploy that introduces missed-clock-in alerts, treat
+    # every shift that already exists as already-alerted — otherwise the
+    # first escalation check after this deploy would email about every
+    # historical missed shift ever recorded, not just new ones going forward.
+    if ('shifts', 'missed_alert_sent_at') in newly_added:
+        conn.execute("UPDATE shifts SET missed_alert_sent_at=CURRENT_TIMESTAMP WHERE missed_alert_sent_at IS NULL")
+        conn.commit()
+        print('  Missed-clock-in alerts: backfilled existing shifts — only new misses will notify')
 
     # ── Roster seed for the week of 31 Aug – 6 Sep 2026 ──────────────────────
     # seed_data.py (run by the Procfile before this script, on every startup)
@@ -921,6 +935,64 @@ def check_expiry_reminders(conn):
         sent += 1
     if sent: conn.commit()
     return sent
+
+# Runs on its own timer (see _escalation_loop) rather than being piggybacked
+# on an admin page load like check_expiry_reminders — a missed shift needs
+# to reach someone within minutes, not whenever an admin next opens the
+# dashboard, which could be hours later or not at all that day.
+ESCALATION_INTERVAL_SECONDS = 5 * 60
+
+def check_missed_clockins(conn):
+    """Email admin the moment a scheduled shift crosses the missed-clock-in
+    grace period (CLOCK_IN_GRACE_MINUTES) with nobody having clocked in, and
+    nudge the guard in-app too. Deduped per shift via shifts.missed_alert_sent_at
+    so a repeat check never re-sends for the same miss. Safe to call often —
+    most calls find nothing new due.
+    """
+    now = datetime.now()
+    cutoff_date = (now - timedelta(days=1)).strftime('%Y-%m-%d')
+    candidates = RL(conn.execute('''
+        SELECT sh.*, g.name as guard_name, s.name as site_name, s.client_name
+        FROM shifts sh
+        JOIN guards g ON g.id = sh.guard_id
+        JOIN sites  s ON s.id = sh.site_id
+        WHERE sh.cancelled = 0 AND sh.clock_in_at IS NULL
+          AND sh.missed_alert_sent_at IS NULL AND sh.shift_date >= ?
+    ''', (cutoff_date,)).fetchall())
+    sent = 0
+    for sh in candidates:
+        try:
+            start_dt = datetime.strptime(f"{sh['shift_date']} {sh['start_time']}", '%Y-%m-%d %H:%M')
+        except ValueError:
+            continue
+        if now <= start_dt + timedelta(minutes=CLOCK_IN_GRACE_MINUTES):
+            continue  # not missed yet
+        late_by = int((now - start_dt).total_seconds() // 60)
+        send_email(DEFAULT_ADMIN_EMAIL,
+                   f'{COMPANY_NAME}: Missed clock-in — {sh["guard_name"]} @ {sh["site_name"]}',
+                   f"{sh['guard_name']} was due to start at {sh['site_name']} ({sh['client_name']}) "
+                   f"at {sh['start_time']} on {sh['shift_date']} and hasn't clocked in "
+                   f"({late_by} minute(s) late). Please check in with them.")
+        conn.execute('INSERT INTO reminders (id,guard_id,message) VALUES (?,?,?)',
+                    (str(uuid.uuid4()), sh['guard_id'],
+                     f"You were due to start at {sh['site_name']} at {sh['start_time']} and haven't "
+                     f"clocked in yet. Please clock in now or contact your supervisor."))
+        conn.execute('UPDATE shifts SET missed_alert_sent_at=? WHERE id=?', (now.isoformat(), sh['id']))
+        audit(conn, {'admin_id':'','name':'System'}, 'MISSED_CLOCKIN_ALERT',
+              f"{sh['guard_name']} @ {sh['site_name']} — {sh['shift_date']} {sh['start_time']} ({late_by}m late)")
+        sent += 1
+    if sent: conn.commit()
+    return sent
+
+def _escalation_loop():
+    while True:
+        time.sleep(ESCALATION_INTERVAL_SECONDS)
+        try:
+            db = get_db()
+            check_missed_clockins(db)
+            db.close()
+        except Exception as e:
+            print(f'  ESCALATION: missed clock-in check failed: {e}')
 
 AVAIL_STALE_DAYS = 14  # matches the threshold the admin board already uses for its freshness flag
 
@@ -3262,6 +3334,11 @@ if __name__ == '__main__':
     except Exception as e:
         print(f'  BACKUP: startup snapshot failed: {e}')
     threading.Thread(target=_backup_loop, daemon=True).start()
+    try:
+        db = get_db(); check_missed_clockins(db); db.close()
+    except Exception as e:
+        print(f'  ESCALATION: startup missed clock-in check failed: {e}')
+    threading.Thread(target=_escalation_loop, daemon=True).start()
     print(f"\n{'='*55}")
     print(f"  {COMPANY_NAME}")
     print(f"  Guard Management System  v3.0")
