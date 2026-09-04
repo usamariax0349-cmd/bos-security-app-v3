@@ -2223,10 +2223,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             row = R(db.execute('SELECT * FROM admins WHERE email=? AND active=1',
                                (email_in,)).fetchone())
             db.close()
-            print(f"  LOGIN: email={email_in!r} found={'YES' if row else 'NO'}")
             if row:
                 pw_ok = verify_password(data.get('password',''), row['password_hash'], row['salt'])
-                print(f"  LOGIN: password_check={'PASS' if pw_ok else 'FAIL'} role={row.get('role')}")
                 if not pw_ok:
                     record_login_failure(ip)
                     self.err('Invalid email or password', 401); return
