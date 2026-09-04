@@ -1313,7 +1313,13 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div id="tab-audit" class="tab-content">
       <div class="section">
         <div class="section-head"><span class="section-title">Audit Log</span>
-          <button class="btn btn-ghost btn-sm" onclick="loadAudit()">↻ Refresh</button>
+          <div style="display:flex;align-items:center;gap:14px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-weight:400">
+              <input type="checkbox" id="audit-include-guard" onchange="loadAudit()"> Show guard activity
+            </label>
+            <button class="btn btn-ghost btn-sm" id="audit-backup-btn" onclick="downloadDbBackup()" style="display:none">⬇ Download Backup</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadAudit()">↻ Refresh</button>
+          </div>
         </div>
         <div class="tbl-wrap">
           <table>
@@ -4588,7 +4594,9 @@ async function toggleAdminActive(id, current){
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 async function loadAudit(){
   try{
-    const rows=await apiFetch('/api/audit');
+    document.getElementById('audit-backup-btn').style.display = currentRole==='superadmin' ? '' : 'none';
+    const includeGuard = document.getElementById('audit-include-guard').checked;
+    const rows=await apiFetch('/api/audit?include_guard='+(includeGuard?'1':'0'));
     document.getElementById('audit-tbody').innerHTML=rows.length===0
       ? `<tr><td colspan="4" class="empty-state"><div class="ei">📜</div><p>No actions logged yet</p></td></tr>`
       : rows.map(r=>`<tr>
@@ -4598,6 +4606,10 @@ async function loadAudit(){
           <td style="font-size:12px;color:var(--muted)">${r.details||''}</td>
         </tr>`).join('');
   }catch(e){ toast(e.message,'error'); }
+}
+function downloadDbBackup(){
+  const stamp = fmtISO(new Date()).replace(/-/g,'');
+  downloadFile('/api/backup/download', `BOS_backup_${stamp}.db`);
 }
 
 // ── Logo ───────────────────────────────────────────────────────────────────────

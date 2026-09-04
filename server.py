@@ -5,7 +5,7 @@ Production | Multi-Admin | Roles | Audit Log | v3.0
 Run:  py server.py  →  http://localhost:5000
 """
 
-import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time
+import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time, threading
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
@@ -85,7 +85,21 @@ LOGIN_MAX_ATTEMPTS  = 10
 LOGIN_WINDOW_SECONDS = 15 * 60
 _login_failures = {}   # ip → [timestamps of recent failed attempts]
 
+_last_failure_sweep = time.time()
+FAILURE_SWEEP_INTERVAL = 3600  # prune stale IP entries at most this often
+
+def _prune_stale_login_failures():
+    global _last_failure_sweep
+    now = time.time()
+    if now - _last_failure_sweep < FAILURE_SWEEP_INTERVAL:
+        return
+    _last_failure_sweep = now
+    for ip in [ip for ip, attempts in _login_failures.items()
+               if not attempts or now - attempts[-1] > LOGIN_WINDOW_SECONDS]:
+        _login_failures.pop(ip, None)
+
 def login_rate_limited(ip):
+    _prune_stale_login_failures()
     now = time.time()
     attempts = [t for t in _login_failures.get(ip, []) if now - t < LOGIN_WINDOW_SECONDS]
     _login_failures[ip] = attempts
@@ -124,6 +138,39 @@ def save_uploaded_photo(data):
     with open(os.path.join(UPLOADS_PATH, photo), 'wb') as f:
         f.write(base64.b64decode(data['photo_b64']))
     return photo
+
+# ─── Database backups ─────────────────────────────────────────────────────────
+# Rotating on-volume snapshots via sqlite3's own backup API (atomic and safe
+# even if a write is mid-transaction — unlike copying the file bytes directly).
+# This alone doesn't protect against total volume loss, since the snapshots
+# live on the same volume as the live DB — that's what the superadmin-only
+# "Download Backup" endpoint further down is for, so a copy can be pulled
+# off-Railway too.
+BACKUPS_PATH = os.path.join(DATA_DIR, 'data', 'backups')
+os.makedirs(BACKUPS_PATH, exist_ok=True)
+BACKUP_INTERVAL_SECONDS = 12 * 3600
+BACKUP_KEEP = 14
+
+def run_db_backup():
+    stamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    dest = os.path.join(BACKUPS_PATH, f'security_{stamp}.db')
+    src = sqlite3.connect(DB_PATH)
+    dst = sqlite3.connect(dest)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close(); src.close()
+    kept = sorted(f for f in os.listdir(BACKUPS_PATH) if f.startswith('security_') and f.endswith('.db'))
+    for stale in kept[:-BACKUP_KEEP]:
+        try: os.remove(os.path.join(BACKUPS_PATH, stale))
+        except OSError: pass
+    return dest
+
+def _backup_loop():
+    while True:
+        time.sleep(BACKUP_INTERVAL_SECONDS)
+        try: run_db_backup()
+        except Exception as e: print(f'  BACKUP: snapshot failed: {e}')
 
 # ─── Password Hashing ─────────────────────────────────────────────────────────
 def hash_password(password, salt=None):
@@ -1968,10 +2015,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json(rows); return
 
         if path == '/api/audit':
+            # Guard actions (logins, clock-in/out, incidents, checkpoint scans,
+            # availability changes) share this table so there's one durable
+            # record of "who did what, when" for compliance/dispute purposes —
+            # but there are 100+ guards clocking in and out daily, so by
+            # default they're filtered out here to keep the admin-actions view
+            # usable; include_guard=1 brings them back in for when they're
+            # actually needed.
+            include_guard = qs.get('include_guard',['0'])[0] == '1'
+            where = '' if include_guard else "WHERE action NOT LIKE 'GUARD_%'"
             db = get_db()
             self.send_json(RL(db.execute(
-                'SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 300').fetchall()))
+                f'SELECT * FROM audit_log {where} ORDER BY created_at DESC LIMIT 300').fetchall()))
             db.close(); return
+
+        if path == '/api/backup/download':
+            # Superadmin only — streams a fresh snapshot of the live DB so it can
+            # be saved off-Railway. The on-volume rotating snapshots (BACKUPS_PATH)
+            # protect against a bad migration or accidental delete, but not
+            # against losing the volume itself; this is the only thing that does.
+            s = self.require_admin('superadmin')
+            if s is None: return
+            try:
+                path_ = run_db_backup()
+            except Exception as e:
+                self.err(f'Backup failed: {e}', 500); return
+            with open(path_, 'rb') as f: data = f.read()
+            db = get_db()
+            audit(db, s, 'BACKUP_DOWNLOAD'); db.commit(); db.close()
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.send_download(data, 'application/octet-stream', f'bos_backup_{stamp}.db'); return
 
         if path == '/api/incidents':
             db = get_db(); where=[]; params=[]
@@ -2129,6 +2202,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('UPDATE guards SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), row['id']))
+            audit(db, {'admin_id':row['id'],'name':row['name']}, 'GUARD_LOGIN')
             db.commit(); db.close()
             self.send_json({'token':token,'id':row['id'],'name':row['name'],'company':COMPANY_NAME}); return
 
@@ -2214,6 +2288,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 (sid,gsx['guard_id'],data['site_id'],data['shift_date'],
                  data['start_time'],data['end_time'],float(data['total_hours']),
                  data.get('notes',''), photo, lat, lng, dist, location_verified))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_SUBMISSION',
+                  f"{data['shift_date']} {data['start_time']}-{data['end_time']} @ {site['name'] if site else data['site_id']}")
             db.commit(); db.close()
             self.send_json({'id':sid,'message':'Shift submitted successfully!'}, 201); return
 
@@ -2238,6 +2314,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m)
                 VALUES (?,?,?,?,?,?,?,?)''',
                 (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_CHECKPOINT_SCAN', cp['name'])
             db.commit(); db.close()
             self.send_json({'ok':True,'id':scan_id,'distance_m':round(dist,1)}, 201); return
 
@@ -2253,6 +2330,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                           VALUES (?,?,?,?,?,?,?,?)''',
                        (iid, gsx['guard_id'], data['site_id'], data['type'],
                         data.get('description',''), photo, data.get('lat'), data.get('lng')))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_INCIDENT_REPORT', data['type'])
             db.commit(); db.close()
             self.send_json({'id':iid,'message':'Incident reported.'}, 201); return
 
@@ -2281,6 +2359,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             data.get('available_from','') if data['mode']=='partial' else ''))
             db.execute('UPDATE guards SET availability_confirmed_at=? WHERE id=?',
                        (datetime.now().isoformat(), gsx['guard_id']))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_AVAILABILITY_SET',
+                  f"{date}: {data['mode']}" + (f" from {data.get('available_from')}" if data['mode']=='partial' else ''))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
@@ -2359,6 +2439,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 verified = 1
             db.execute('''UPDATE shifts SET clock_in_at=?, clock_in_lat=?, clock_in_lng=?, clock_in_verified=?
                           WHERE id=?''', (datetime.now().isoformat(), lat, lng, verified, m_ci.group(1)))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_CLOCK_IN', sh['site_name'])
             db.commit()
             row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
@@ -2408,6 +2489,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('''UPDATE shifts SET clock_out_at=?, clock_out_lat=?, clock_out_lng=?,
                           clock_out_verified=?, submission_id=? WHERE id=?''',
                        (now.isoformat(), lat, lng, verified, sub_id, m_co.group(1)))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_CLOCK_OUT',
+                  f"{sh['site_name']} · {total_hours}h")
             db.commit()
             row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
@@ -3164,6 +3247,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     init_db()
+    try:
+        run_db_backup()
+    except Exception as e:
+        print(f'  BACKUP: startup snapshot failed: {e}')
+    threading.Thread(target=_backup_loop, daemon=True).start()
     print(f"\n{'='*55}")
     print(f"  {COMPANY_NAME}")
     print(f"  Guard Management System  v3.0")
