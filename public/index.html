@@ -585,6 +585,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
       <div class="guard-subtitle">Guard Portal</div>
+      <div id="offline-queue-badge" class="hidden" style="margin-top:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;padding:8px 12px;border-radius:8px;font-size:12px;text-align:center"></div>
     </div>
 
     <!-- Step 0: Guard login -->
@@ -1786,6 +1787,110 @@ async function guardApiFetch(url, opts={}) {
   return res.json();
 }
 
+// ── Offline queue (guard clock-in/out + checkpoint scans) ───────────────────
+// Sites with poor signal — basements, underground carparks, stairwells — are
+// exactly where a guard most needs to clock in or scan a checkpoint, so those
+// three actions queue locally on a network failure instead of just erroring,
+// and replay automatically once a connection is back. Clock-in/out are
+// already server-side idempotent (a repeat is rejected with "already clocked
+// in/out", which a replay treats as success); a checkpoint scan is a
+// legitimate repeatable action so it carries its own client-generated
+// idempotency id instead, deduped server-side.
+const OFFLINE_DB_NAME = 'bos_offline_queue', OFFLINE_DB_VERSION = 1, OFFLINE_STORE = 'pending';
+function isNetworkError(e){ return e instanceof TypeError; }
+function offlineDB(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(OFFLINE_STORE, {keyPath:'id'}); };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function queueOfflineAction(action){
+  try{
+    const db = await offlineDB();
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+      tx.objectStore(OFFLINE_STORE).put(action);
+      tx.oncomplete = resolve; tx.onerror = ()=>reject(tx.error);
+    });
+  }catch(e){ /* IndexedDB unavailable (private mode, etc.) — the action is simply lost, same as before this feature existed */ }
+  await updateOfflineBadge();
+}
+async function getOfflineQueue(){
+  try{
+    const db = await offlineDB();
+    return await new Promise((resolve, reject)=>{
+      const tx = db.transaction(OFFLINE_STORE, 'readonly');
+      const req = tx.objectStore(OFFLINE_STORE).getAll();
+      req.onsuccess = ()=>resolve(req.result.sort((a,b)=>a.created_at-b.created_at));
+      req.onerror = ()=>reject(req.error);
+    });
+  }catch(e){ return []; }
+}
+async function removeOfflineAction(id){
+  try{
+    const db = await offlineDB();
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+      tx.objectStore(OFFLINE_STORE).delete(id);
+      tx.oncomplete = resolve; tx.onerror = ()=>reject(tx.error);
+    });
+  }catch(e){}
+}
+async function updateOfflineBadge(){
+  const queue = await getOfflineQueue();
+  offlinePendingShiftIds = new Set(queue.filter(a=>a.type==='clock_in').map(a=>a.shiftId));
+  const badge = document.getElementById('offline-queue-badge');
+  if(!queue.length){ badge.classList.add('hidden'); return; }
+  badge.textContent = `🔄 ${queue.length} action${queue.length>1?'s':''} waiting to sync — will send automatically once you're back online`;
+  badge.classList.remove('hidden');
+}
+let offlineSyncing = false;
+async function syncPendingActions(){
+  if(offlineSyncing || !guardAuthToken) return;
+  offlineSyncing = true;
+  let syncedAny = false;
+  try{
+    const queue = await getOfflineQueue();
+    for(const action of queue){
+      let res;
+      try{
+        res = await fetch(action.url, {method:'POST',
+          headers:{'Content-Type':'application/json','X-Auth-Token':guardAuthToken},
+          body: JSON.stringify(action.body)});
+      }catch(e){
+        if(isNetworkError(e)) break;  // still offline — leave the rest queued, retry later
+        continue;
+      }
+      if(res.ok){ await removeOfflineAction(action.id); syncedAny = true; continue; }
+      const errBody = await res.json().catch(()=>({}));
+      const msg = (errBody.error||'').toLowerCase();
+      const alreadyDone = action.type!=='checkpoint_scan' &&
+        (msg.includes('already clocked in') || msg.includes('already clocked out'));
+      await removeOfflineAction(action.id);
+      if(alreadyDone){ syncedAny = true; }
+      else{
+        toast(`A queued action couldn't be completed: ${errBody.error||'unknown error'}. Please contact your supervisor.`, 'error', 6000);
+      }
+    }
+  } finally {
+    offlineSyncing = false;
+    updateOfflineBadge();
+    // A real reload only makes sense once we know we're actually online
+    // (proven by at least one successful sync just now) — otherwise it would
+    // just fail and blank out whatever's already correctly on screen.
+    if(!document.getElementById('step-myshifts').classList.contains('hidden')){
+      if(syncedAny) loadMyShifts(); else renderMyShiftsList();
+    }
+  }
+}
+function cacheGuardIdentity(g){ try{ localStorage.setItem('sg_guard_identity', JSON.stringify({id:g.id,name:g.name})); }catch(e){} }
+function cachedGuardIdentity(){ try{ return JSON.parse(localStorage.getItem('sg_guard_identity')||'null'); }catch(e){ return null; } }
+window.addEventListener('online', syncPendingActions);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncPendingActions(); });
+setInterval(syncPendingActions, 30000);
+
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function hideAllPages(){
   ['guard-page','login-page','admin-page','client-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
@@ -1966,10 +2071,29 @@ async function init(){
         return;
       }
       selectedGuard = {id:me.id, name:me.name};
+      cacheGuardIdentity(selectedGuard);
       showModeMenu();
       checkReminders();
       checkUnreadMessages();
-    }catch(e){ guardAuthToken=null; localStorage.removeItem('sg_guard_token'); }
+      syncPendingActions();
+    }catch(e){
+      if(isNetworkError(e)){
+        // No signal right now — don't sign the guard out just because we
+        // can't reach the server. Fall back to their cached identity so the
+        // portal (and any queued offline actions) is still reachable; the
+        // online-event/periodic retry in syncPendingActions picks up once
+        // a connection returns.
+        const cached = cachedGuardIdentity();
+        if(cached){
+          selectedGuard = cached;
+          showModeMenu();
+          updateOfflineBadge();
+          toast('You appear to be offline — showing your last known info', 'info', 4000);
+        }
+      } else {
+        guardAuthToken=null; localStorage.removeItem('sg_guard_token');
+      }
+    }
   }
 }
 
@@ -2050,6 +2174,7 @@ function renderGeoMap(elId, site, guardLat, guardLng, radius){
 
 // ── My Shifts (roster + clock in/out) ────────────────────────────────────────
 let myShiftsData = [];
+let offlinePendingShiftIds = new Set();  // shifts with a queued-but-not-yet-synced clock-in
 const SHIFT_STATUS_LABEL = {
   scheduled:  {label:'Awaiting Clock In', badge:'pending'},
   missed:     {label:'Missed Clock In',   badge:'rejected'},
@@ -2075,9 +2200,12 @@ function renderMyShiftsList(){
     return;
   }
   listEl.innerHTML = myShiftsData.map(sh=>{
+    const pendingSync = offlinePendingShiftIds.has(sh.id) && (sh.status==='scheduled' || sh.status==='missed');
     const st = SHIFT_STATUS_LABEL[sh.status] || {label:sh.status, badge:'pending'};
     let action = '';
-    if(sh.status==='scheduled' || sh.status==='missed'){
+    if(pendingSync){
+      action = `<span style="font-size:11px;color:#fbbf24">🔄 Syncing…</span>`;
+    } else if(sh.status==='scheduled' || sh.status==='missed'){
       action = `<button class="btn btn-sm btn-gold" onclick="clockIn('${sh.id}')">Clock In</button>`;
     } else if(sh.status==='in_progress'){
       action = `<button class="btn btn-sm btn-gold" onclick="openClockOut('${sh.id}')">Clock Out</button>`;
@@ -2088,7 +2216,7 @@ function renderMyShiftsList(){
       <div>
         <div class="cp-name">${sh.site_name}${sh.position?' · '+sh.position:''}</div>
         <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time||'Required'}
-          <span class="badge badge-${st.badge}" style="margin-left:6px">${st.label}</span>
+          <span class="badge badge-${pendingSync?'pending':st.badge}" style="margin-left:6px">${pendingSync?'Clocked in (offline)':st.label}</span>
         </div>
       </div>
       ${action}
@@ -2185,14 +2313,23 @@ function clockIn(shiftId){
   const statusEl = document.getElementById('myshifts-status');
   statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
   navigator.geolocation.getCurrentPosition(async pos=>{
+    const body = {lat:pos.coords.latitude, lng:pos.coords.longitude};
     try{
-      await guardApiFetch(`/api/guard/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify({
-        lat:pos.coords.latitude, lng:pos.coords.longitude
-      })});
+      await guardApiFetch(`/api/guard/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify(body)});
       statusEl.classList.add('hidden');
       toast('Clocked in ✓','success');
       loadMyShifts();
-    }catch(e){ statusEl.className='geo-status bad'; statusEl.innerHTML=e.message; }
+    }catch(e){
+      if(isNetworkError(e)){
+        await queueOfflineAction({id:crypto.randomUUID(), type:'clock_in', shiftId,
+          url:`/api/guard/shifts/${shiftId}/clock-in`, body, created_at:Date.now()});
+        statusEl.classList.add('hidden');
+        toast('No connection — clock-in saved, will sync automatically','info',5000);
+        renderMyShiftsList();  // local re-render only — a network reload would just fail right now
+        return;
+      }
+      statusEl.className='geo-status bad'; statusEl.innerHTML=e.message;
+    }
   }, err=>{
     statusEl.className='geo-status bad'; statusEl.innerHTML='⚠️ Could not get your location: '+err.message;
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
@@ -2245,6 +2382,14 @@ async function confirmClockOut(){
       showGuardCard('step-success');
       loadMyShifts();
     }catch(e){
+      if(isNetworkError(e)){
+        await queueOfflineAction({id:crypto.randomUUID(), type:'clock_out', shiftId:clockOutShiftId,
+          url:`/api/guard/shifts/${clockOutShiftId}/clock-out`, body, created_at:Date.now()});
+        document.getElementById('success-title').textContent='Clock-Out Saved!';
+        document.getElementById('success-sub').textContent="You're offline right now — this will sync automatically once you're back online.";
+        showGuardCard('step-success');
+        return;
+      }
       statusEl.className='geo-status bad'; statusEl.innerHTML=e.message;
       btn.disabled=false; btn.textContent='✓ Confirm Clock Out';
     }
@@ -2275,10 +2420,12 @@ async function guardDoLogin(){
       return;
     }
     selectedGuard = {id:d.id, name:d.name};
+    cacheGuardIdentity(selectedGuard);
     document.getElementById('glogin-email').value=''; document.getElementById('glogin-pass').value='';
     showModeMenu();
     checkReminders();
     checkUnreadMessages();
+    syncPendingActions();
   }catch(e){ errEl.textContent = e.message; errEl.style.display='block'; }
 }
 async function guardSubmitFirstPassword(){
@@ -2292,16 +2439,19 @@ async function guardSubmitFirstPassword(){
     const d = await guardApiFetch('/api/guard/setup-password', {method:'POST',
       body: JSON.stringify({new_password:np, confirm_password:cp})});
     selectedGuard = {id:d.id, name:d.name};
+    cacheGuardIdentity(selectedGuard);
     closeModal('guard-firstpw-modal');
     showModeMenu();
     checkReminders();
     checkUnreadMessages();
+    syncPendingActions();
   }catch(e){ errEl.textContent = e.message; errEl.style.display='block'; }
 }
 async function guardLogout(){
   try{ await guardApiFetch('/api/guard/logout', {method:'POST'}); }catch(e){}
   guardAuthToken = null; selectedGuard = null;
   localStorage.removeItem('sg_guard_token');
+  localStorage.removeItem('sg_guard_identity');
   showGuardCard('step-0');
 }
 
@@ -2365,14 +2515,24 @@ function scanCheckpoint(cpId){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
   if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
+    const body = {checkpoint_id:cpId, lat:pos.coords.latitude, lng:pos.coords.longitude};
     try{
-      const d = await guardApiFetch('/api/guard/checkpoints/scan',{method:'POST',body:JSON.stringify({
-        checkpoint_id:cpId, lat:pos.coords.latitude, lng:pos.coords.longitude
-      })});
+      const d = await guardApiFetch('/api/guard/checkpoints/scan',{method:'POST',body:JSON.stringify(body)});
       patrolScanned.add(cpId);
       renderPatrolList();
       toast(`Checked in ✓ (${d.distance_m}m from checkpoint)`,'success');
-    }catch(e){ toast(e.message,'error'); }
+    }catch(e){
+      if(isNetworkError(e)){
+        const clientScanId = crypto.randomUUID();
+        await queueOfflineAction({id:clientScanId, type:'checkpoint_scan', cpId,
+          url:'/api/guard/checkpoints/scan', body:{...body, client_scan_id:clientScanId}, created_at:Date.now()});
+        patrolScanned.add(cpId);
+        renderPatrolList();
+        toast('No connection — check-in saved, will sync automatically','info',5000);
+        return;
+      }
+      toast(e.message,'error');
+    }
   }, err=>{ toast('Could not get your location: '+err.message,'error'); }, {enableHighAccuracy:true, timeout:12000});
 }
 

@@ -606,6 +606,14 @@ def init_db():
         # Missed clock-in escalation — dedupes the alert email per shift so a
         # repeat check never re-sends for the same miss (see check_missed_clockins).
         ("shifts", "missed_alert_sent_at", "ALTER TABLE shifts ADD COLUMN missed_alert_sent_at TEXT"),
+        # Offline queue support — a guard with no signal queues a checkpoint
+        # scan locally and replays it once back online. Unlike clock-in/out
+        # (already naturally idempotent: a repeat is rejected with "already
+        # clocked in/out"), a scan is a legitimate repeatable action, so a
+        # replayed request needs its own dedup key to avoid a real double-scan
+        # if the first attempt actually reached the server but the response
+        # never made it back to the guard's phone.
+        ("checkpoint_scans", "client_scan_id", "ALTER TABLE checkpoint_scans ADD COLUMN client_scan_id TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -775,6 +783,11 @@ def init_db():
         conn.commit()
     except sqlite3.IntegrityError as e:
         print(f'  WARNING: guards_email unique index not created — duplicate guard emails exist: {e}')
+
+    # Offline checkpoint-scan replay dedup — see the migrations list above.
+    conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS checkpoint_scans_client_scan_id
+                    ON checkpoint_scans(client_scan_id) WHERE client_scan_id IS NOT NULL''')
+    conn.commit()
 
     # One-time bootstrap: every guard predates password logins, so give each
     # active one without a password a random temp password now rather than
@@ -2378,6 +2391,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for f in ['checkpoint_id','lat','lng']:
                 if data.get(f) is None: self.err(f'{f} required'); return
             db = get_db()
+            # Offline queue replay: the client attaches the same client_scan_id
+            # every time it retries this exact scan attempt. If it already
+            # landed (the first attempt reached the server but the guard's
+            # phone never got the response before losing signal), return that
+            # scan's result instead of recording a second, phantom patrol pass.
+            client_scan_id = data.get('client_scan_id')
+            if client_scan_id:
+                existing = R(db.execute('SELECT id, distance_m FROM checkpoint_scans WHERE client_scan_id=?',
+                                        (client_scan_id,)).fetchone())
+                if existing:
+                    db.close()
+                    self.send_json({'ok':True,'id':existing['id'],
+                                    'distance_m':round(existing['distance_m'],1)}, 200); return
             cp = R(db.execute('SELECT * FROM checkpoints WHERE id=? AND active=1',
                               (data['checkpoint_id'],)).fetchone())
             if not cp:
@@ -2390,10 +2416,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.err(f"You must be within {radius}m of '{cp['name']}' to check in. "
                          f"You are currently {int(dist)}m away.", 403); return
             scan_id = str(uuid.uuid4())
-            db.execute('''INSERT INTO checkpoint_scans
-                (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m)
-                VALUES (?,?,?,?,?,?,?,?)''',
-                (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist))
+            try:
+                db.execute('''INSERT INTO checkpoint_scans
+                    (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m,client_scan_id)
+                    VALUES (?,?,?,?,?,?,?,?,?)''',
+                    (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist, client_scan_id))
+            except sqlite3.IntegrityError:
+                # Two replays of the same offline-queued scan raced each other
+                # past the existence check above — the other one won, so
+                # return its result instead of erroring the guard's retry.
+                existing = R(db.execute('SELECT id, distance_m FROM checkpoint_scans WHERE client_scan_id=?',
+                                        (client_scan_id,)).fetchone())
+                db.close()
+                self.send_json({'ok':True,'id':existing['id'],
+                                'distance_m':round(existing['distance_m'],1)}, 200); return
             audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_CHECKPOINT_SCAN', cp['name'])
             db.commit(); db.close()
             self.send_json({'ok':True,'id':scan_id,'distance_m':round(dist,1)}, 201); return
