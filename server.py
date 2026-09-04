@@ -152,7 +152,7 @@ BACKUP_INTERVAL_SECONDS = 12 * 3600
 BACKUP_KEEP = 14
 
 def run_db_backup():
-    stamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     dest = os.path.join(BACKUPS_PATH, f'security_{stamp}.db')
     src = sqlite3.connect(DB_PATH)
     dst = sqlite3.connect(dest)
