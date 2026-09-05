@@ -633,6 +633,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <span><div class="mt">Messages<span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms">Chat directly with the office</div></span>
         </button>
       </div>
+      <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
+      <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
+        🔔 Notifications on — <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline">turn off</a>
+      </div>
       <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
     </div>
 
@@ -1887,6 +1891,58 @@ async function syncPendingActions(){
 }
 function cacheGuardIdentity(g){ try{ localStorage.setItem('sg_guard_identity', JSON.stringify({id:g.id,name:g.name})); }catch(e){} }
 function cachedGuardIdentity(){ try{ return JSON.parse(localStorage.getItem('sg_guard_identity')||'null'); }catch(e){ return null; } }
+
+// ── Push notifications (new messages, new shifts published) ────────────────
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function refreshPushUI(){
+  const btn = document.getElementById('push-enable-btn');
+  const note = document.getElementById('push-enabled-note');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
+    btn.classList.add('hidden'); note.classList.add('hidden'); return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(sub){ btn.classList.add('hidden'); note.classList.remove('hidden'); return; }
+    note.classList.add('hidden');
+    if(Notification.permission === 'denied'){ btn.classList.add('hidden'); return; }
+    const cfg = await guardApiFetch('/api/guard/push/vapid-key').catch(()=>({enabled:false}));
+    btn.classList.toggle('hidden', !cfg.enabled);
+  }catch(e){ btn.classList.add('hidden'); note.classList.add('hidden'); }
+}
+async function enablePushNotifications(){
+  try{
+    const cfg = await guardApiFetch('/api/guard/push/vapid-key');
+    if(!cfg.enabled || !cfg.public_key){ toast('Notifications are not available right now','error'); return; }
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ toast('Notifications permission was not granted','error'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(cfg.public_key)
+    });
+    await guardApiFetch('/api/guard/push/subscribe', {method:'POST', body: JSON.stringify({subscription: sub.toJSON()})});
+    toast('Notifications enabled ✓','success');
+    refreshPushUI();
+  }catch(e){ toast('Could not enable notifications: '+e.message,'error'); }
+}
+async function disablePushNotifications(){
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(sub){
+      await guardApiFetch('/api/guard/push/unsubscribe', {method:'POST', body: JSON.stringify({endpoint: sub.endpoint})});
+      await sub.unsubscribe();
+    }
+    toast('Notifications turned off','info');
+    refreshPushUI();
+  }catch(e){ toast('Could not turn off notifications: '+e.message,'error'); }
+}
 window.addEventListener('online', syncPendingActions);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncPendingActions(); });
 setInterval(syncPendingActions, 30000);
@@ -2110,6 +2166,7 @@ function showGuardCard(id){
 function showModeMenu(){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
   showGuardCard('step-menu');
+  refreshPushUI();
 }
 function startShiftFlow(){
   showGuardCard('step-myshifts');
