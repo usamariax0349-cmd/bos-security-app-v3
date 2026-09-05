@@ -25,6 +25,14 @@ try:
 except ImportError:
     PIL_OK = False
 
+try:
+    from pywebpush import webpush, WebPushException
+    from py_vapid import Vapid02
+    from py_vapid.utils import b64urlencode
+    PYWEBPUSH_OK = True
+except ImportError:
+    PYWEBPUSH_OK = False
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 PORT         = int(os.environ.get('PORT', 5000))
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
@@ -240,6 +248,55 @@ def send_email(to_email, subject, body_text):
     except Exception as e:
         print(f"  EMAIL: Failed to send to {to_email}: {e}")
         return False
+
+# ─── Web Push ─────────────────────────────────────────────────────────────────
+# So a guard finds out about a new message or a new shift without having to
+# open the app and poll for it. VAPID keys are generated once (see init_db)
+# and kept in the DB rather than requiring an env var, so this works with no
+# setup step and survives restarts/redeploys like everything else here.
+def generate_vapid_keypair():
+    v = Vapid02(); v.generate_keys()
+    priv = v.private_key.private_numbers().private_value.to_bytes(32, 'big')
+    pub_n = v.public_key.public_numbers()
+    pub = b'\x04' + pub_n.x.to_bytes(32, 'big') + pub_n.y.to_bytes(32, 'big')
+    return b64urlencode(priv), b64urlencode(pub)
+
+def get_vapid_keys():
+    db = get_db()
+    row = R(db.execute('SELECT private_key, public_key FROM push_config WHERE id=1').fetchone())
+    db.close()
+    return (row['private_key'], row['public_key']) if row else (None, None)
+
+def send_push(guard_id, title, body, url='/'):
+    """Best-effort — a push failure must never break whatever triggered it
+    (sending a message, publishing a shift). Prunes subscriptions the push
+    service reports as gone (410/404) so they stop being retried forever."""
+    if not PYWEBPUSH_OK:
+        return
+    priv_key, _ = get_vapid_keys()
+    if not priv_key:
+        return
+    db = get_db()
+    subs = RL(db.execute('SELECT * FROM push_subscriptions WHERE guard_id=?', (guard_id,)).fetchall())
+    if not subs:
+        db.close(); return
+    payload = json.dumps({'title': title, 'body': body, 'url': url})
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={'endpoint': sub['endpoint'],
+                                    'keys': {'p256dh': sub['p256dh'], 'auth': sub['auth']}},
+                data=payload, vapid_private_key=priv_key,
+                vapid_claims={'sub': f'mailto:{DEFAULT_ADMIN_EMAIL}'})
+        except WebPushException as e:
+            status = getattr(e.response, 'status_code', None)
+            if status in (404, 410):
+                db.execute('DELETE FROM push_subscriptions WHERE id=?', (sub['id'],))
+            else:
+                print(f'  PUSH: failed for guard {guard_id}: {e}')
+        except Exception as e:
+            print(f'  PUSH: unexpected error for guard {guard_id}: {e}')
+    db.commit(); db.close()
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 def init_db():
@@ -457,6 +514,27 @@ def init_db():
             read_at     TEXT
         );
 
+        -- Singleton row — one VAPID keypair for the whole app, generated once
+        -- (see init_db) and reused forever so existing push subscriptions
+        -- don't silently break on the next restart/redeploy.
+        CREATE TABLE IF NOT EXISTS push_config (
+            id          INTEGER PRIMARY KEY CHECK (id=1),
+            private_key TEXT NOT NULL,
+            public_key  TEXT NOT NULL
+        );
+
+        -- One row per browser/device a guard has opted into push on. A guard
+        -- can have several (phone + a second device), so this is keyed by
+        -- endpoint, not guard_id.
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id         TEXT PRIMARY KEY,
+            guard_id   TEXT NOT NULL,
+            endpoint   TEXT NOT NULL UNIQUE,
+            p256dh     TEXT NOT NULL,
+            auth       TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         -- Keyword-matched canned answers. When a guard's message matches one,
         -- the FAQ auto-responder replies instantly instead of waiting on
         -- admin, and marks the guard's message as already handled.
@@ -606,6 +684,14 @@ def init_db():
         # Missed clock-in escalation — dedupes the alert email per shift so a
         # repeat check never re-sends for the same miss (see check_missed_clockins).
         ("shifts", "missed_alert_sent_at", "ALTER TABLE shifts ADD COLUMN missed_alert_sent_at TEXT"),
+        # Offline queue support — a guard with no signal queues a checkpoint
+        # scan locally and replays it once back online. Unlike clock-in/out
+        # (already naturally idempotent: a repeat is rejected with "already
+        # clocked in/out"), a scan is a legitimate repeatable action, so a
+        # replayed request needs its own dedup key to avoid a real double-scan
+        # if the first attempt actually reached the server but the response
+        # never made it back to the guard's phone.
+        ("checkpoint_scans", "client_scan_id", "ALTER TABLE checkpoint_scans ADD COLUMN client_scan_id TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -775,6 +861,22 @@ def init_db():
         conn.commit()
     except sqlite3.IntegrityError as e:
         print(f'  WARNING: guards_email unique index not created — duplicate guard emails exist: {e}')
+
+    # Offline checkpoint-scan replay dedup — see the migrations list above.
+    conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS checkpoint_scans_client_scan_id
+                    ON checkpoint_scans(client_scan_id) WHERE client_scan_id IS NOT NULL''')
+    conn.commit()
+
+    # One-time VAPID keypair generation for Web Push — see push_config above.
+    if PYWEBPUSH_OK and not conn.execute('SELECT 1 FROM push_config WHERE id=1').fetchone():
+        try:
+            priv_b64, pub_b64 = generate_vapid_keypair()
+            conn.execute('INSERT INTO push_config (id, private_key, public_key) VALUES (1, ?, ?)',
+                        (priv_b64, pub_b64))
+            conn.commit()
+            print('  Push notifications: generated VAPID keypair')
+        except Exception as e:
+            print(f'  WARNING: could not generate VAPID keys — push notifications disabled: {e}')
 
     # One-time bootstrap: every guard predates password logins, so give each
     # active one without a password a random temp password now rather than
@@ -1767,6 +1869,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     (gsx['guard_id'],)).fetchall())
                 db.close(); self.send_json(rows); return
 
+            if path == '/api/guard/push/vapid-key':
+                _, pub_key = get_vapid_keys()
+                self.send_json({'enabled': PYWEBPUSH_OK and pub_key is not None, 'public_key': pub_key}); return
+
             self.send_response(404); self.end_headers(); return
 
         # ── Admin-only below ──
@@ -2336,6 +2442,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        if path == '/api/guard/push/subscribe':
+            sub = data.get('subscription') or {}
+            endpoint = sub.get('endpoint'); keys = sub.get('keys') or {}
+            if not endpoint or not keys.get('p256dh') or not keys.get('auth'):
+                self.err('Invalid push subscription'); return
+            db = get_db()
+            # Upsert on endpoint: the same browser subscription re-registering
+            # (e.g. after a token refresh) should replace, not duplicate.
+            db.execute('DELETE FROM push_subscriptions WHERE endpoint=?', (endpoint,))
+            db.execute('''INSERT INTO push_subscriptions (id,guard_id,endpoint,p256dh,auth)
+                          VALUES (?,?,?,?,?)''',
+                       (str(uuid.uuid4()), gsx['guard_id'], endpoint, keys['p256dh'], keys['auth']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        if path == '/api/guard/push/unsubscribe':
+            endpoint = data.get('endpoint')
+            if not endpoint: self.err('endpoint required'); return
+            db = get_db()
+            db.execute('DELETE FROM push_subscriptions WHERE endpoint=? AND guard_id=?',
+                       (endpoint, gsx['guard_id']))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
         if path == '/api/guard/submissions':
             for f in ['site_id','shift_date','start_time','end_time','total_hours']:
                 if not data.get(f): self.err(f'{f} required'); return
@@ -2378,6 +2508,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for f in ['checkpoint_id','lat','lng']:
                 if data.get(f) is None: self.err(f'{f} required'); return
             db = get_db()
+            # Offline queue replay: the client attaches the same client_scan_id
+            # every time it retries this exact scan attempt. If it already
+            # landed (the first attempt reached the server but the guard's
+            # phone never got the response before losing signal), return that
+            # scan's result instead of recording a second, phantom patrol pass.
+            client_scan_id = data.get('client_scan_id')
+            if client_scan_id:
+                existing = R(db.execute('SELECT id, distance_m FROM checkpoint_scans WHERE client_scan_id=?',
+                                        (client_scan_id,)).fetchone())
+                if existing:
+                    db.close()
+                    self.send_json({'ok':True,'id':existing['id'],
+                                    'distance_m':round(existing['distance_m'],1)}, 200); return
             cp = R(db.execute('SELECT * FROM checkpoints WHERE id=? AND active=1',
                               (data['checkpoint_id'],)).fetchone())
             if not cp:
@@ -2390,10 +2533,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.err(f"You must be within {radius}m of '{cp['name']}' to check in. "
                          f"You are currently {int(dist)}m away.", 403); return
             scan_id = str(uuid.uuid4())
-            db.execute('''INSERT INTO checkpoint_scans
-                (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m)
-                VALUES (?,?,?,?,?,?,?,?)''',
-                (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist))
+            try:
+                db.execute('''INSERT INTO checkpoint_scans
+                    (id,checkpoint_id,checkpoint_name,guard_id,site_id,lat,lng,distance_m,client_scan_id)
+                    VALUES (?,?,?,?,?,?,?,?,?)''',
+                    (scan_id, cp['id'], cp['name'], gsx['guard_id'], cp['site_id'], lat, lng, dist, client_scan_id))
+            except sqlite3.IntegrityError:
+                # Two replays of the same offline-queued scan raced each other
+                # past the existence check above — the other one won, so
+                # return its result instead of erroring the guard's retry.
+                existing = R(db.execute('SELECT id, distance_m FROM checkpoint_scans WHERE client_scan_id=?',
+                                        (client_scan_id,)).fetchone())
+                db.close()
+                self.send_json({'ok':True,'id':existing['id'],
+                                'distance_m':round(existing['distance_m'],1)}, 200); return
             audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_CHECKPOINT_SCAN', cp['name'])
             db.commit(); db.close()
             self.send_json({'ok':True,'id':scan_id,'distance_m':round(dist,1)}, 201); return
@@ -2853,15 +3006,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 by_guard.setdefault(r['guard_id'], {'name':r['guard_name'],'email':r['guard_email'],'shifts':[]})
                 by_guard[r['guard_id']]['shifts'].append(r)
             notified = 0
-            for g in by_guard.values():
-                if not g['email']: continue
-                lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time'] or 'Required'} at {sh['site_name']}"
-                         for sh in g['shifts']]
-                body = (f"Hi {g['name']},\n\nYour shifts for {date_from} to {date_to} have been "
-                        f"published:\n\n" + "\n".join(lines) +
-                        f"\n\nView your roster in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
-                if send_email(g['email'], f'{COMPANY_NAME}: New shifts published', body):
-                    notified += 1
+            for gid_, g in by_guard.items():
+                if g['email']:
+                    lines = [f"- {sh['shift_date']} {sh['start_time']}-{sh['end_time'] or 'Required'} at {sh['site_name']}"
+                             for sh in g['shifts']]
+                    body = (f"Hi {g['name']},\n\nYour shifts for {date_from} to {date_to} have been "
+                            f"published:\n\n" + "\n".join(lines) +
+                            f"\n\nView your roster in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
+                    if send_email(g['email'], f'{COMPANY_NAME}: New shifts published', body):
+                        notified += 1
+                n = len(g['shifts'])
+                send_push(gid_, 'New shift published',
+                          f"{n} new shift{'s' if n>1 else ''} added to your roster", '/')
             self.send_json({'published': len(rows), 'notified': notified}); return
 
         if path == '/api/rates':
@@ -2899,6 +3055,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
                        (mid, guard['id'], 'admin', s2['name'], data['body'].strip()))
             audit(db, s2, 'MESSAGE_SEND', f"to {guard['name']}"); db.commit(); db.close()
+            send_push(guard['id'], f'New message from {s2["name"]}', data['body'].strip()[:120], '/')
             self.send_json({'id':mid,'ok':True}, 201); return
 
         if path == '/api/messages/read':

@@ -1,4 +1,4 @@
-const CACHE = 'bos-v26';
+const CACHE = 'bos-v28';
 const STATIC = ['/', '/index.html', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
@@ -27,5 +27,25 @@ self.addEventListener('fetch', e => {
       }
       return res;
     }))
+  );
+});
+
+// ── Push notifications (guard messages, new shifts published) ──────────────
+self.addEventListener('push', e => {
+  let data = {title: 'Brown Owl Security', body: 'You have a new notification', url: '/'};
+  try { if (e.data) data = {...data, ...e.data.json()}; } catch(err) {}
+  e.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body, icon: '/icon.svg', badge: '/icon.svg', data: {url: data.url}
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(clientsArr => {
+      const existing = clientsArr.find(c => 'focus' in c);
+      if (existing) return existing.focus();
+      return self.clients.openWindow(url);
+    })
   );
 });
