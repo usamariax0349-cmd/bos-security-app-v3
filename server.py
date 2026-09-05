@@ -422,6 +422,23 @@ def init_db():
             reviewed_at    TEXT
         );
 
+        -- A guard-triggered emergency alert — deliberately separate from the
+        -- regular incidents table (which admin reviews whenever they next
+        -- check the Incidents tab). This needs to interrupt an admin
+        -- immediately regardless of what they're doing, so it drives its own
+        -- persistent banner across the whole admin UI until resolved.
+        CREATE TABLE IF NOT EXISTS panic_alerts (
+            id            TEXT PRIMARY KEY,
+            guard_id      TEXT NOT NULL,
+            lat           REAL,
+            lng           REAL,
+            status        TEXT DEFAULT 'active',
+            resolved_by   TEXT,
+            resolved_at   TEXT,
+            resolved_note TEXT DEFAULT '',
+            created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE TABLE IF NOT EXISTS client_sites (
             admin_id TEXT NOT NULL,
             site_id  TEXT NOT NULL,
@@ -2247,6 +2264,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 {wc} ORDER BY i.occurred_at DESC LIMIT 300''', params).fetchall())
             db.close(); self.send_json(rows); return
 
+        if path == '/api/panic-alerts':
+            db = get_db(); where=[]; params=[]
+            if qs.get('status'): where.append('p.status=?'); params.append(qs['status'][0])
+            wc = ('WHERE '+' AND '.join(where)) if where else ''
+            rows = RL(db.execute(f'''
+                SELECT p.*, g.name as guard_name, g.phone as guard_phone
+                FROM panic_alerts p JOIN guards g ON g.id=p.guard_id
+                {wc} ORDER BY p.created_at DESC LIMIT 100''', params).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/activity':
             db = get_db()
             scans = RL(db.execute('''
@@ -2417,6 +2444,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             gs0['must_change_password'] = False
             self.send_json({'token': self.headers.get('X-Auth-Token',''),
                             'id': gs0['guard_id'], 'name': gs0['name'], 'company': COMPANY_NAME}); return
+
+        # Emergency alert — deliberately available even mid-forced-password-
+        # change, same as login/logout/setup-password above: a safety feature
+        # should have as few preconditions as possible before it works.
+        if path == '/api/guard/panic':
+            gs0 = self.get_guard_session()
+            if not gs0: self.err('Unauthorized', 401); return
+            lat, lng = data.get('lat'), data.get('lng')
+            db = get_db()
+            aid = str(uuid.uuid4())
+            db.execute('INSERT INTO panic_alerts (id,guard_id,lat,lng) VALUES (?,?,?,?)',
+                       (aid, gs0['guard_id'], lat, lng))
+            audit(db, {'admin_id':gs0['guard_id'],'name':gs0['name']}, 'GUARD_PANIC_ALERT',
+                  f"lat={lat},lng={lng}" if lat is not None else 'location unavailable')
+            db.commit(); db.close()
+            maps_link = f"https://www.google.com/maps?q={lat},{lng}" if lat is not None and lng is not None \
+                        else 'location unavailable'
+            send_email(DEFAULT_ADMIN_EMAIL, f'EMERGENCY ALERT - {gs0["name"]}',
+                       f"{gs0['name']} has triggered an emergency alert in the Guard Portal.\n\n"
+                       f"Location: {maps_link}\n\nPlease respond immediately.")
+            self.send_json({'ok':True, 'id':aid}, 201); return
 
         # ── Guard-authenticated below — but only for /api/guard/* paths, so a
         # request for anything else (admin routes included) is left alone to
@@ -2844,6 +2892,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     f"— {COMPANY_NAME}"
                 )
             self.send_json({'ok':True,'temp_password':temp_pw,'emailed':emailed}); return
+
+        m = re.match(r'^/api/panic-alerts/([^/]+)/resolve$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            alert = R(db.execute('SELECT * FROM panic_alerts WHERE id=?', (m.group(1),)).fetchone())
+            if not alert: db.close(); self.err('Alert not found', 404); return
+            db.execute('''UPDATE panic_alerts SET status='resolved', resolved_by=?, resolved_at=?, resolved_note=?
+                          WHERE id=?''', (s2['name'], datetime.now().isoformat(), data.get('note',''), m.group(1)))
+            audit(db, s2, 'PANIC_ALERT_RESOLVE', alert.get('guard_id','')); db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         m = re.match(r'^/api/guards/([^/]+)/site-pref$', path)
         if m:
