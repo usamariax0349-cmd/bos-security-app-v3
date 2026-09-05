@@ -586,9 +586,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
       <div class="guard-subtitle">Guard Portal</div>
-      <div style="display:flex;gap:6px;justify-content:center;margin-top:10px">
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap">
         <button class="lang-btn" data-lang="en" onclick="setGuardLang('en')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">English</button>
         <button class="lang-btn" data-lang="hi" onclick="setGuardLang('hi')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">हिन्दी</button>
+        <button class="lang-btn" data-lang="ur" onclick="setGuardLang('ur')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">اردو</button>
+        <button class="lang-btn" data-lang="ar" onclick="setGuardLang('ar')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">العربية</button>
       </div>
       <div id="offline-queue-badge" class="hidden" style="margin-top:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;padding:8px 12px;border-radius:8px;font-size:12px;text-align:center"></div>
       <button id="panic-btn" class="hidden" data-i18n="emergency_btn" onclick="openPanicConfirm()" style="margin-top:12px;width:100%;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">🆘 Emergency</button>
@@ -1858,6 +1860,13 @@ const TRANSLATIONS = {
     queued_action_failed_prefix: "A queued action couldn't be completed: ",
     queued_action_failed_suffix: ". Please contact your supervisor.",
     unknown_error: "unknown error", email_password_required: "Email and password are required",
+    avail_updated_prefix: "You last updated this ", avail_not_set_yet: "You haven't set your availability yet",
+    avail_working_prefix: "Working — ", avail_free_from_time_prefix: "Free from ",
+    avail_unavailable_label: "Unavailable", avail_available_all_day_label: "Available all day", change_btn: "Change",
+    incident_select_site: "Please select a site", submitting_btn: "Submitting…",
+    no_messages_yet: "No messages yet. Say hello 👋", office_label: "Office", guard_label: "Guard",
+    loading_label: "Loading…", could_not_load_messages: "Could not load messages.",
+    could_not_send_message: "Could not send message",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -1932,8 +1941,178 @@ const TRANSLATIONS = {
     queued_action_failed_prefix: "एक कार्रवाई पूरी नहीं हो सकी: ",
     queued_action_failed_suffix: "। कृपया अपने पर्यवेक्षक से संपर्क करें।",
     unknown_error: "अज्ञात त्रुटि", email_password_required: "ईमेल और पासवर्ड आवश्यक हैं",
+    avail_updated_prefix: "आपने इसे आख़िरी बार अपडेट किया ", avail_not_set_yet: "आपने अभी तक अपनी उपलब्धता सेट नहीं की है",
+    avail_working_prefix: "काम पर — ", avail_free_from_time_prefix: "इस समय से खाली ",
+    avail_unavailable_label: "अनुपलब्ध", avail_available_all_day_label: "पूरे दिन उपलब्ध", change_btn: "बदलें",
+    incident_select_site: "कृपया एक साइट चुनें", submitting_btn: "जमा किया जा रहा है…",
+    no_messages_yet: "अभी तक कोई संदेश नहीं। नमस्ते कहें 👋", office_label: "कार्यालय", guard_label: "गार्ड",
+    loading_label: "लोड हो रहा है…", could_not_load_messages: "संदेश लोड नहीं हो सके।",
+    could_not_send_message: "संदेश भेजा नहीं जा सका",
+  },
+  ur: {
+    login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
+    login_btn: "لاگ ان ←", login_contact_office: "ابھی تک اکاؤنٹ نہیں ہے، یا پاس ورڈ بھول گئے؟ دفتر سے رابطہ کریں۔",
+    menu_title: "آپ کیا کرنا چاہیں گے؟",
+    menu_myshifts_title: "میری شفٹس", menu_myshifts_sub: "اپنا روسٹر دیکھیں اور کلاک ان / کلاک آؤٹ کریں",
+    menu_patrol_title: "پٹرول چیک پوائنٹس", menu_patrol_sub: "اپنی شفٹ کے دوران سائٹ چیک پوائنٹس پر چیک ان کریں",
+    menu_incident_title: "واقعہ رپورٹ کریں", menu_incident_sub: "تصویر اور مقام کے ساتھ واقعہ درج کریں",
+    menu_availability_title: "میری دستیابی", menu_availability_sub: "دفتر کو بتائیں کہ آپ کب فارغ ہیں",
+    menu_messages_title: "پیغامات", menu_messages_sub: "دفتر سے براہ راست بات کریں",
+    push_enable_btn: "🔔 اطلاعات فعال کریں", push_enabled_prefix: "🔔 اطلاعات فعال ہیں —", push_turn_off: "بند کریں",
+    logout_btn: "لاگ آؤٹ",
+    myshifts_title: "🕐 میری شفٹس", back_to_menu: "→ مینو پر واپس جائیں",
+    clockout_title_prefix: "کلاک آؤٹ — ", clockout_sub: "اختیاری: یہ شفٹ ختم کرنے سے پہلے ایک تصویر اور کوئی نوٹس شامل کریں۔",
+    notes_label: "نوٹس (اختیاری)", notes_placeholder: "کوئی واقعہ یا اضافی معلومات...",
+    take_photo: "تصویر لیں", from_gallery: "گیلری سے",
+    confirm_clockout_btn: "✓ کلاک آؤٹ کی تصدیق کریں", back_btn: "→ واپس",
+    shift_completed_title: "شفٹ مکمل ہوگئی!", shift_completed_sub: "آپ کے اوقات درج کر لیے گئے ہیں اور جائزے کے لیے زیر التوا ہیں۔",
+    back_to_myshifts: "→ میری شفٹس پر واپس جائیں",
+    patrol_title: "🚶 پٹرول چیک پوائنٹس", site_label: "سائٹ", search_site_placeholder: "سائٹ کا نام تلاش کریں...",
+    incident_title: "🚨 واقعہ رپورٹ کریں", incident_type_label: "واقعے کی قسم",
+    incident_type_suspicious: "مشکوک سرگرمی", incident_type_theft: "چوری", incident_type_vandalism: "توڑ پھوڑ",
+    incident_type_medical: "طبی", incident_type_trespassing: "غیر قانونی داخلہ", incident_type_alarm: "الارم ایکٹیویشن",
+    incident_type_equipment: "آلات کی خرابی", incident_type_other: "دیگر",
+    description_label: "تفصیل", incident_desc_placeholder: "کیا ہوا؟ ہو سکے تو زیادہ سے زیادہ تفصیل شامل کریں...",
+    report_incident_btn: "🚨 واقعہ رپورٹ کریں",
+    incident_reported_title: "واقعہ رپورٹ ہوگیا", incident_reported_sub: "آپ کی واقعہ رپورٹ درج کر لی گئی ہے اور دفتر کو بھیج دی گئی ہے۔",
+    report_another: "+ ایک اور رپورٹ کریں",
+    availability_title: "📅 میری دستیابی", confirm_no_changes: "✓ کچھ نہیں بدلا — جیسا ہے ویسے تصدیق کریں",
+    avail_edit_title: "دستیابی سیٹ کریں",
+    avail_free_all_day: "پورا دن دستیاب", avail_free_all_day_sub: "اس دن کی کوئی بھی عدم دستیابی ختم کر دیتا ہے",
+    avail_free_from: "ایک وقت سے فارغ", avail_free_from_sub: "پہلے مصروف، اس کے بعد دستیاب",
+    avail_unavailable: "پورا دن دستیاب نہیں", avail_unavailable_sub: "اس دن شفٹ کی پیشکش نہیں کی جائے گی",
+    save_btn: "محفوظ کریں", cancel_btn: "→ منسوخ کریں",
+    messages_title: "💬 پیغامات", msg_input_placeholder: "دفتر کو پیغام لکھیں...", send_btn: "بھیجیں",
+    admin_login_link: "ایڈمن لاگ ان",
+    emergency_btn: "🆘 ہنگامی صورتحال", panic_confirm_title: "🆘 ہنگامی الرٹ بھیجیں؟",
+    panic_confirm_body: "اس سے فوری طور پر دفتر کو آپ کے نام اور موجودہ مقام کے ساتھ مطلع کیا جائے گا۔ صرف اسی وقت استعمال کریں جب آپ کو فوری مدد درکار ہو۔",
+    panic_cancel: "منسوخ کریں", panic_send: "جی ہاں، الرٹ بھیجیں", panic_sending: "بھیجا جا رہا ہے…",
+    first_pw_title: "🔐 اپنا پاس ورڈ سیٹ کریں",
+    first_pw_body: "خوش آمدید! آپ کی سیکیورٹی کے لیے، آگے بڑھنے سے پہلے آپ کو ایک ذاتی پاس ورڈ بنانا ہوگا۔ اس مرحلے کے بعد آپ کا عارضی پاس ورڈ کام نہیں کرے گا۔",
+    new_password_label: "نیا پاس ورڈ", new_password_placeholder: "کم از کم 6 حروف",
+    confirm_password_label: "پاس ورڈ کی تصدیق کریں", confirm_password_placeholder: "اپنا پاس ورڈ دوبارہ لکھیں",
+    set_password_continue: "پاس ورڈ سیٹ کریں اور جاری رکھیں ←",
+    status_scheduled: "کلاک ان کا انتظار", status_missed: "کلاک ان چھوٹ گیا", status_in_progress: "کلاک ان — سائٹ پر",
+    status_completed: "کلاک آؤٹ ہوگیا", status_cancelled: "منسوخ",
+    clock_in_btn: "کلاک ان", clock_out_btn: "کلاک آؤٹ", done_label: "✓ مکمل", syncing_label: "🔄 سنک ہو رہا ہے…",
+    clocked_in_offline: "کلاک ان (آف لائن)",
+    no_shifts: "ابھی آپ کے لیے کوئی شفٹ طے شدہ نہیں ہے۔ بعد میں دیکھیں یا دفتر سے رابطہ کریں۔",
+    could_not_load_shifts: "آپ کی شفٹس لوڈ نہیں ہو سکیں۔",
+    no_checkpoints: "اس سائٹ کے لیے ابھی تک کوئی چیک پوائنٹ سیٹ نہیں کیا گیا۔",
+    check_in_radius: "چیک ان کا دائرہ", check_in_btn: "چیک ان", checked_in_btn: "چیک ان ہوگیا",
+    offline_saved_clockin: "کوئی کنکشن نہیں — کلاک ان محفوظ ہوگیا، یہ خود بخود سنک ہو جائے گا",
+    offline_saved_checkin: "کوئی کنکشن نہیں — چیک ان محفوظ ہوگیا، یہ خود بخود سنک ہو جائے گا",
+    offline_clockout_title: "کلاک آؤٹ محفوظ ہوگیا!",
+    offline_clockout_sub: "آپ ابھی آف لائن ہیں — واپس آن لائن آنے پر یہ خود بخود سنک ہو جائے گا۔",
+    offline_showing_cached: "لگتا ہے آپ آف لائن ہیں — آپ کی آخری معلوم معلومات دکھائی جا رہی ہیں",
+    clocked_in_toast: "کلاک ان ہوگیا ✓", checked_in_toast: "چیک ان ہوگیا ✓", shift_required_label: "درکار",
+    panic_alert_sent_toast: "🆘 ہنگامی الرٹ بھیج دیا گیا — دفتر کو مطلع کر دیا گیا ہے",
+    notifications_enabled_toast: "اطلاعات فعال ہوگئیں ✓", notifications_disabled_toast: "اطلاعات بند کر دی گئیں",
+    set_availability_prefix: "دستیابی سیٹ کریں — ",
+    geo_not_supported: "آپ کا ڈیوائس مقام کی سہولت فراہم نہیں کرتا", getting_location: "📍 آپ کا مقام حاصل کیا جا رہا ہے…",
+    could_not_get_location_prefix: "⚠️ آپ کا مقام حاصل نہیں ہو سکا: ", clocking_out_btn: "کلاک آؤٹ کیا جا رہا ہے…",
+    photo_attached_toast: "تصویر منسلک ہوگئی ✓", please_log_in_first: "براہ کرم پہلے لاگ ان کریں",
+    from_checkpoint_suffix: "چیک پوائنٹ سے",
+    offline_action_singular: "کارروائی", offline_action_plural: "کارروائیاں",
+    offline_waiting_suffix: "سنک ہونے کی منتظر — واپس آن لائن آنے پر یہ خود بخود بھیج دی جائے گی",
+    notifications_unavailable: "اطلاعات ابھی دستیاب نہیں ہیں",
+    notifications_permission_denied: "اطلاعات کی اجازت نہیں دی گئی",
+    could_not_enable_notifications_prefix: "اطلاعات فعال نہیں کی جا سکیں: ",
+    could_not_disable_notifications_prefix: "اطلاعات بند نہیں کی جا سکیں: ",
+    queued_action_failed_prefix: "ایک زیر التوا کارروائی مکمل نہیں ہو سکی: ",
+    queued_action_failed_suffix: "۔ براہ کرم اپنے سپروائزر سے رابطہ کریں۔",
+    unknown_error: "نامعلوم خرابی", email_password_required: "ای میل اور پاس ورڈ درکار ہیں",
+    avail_updated_prefix: "آپ نے آخری بار یہ اپ ڈیٹ کیا ", avail_not_set_yet: "آپ نے ابھی تک اپنی دستیابی سیٹ نہیں کی",
+    avail_working_prefix: "کام پر — ", avail_free_from_time_prefix: "اس وقت سے فارغ ",
+    avail_unavailable_label: "دستیاب نہیں", avail_available_all_day_label: "پورا دن دستیاب", change_btn: "تبدیل کریں",
+    incident_select_site: "براہ کرم ایک سائٹ منتخب کریں", submitting_btn: "جمع کیا جا رہا ہے…",
+    no_messages_yet: "ابھی تک کوئی پیغام نہیں۔ سلام کہیں 👋", office_label: "دفتر", guard_label: "گارڈ",
+    loading_label: "لوڈ ہو رہا ہے…", could_not_load_messages: "پیغامات لوڈ نہیں ہو سکے۔",
+    could_not_send_message: "پیغام بھیجا نہیں جا سکا",
+  },
+  ar: {
+    login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
+    login_btn: "تسجيل الدخول ←", login_contact_office: "ليس لديك حساب بعد، أو نسيت كلمة المرور؟ تواصل مع المكتب.",
+    menu_title: "ماذا تريد أن تفعل؟",
+    menu_myshifts_title: "مناوباتي", menu_myshifts_sub: "عرض جدولك وتسجيل الحضور / الانصراف",
+    menu_patrol_title: "نقاط تفتيش الدورية", menu_patrol_sub: "سجّل حضورك عند نقاط التفتيش أثناء مناوبتك",
+    menu_incident_title: "الإبلاغ عن حادثة", menu_incident_sub: "سجّل حادثة مع صورة والموقع",
+    menu_availability_title: "أوقات توفري", menu_availability_sub: "أخبر المكتب متى تكون متاحًا",
+    menu_messages_title: "الرسائل", menu_messages_sub: "تحدث مباشرة مع المكتب",
+    push_enable_btn: "🔔 تفعيل الإشعارات", push_enabled_prefix: "🔔 الإشعارات مفعّلة —", push_turn_off: "إيقاف",
+    logout_btn: "تسجيل الخروج",
+    myshifts_title: "🕐 مناوباتي", back_to_menu: "→ العودة إلى القائمة",
+    clockout_title_prefix: "تسجيل الانصراف — ", clockout_sub: "اختياري: أرفق صورة وأي ملاحظات قبل إنهاء هذه المناوبة.",
+    notes_label: "ملاحظات (اختياري)", notes_placeholder: "أي حوادث أو معلومات إضافية...",
+    take_photo: "التقاط صورة", from_gallery: "من المعرض",
+    confirm_clockout_btn: "✓ تأكيد الانصراف", back_btn: "→ رجوع",
+    shift_completed_title: "اكتملت المناوبة!", shift_completed_sub: "تم تسجيل ساعاتك وهي قيد المراجعة.",
+    back_to_myshifts: "→ العودة إلى مناوباتي",
+    patrol_title: "🚶 نقاط تفتيش الدورية", site_label: "الموقع", search_site_placeholder: "ابحث عن اسم الموقع...",
+    incident_title: "🚨 الإبلاغ عن حادثة", incident_type_label: "نوع الحادثة",
+    incident_type_suspicious: "نشاط مشبوه", incident_type_theft: "سرقة", incident_type_vandalism: "تخريب",
+    incident_type_medical: "حالة طبية", incident_type_trespassing: "تعدٍ", incident_type_alarm: "تفعيل الإنذار",
+    incident_type_equipment: "عطل في المعدات", incident_type_other: "أخرى",
+    description_label: "الوصف", incident_desc_placeholder: "ماذا حدث؟ يرجى تضمين أكبر قدر ممكن من التفاصيل...",
+    report_incident_btn: "🚨 الإبلاغ عن حادثة",
+    incident_reported_title: "تم الإبلاغ عن الحادثة", incident_reported_sub: "تم تسجيل تقرير الحادثة وإرساله إلى المكتب.",
+    report_another: "+ إضافة تقرير آخر",
+    availability_title: "📅 أوقات توفري", confirm_no_changes: "✓ لا شيء تغيّر — تأكيد كما هو",
+    avail_edit_title: "تحديد التوفر",
+    avail_free_all_day: "متاح طوال اليوم", avail_free_all_day_sub: "يزيل أي عدم توفر لهذا اليوم",
+    avail_free_from: "متاح ابتداءً من وقت معين", avail_free_from_sub: "مشغول قبل ذلك، متاح بعده",
+    avail_unavailable: "غير متاح طوال اليوم", avail_unavailable_sub: "لن يتم عرض مناوبات عليك هذا اليوم",
+    save_btn: "حفظ", cancel_btn: "→ إلغاء",
+    messages_title: "💬 الرسائل", msg_input_placeholder: "اكتب رسالة إلى المكتب...", send_btn: "إرسال",
+    admin_login_link: "تسجيل دخول المسؤول",
+    emergency_btn: "🆘 طوارئ", panic_confirm_title: "🆘 إرسال تنبيه طوارئ؟",
+    panic_confirm_body: "سيؤدي هذا إلى إخطار المكتب فورًا باسمك وموقعك الحالي. استخدم هذا فقط إذا كنت بحاجة إلى مساعدة عاجلة.",
+    panic_cancel: "إلغاء", panic_send: "نعم، أرسل التنبيه", panic_sending: "جارٍ الإرسال…",
+    first_pw_title: "🔐 عيّن كلمة المرور الخاصة بك",
+    first_pw_body: "مرحبًا! لأمانك، يجب عليك إنشاء كلمة مرور شخصية قبل المتابعة. لن تعمل كلمة المرور المؤقتة بعد هذه الخطوة.",
+    new_password_label: "كلمة المرور الجديدة", new_password_placeholder: "6 أحرف على الأقل",
+    confirm_password_label: "تأكيد كلمة المرور", confirm_password_placeholder: "أعد كتابة كلمة المرور",
+    set_password_continue: "تعيين كلمة المرور والمتابعة ←",
+    status_scheduled: "بانتظار تسجيل الحضور", status_missed: "فات تسجيل الحضور", status_in_progress: "تم تسجيل الحضور — في الموقع",
+    status_completed: "تم تسجيل الانصراف", status_cancelled: "ملغاة",
+    clock_in_btn: "تسجيل الحضور", clock_out_btn: "تسجيل الانصراف", done_label: "✓ منتهية", syncing_label: "🔄 جارٍ المزامنة…",
+    clocked_in_offline: "تم تسجيل الحضور (دون اتصال)",
+    no_shifts: "لا توجد مناوبات مجدولة لك الآن. تحقق لاحقًا أو تواصل مع المكتب.",
+    could_not_load_shifts: "تعذّر تحميل مناوباتك.",
+    no_checkpoints: "لم يتم إعداد أي نقاط تفتيش لهذا الموقع بعد.",
+    check_in_radius: "نطاق تسجيل الحضور", check_in_btn: "تسجيل الحضور", checked_in_btn: "تم تسجيل الحضور",
+    offline_saved_clockin: "لا يوجد اتصال — تم حفظ تسجيل الحضور، وستتم المزامنة تلقائيًا",
+    offline_saved_checkin: "لا يوجد اتصال — تم حفظ تسجيل الحضور، وستتم المزامنة تلقائيًا",
+    offline_clockout_title: "تم حفظ الانصراف!",
+    offline_clockout_sub: "أنت غير متصل الآن — ستتم المزامنة تلقائيًا عند عودة الاتصال.",
+    offline_showing_cached: "يبدو أنك غير متصل — يتم عرض آخر المعلومات المعروفة",
+    clocked_in_toast: "تم تسجيل الحضور ✓", checked_in_toast: "تم تسجيل الحضور ✓", shift_required_label: "مطلوب",
+    panic_alert_sent_toast: "🆘 تم إرسال تنبيه الطوارئ — تم إخطار المكتب",
+    notifications_enabled_toast: "تم تفعيل الإشعارات ✓", notifications_disabled_toast: "تم إيقاف الإشعارات",
+    set_availability_prefix: "تحديد التوفر — ",
+    geo_not_supported: "جهازك لا يدعم تحديد الموقع", getting_location: "📍 جارٍ تحديد موقعك…",
+    could_not_get_location_prefix: "⚠️ تعذّر تحديد موقعك: ", clocking_out_btn: "جارٍ تسجيل الانصراف…",
+    photo_attached_toast: "تم إرفاق الصورة ✓", please_log_in_first: "يرجى تسجيل الدخول أولاً",
+    from_checkpoint_suffix: "من نقطة التفتيش",
+    offline_action_singular: "إجراء", offline_action_plural: "إجراءات",
+    offline_waiting_suffix: "بانتظار المزامنة — سيتم الإرسال تلقائيًا عند عودة الاتصال",
+    notifications_unavailable: "الإشعارات غير متاحة حاليًا",
+    notifications_permission_denied: "لم يتم منح إذن الإشعارات",
+    could_not_enable_notifications_prefix: "تعذّر تفعيل الإشعارات: ",
+    could_not_disable_notifications_prefix: "تعذّر إيقاف الإشعارات: ",
+    queued_action_failed_prefix: "تعذّر إكمال أحد الإجراءات المعلّقة: ",
+    queued_action_failed_suffix: ". يرجى التواصل مع مشرفك.",
+    unknown_error: "خطأ غير معروف", email_password_required: "البريد الإلكتروني وكلمة المرور مطلوبان",
+    avail_updated_prefix: "آخر تحديث لك كان ", avail_not_set_yet: "لم تحدد أوقات توفرك بعد",
+    avail_working_prefix: "العمل — ", avail_free_from_time_prefix: "متاح ابتداءً من ",
+    avail_unavailable_label: "غير متاح", avail_available_all_day_label: "متاح طوال اليوم", change_btn: "تغيير",
+    incident_select_site: "يرجى اختيار موقع", submitting_btn: "جارٍ الإرسال…",
+    no_messages_yet: "لا توجد رسائل بعد. قل مرحبًا 👋", office_label: "المكتب", guard_label: "الحارس",
+    loading_label: "جارٍ التحميل…", could_not_load_messages: "تعذّر تحميل الرسائل.",
+    could_not_send_message: "تعذّر إرسال الرسالة",
   },
 };
+const RTL_LANGS = new Set(['ur','ar']);
 let guardLang = localStorage.getItem('sg_guard_lang') || 'en';
 function t(key){ return (TRANSLATIONS[guardLang] && TRANSLATIONS[guardLang][key]) || TRANSLATIONS.en[key] || key; }
 function applyTranslations(){
@@ -1942,6 +2121,12 @@ function applyTranslations(){
   document.querySelectorAll('#panic-confirm-modal [data-i18n], #guard-firstpw-modal [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
   const langBtns = document.querySelectorAll('.lang-btn');
   langBtns.forEach(b=>b.classList.toggle('active', b.dataset.lang===guardLang));
+  // Urdu/Arabic are RTL scripts — scope the direction to the guard portal and
+  // its modals only, so the rest of the app (admin, client portal) is unaffected.
+  const dir = RTL_LANGS.has(guardLang) ? 'rtl' : 'ltr';
+  ['guard-page','panic-confirm-modal','guard-firstpw-modal'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.dir = dir;
+  });
 }
 function setGuardLang(lang){
   guardLang = lang;
@@ -2531,7 +2716,7 @@ function renderMyShiftsList(){
     return `<div class="cp-row ${sh.status==='completed'?'done':''}">
       <div>
         <div class="cp-name">${sh.site_name}${sh.position?' · '+sh.position:''}</div>
-        <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time||t('shift_required_label')}
+        <div class="cp-sub"><span dir="ltr" style="unicode-bidi:isolate">${sh.shift_date} · ${sh.start_time}–${sh.end_time||t('shift_required_label')}</span>
           <span class="badge badge-${pendingSync?'pending':st.badge}" style="margin-left:6px">${pendingSync?t('clocked_in_offline'):statusLabel}</span>
         </div>
       </div>
@@ -2565,11 +2750,11 @@ function renderGuardAvailability(){
   const days = Array.from({length:7},(_,i)=>new Date(gaWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
   const todayISO = fmtISO(new Date());
-  document.getElementById('gavail-range').textContent =
-    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  document.getElementById('gavail-range').innerHTML =
+    `<span dir="ltr" style="unicode-bidi:isolate">${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</span>`;
   document.getElementById('gavail-updated').textContent = gaConfirmedAt
-    ? `You last updated this ${fmtRelativeDays(gaConfirmedAt)}`
-    : `You haven't set your availability yet`;
+    ? `${t('avail_updated_prefix')}${fmtRelativeDays(gaConfirmedAt)}`
+    : t('avail_not_set_yet');
   document.getElementById('gavail-days').innerHTML = dayISO.map((iso,i)=>{
     // A shift always wins the row — same rule as the admin board. Availability
     // is only for days nothing's booked yet, so a working day isn't editable
@@ -2578,13 +2763,13 @@ function renderGuardAvailability(){
     const leaveRec = gaLeave.find(l=>iso>=l.start_date && iso<=l.end_date);
     const dayLabel = `${SCHED_DAY_NAMES[i]} ${days[i].getDate()}/${days[i].getMonth()+1}`;
     let status, cls, editable = true;
-    if(shift){ status = `Working — ${shift.site_name}`; cls='st-working'; editable=false; }
-    else if(leaveRec && leaveRec.available_from){ status = `Free from ${leaveRec.available_from}`; cls='st-partial'; }
-    else if(leaveRec){ status = 'Unavailable'; cls='st-off'; }
-    else { status = 'Available all day'; cls='st-free'; }
+    if(shift){ status = `${t('avail_working_prefix')}${shift.site_name}`; cls='st-working'; editable=false; }
+    else if(leaveRec && leaveRec.available_from){ status = `${t('avail_free_from_time_prefix')}${leaveRec.available_from}`; cls='st-partial'; }
+    else if(leaveRec){ status = t('avail_unavailable_label'); cls='st-off'; }
+    else { status = t('avail_available_all_day_label'); cls='st-free'; }
     return `<div class="gaday-row ${iso===todayISO?'is-today':''}">
-      <div><div class="gaday-date">${dayLabel}</div><div class="gaday-status ${cls}">${status}</div></div>
-      ${editable ? `<button class="btn btn-sm btn-gold" onclick="gaOpenEdit('${iso}')">Change</button>` : ''}
+      <div><div class="gaday-date"><span dir="ltr" style="unicode-bidi:isolate">${dayLabel}</span></div><div class="gaday-status ${cls}">${status}</div></div>
+      ${editable ? `<button class="btn btn-sm btn-gold" onclick="gaOpenEdit('${iso}')">${t('change_btn')}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -2905,10 +3090,10 @@ function handleIncidentPhoto(input, src){
   reader.readAsDataURL(file);
 }
 async function submitIncident(){
-  if(!selectedGuard){ toast('Please log in first','error'); return; }
-  if(!incidentSite){ toast('Please select a site','error'); return; }
+  if(!selectedGuard){ toast(t('please_log_in_first'),'error'); return; }
+  if(!incidentSite){ toast(t('incident_select_site'),'error'); return; }
   const btn = document.getElementById('incident-submit-btn');
-  btn.disabled=true; btn.textContent='Submitting…';
+  btn.disabled=true; btn.textContent=t('submitting_btn');
   const body = {
     site_id:incidentSite.id,
     type:document.getElementById('incident-type').value,
@@ -2920,7 +3105,7 @@ async function submitIncident(){
     await guardApiFetch('/api/guard/incidents',{method:'POST',body:JSON.stringify(body)});
     showGuardCard('step-incident-success');
   }catch(e){ toast(e.message,'error'); }
-  btn.disabled=false; btn.textContent='🚨 Report Incident';
+  btn.disabled=false; btn.textContent=t('report_incident_btn');
 }
 function resetIncidentForm(){
   incidentPhotoB64=null; incidentPhotoExt=null; incidentGeo=null;
@@ -2957,16 +3142,16 @@ function escapeHtml(s){
 }
 function renderMsgThread(box, rows, viewerRole){
   if(!rows.length){
-    box.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">No messages yet. Say hello 👋</p>';
+    box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${viewerRole==='guard'?t('no_messages_yet'):'No messages yet. Say hello 👋'}</p>`;
     return;
   }
   box.innerHTML = rows.map(m=>{
     const mine = m.sender===viewerRole;
     const isAuto = m.sender_name==='FAQ Auto-Reply';
-    const who = m.sender==='admin' ? (m.sender_name||'Office') : (m.sender_name||'Guard');
+    const who = m.sender==='admin' ? (m.sender_name||(viewerRole==='guard'?t('office_label'):'Office')) : (m.sender_name||(viewerRole==='guard'?t('guard_label'):'Guard'));
     return `<div class="msg-bubble ${mine?'mine':'theirs'}">
       <div>${isAuto?'🤖 ':''}${escapeHtml(m.body)}</div>
-      <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}${fmtDateTime(m.created_at)}</div>
+      <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}<span dir="ltr" style="unicode-bidi:isolate">${fmtDateTime(m.created_at)}</span></div>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
@@ -2980,7 +3165,7 @@ async function checkUnreadMessages(){
 }
 async function loadGuardMessages(){
   const box = document.getElementById('msg-thread');
-  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('loading_label')}</p>`;
   try{
     const rows = await guardApiFetch('/api/guard/messages');
     renderMsgThread(box, rows, 'guard');
@@ -2988,7 +3173,7 @@ async function loadGuardMessages(){
       await guardApiFetch('/api/guard/messages/read', {method:'POST'});
       document.getElementById('msg-unread-dot')?.classList.add('hidden');
     }
-  }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load messages.</p>'; }
+  }catch(e){ box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('could_not_load_messages')}</p>`; }
 }
 async function sendGuardMessage(){
   const input = document.getElementById('msg-input');
@@ -2998,7 +3183,7 @@ async function sendGuardMessage(){
     await guardApiFetch('/api/guard/messages', {method:'POST', body: JSON.stringify({body})});
     input.value='';
     loadGuardMessages();
-  }catch(e){ toast('Could not send message','error'); }
+  }catch(e){ toast(t('could_not_send_message'),'error'); }
 }
 
 // ── Admin Auth ─────────────────────────────────────────────────────────────────
