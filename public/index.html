@@ -586,6 +586,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
       <div class="guard-subtitle">Guard Portal</div>
       <div id="offline-queue-badge" class="hidden" style="margin-top:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;padding:8px 12px;border-radius:8px;font-size:12px;text-align:center"></div>
+      <button id="panic-btn" class="hidden" onclick="openPanicConfirm()" style="margin-top:12px;width:100%;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">🆘 Emergency</button>
     </div>
 
     <!-- Step 0: Guard login -->
@@ -840,6 +841,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="showChangePw()">🔑</button>
       <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()">Logout</button>
     </div>
+  </div>
+
+  <div id="panic-banner" class="hidden" style="background:#dc2626;color:#fff;padding:12px 20px;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer" onclick="openPanicAlertsModal()">
+    <span id="panic-banner-text">🆘 Emergency alert</span>
+    <span style="text-decoration:underline">View →</span>
   </div>
 
   <div class="tabs" id="admin-tabs">
@@ -1716,6 +1722,38 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div>
 
+<!-- Emergency alert confirm -->
+<div id="panic-confirm-modal" class="modal-overlay hidden" style="z-index:9999">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header" style="background:#dc2626;color:#fff;border-radius:12px 12px 0 0">
+      <span class="modal-title" style="color:#fff">🆘 Send Emergency Alert?</span>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:14px;line-height:1.5">
+        This will immediately notify the office with your name and current location. Only use this if you need urgent help.
+      </p>
+      <div id="panic-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:10px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('panic-confirm-modal')">Cancel</button>
+      <button id="panic-send-btn" class="btn" style="flex:1;background:#dc2626;color:#fff" onclick="sendPanicAlert()">Yes, Send Alert</button>
+    </div>
+  </div>
+</div>
+
+<!-- Active emergency alerts -->
+<div id="panic-alerts-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header" style="background:#dc2626;color:#fff">
+      <span class="modal-title" style="color:#fff">🆘 Emergency Alerts</span>
+      <button class="modal-close" style="color:#fff" onclick="closeModal('panic-alerts-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="panic-alerts-list"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Change password modal -->
 <div id="changepw-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -1943,6 +1981,40 @@ async function disablePushNotifications(){
     refreshPushUI();
   }catch(e){ toast('Could not turn off notifications: '+e.message,'error'); }
 }
+
+// ── Emergency alert ──────────────────────────────────────────────────────────
+function openPanicConfirm(){
+  document.getElementById('panic-err').style.display='none';
+  const btn = document.getElementById('panic-send-btn');
+  btn.disabled=false; btn.textContent='Yes, Send Alert';
+  openModal('panic-confirm-modal');
+}
+function sendPanicAlert(){
+  const btn = document.getElementById('panic-send-btn');
+  const errEl = document.getElementById('panic-err');
+  errEl.style.display='none';
+  btn.disabled=true; btn.textContent='Sending…';
+  const submit = (lat, lng) => {
+    guardApiFetch('/api/guard/panic', {method:'POST', body: JSON.stringify({lat, lng})})
+      .then(()=>{
+        closeModal('panic-confirm-modal');
+        toast('🆘 Emergency alert sent — the office has been notified','success',6000);
+      })
+      .catch(e=>{
+        errEl.textContent = e.message; errEl.style.display='block';
+        btn.disabled=false; btn.textContent='Yes, Send Alert';
+      });
+  };
+  if(!navigator.geolocation){ submit(null, null); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => submit(pos.coords.latitude, pos.coords.longitude),
+    () => submit(null, null),  // still send the alert even if location can't be captured
+    {enableHighAccuracy:true, timeout:8000, maximumAge:0}
+  );
+}
+function refreshPanicButton(){
+  document.getElementById('panic-btn').classList.toggle('hidden', !selectedGuard);
+}
 window.addEventListener('online', syncPendingActions);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncPendingActions(); });
 setInterval(syncPendingActions, 30000);
@@ -1964,6 +2036,8 @@ function showAdmin(){
   document.getElementById('admin-page').classList.remove('hidden');
   loadDashboard();
   loadMessageThreads();
+  checkPanicAlerts();
+  if(!_panicTimer) _panicTimer = setInterval(checkPanicAlerts, 10000);
 }
 function showClientPortal(){
   hideAllPages();
@@ -2167,6 +2241,7 @@ function showModeMenu(){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
   showGuardCard('step-menu');
   refreshPushUI();
+  refreshPanicButton();
 }
 function startShiftFlow(){
   showGuardCard('step-myshifts');
@@ -2509,6 +2584,7 @@ async function guardLogout(){
   guardAuthToken = null; selectedGuard = null;
   localStorage.removeItem('sg_guard_token');
   localStorage.removeItem('sg_guard_identity');
+  refreshPanicButton();
   showGuardCard('step-0');
 }
 
@@ -2831,7 +2907,51 @@ async function doLogout(){
   try{ await apiFetch('/api/logout',{method:'POST'}); }catch(e){}
   authToken=null; currentRole=null;
   localStorage.removeItem('sg_token');
+  if(_panicTimer){ clearInterval(_panicTimer); _panicTimer=null; }
   showGuard();
+}
+
+// ── Emergency alerts (admin) ────────────────────────────────────────────────
+let _panicTimer = null;
+async function checkPanicAlerts(){
+  try{
+    const rows = await apiFetch('/api/panic-alerts?status=active');
+    const banner = document.getElementById('panic-banner');
+    if(!rows.length){ banner.classList.add('hidden'); return; }
+    const names = [...new Set(rows.map(r=>r.guard_name))];
+    document.getElementById('panic-banner-text').textContent =
+      `🆘 ${rows.length} active emergency alert${rows.length>1?'s':''} — ${names.join(', ')}`;
+    banner.classList.remove('hidden');
+  }catch(e){ /* silent — this is a background poll, don't spam the admin with toasts */ }
+}
+async function openPanicAlertsModal(){
+  openModal('panic-alerts-modal');
+  const listEl = document.getElementById('panic-alerts-list');
+  listEl.innerHTML = `<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">Loading…</p>`;
+  try{
+    const rows = await apiFetch('/api/panic-alerts?status=active');
+    listEl.innerHTML = rows.length===0
+      ? `<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">No active alerts.</p>`
+      : rows.map(r=>{
+          const mapLink = (r.lat!=null && r.lng!=null)
+            ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">Open location in Maps</a>`
+            : `<span style="color:var(--muted)">Location unavailable</span>`;
+          return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+            <div style="font-weight:700;margin-bottom:4px">${r.guard_name}${r.guard_phone?' · '+r.guard_phone:''}</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${fmtDateTime(r.created_at)}</div>
+            <div style="font-size:13px;margin-bottom:10px">${mapLink}</div>
+            <button class="btn btn-sm btn-primary" onclick="resolvePanicAlert('${r.id}')">Mark Resolved</button>
+          </div>`;
+        }).join('');
+  }catch(e){ listEl.innerHTML = `<p style="color:var(--red);font-size:13px">Could not load alerts.</p>`; }
+}
+async function resolvePanicAlert(id){
+  try{
+    await apiFetch(`/api/panic-alerts/${id}/resolve`, {method:'POST'});
+    toast('Alert marked resolved','success');
+    openPanicAlertsModal();
+    checkPanicAlerts();
+  }catch(e){ toast(e.message,'error'); }
 }
 function showChangePw(){ openModal('changepw-modal'); }
 async function changePassword(){
