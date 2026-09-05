@@ -347,6 +347,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .tab-badge{display:inline-block;min-width:16px;padding:1px 5px;margin-left:5px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:14px;text-align:center;vertical-align:2px}
 .msg-dot{display:inline-block;min-width:16px;padding:0 5px;border-radius:9px;background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center}
 .msg-nav-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
+.lang-btn.active{background:rgba(201,168,76,.25)!important;border-color:var(--gold)!important;color:#fff!important;font-weight:600}
 .msg-thread-item{padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
 .msg-thread-item:hover{background:var(--bg)}
 .msg-thread-item.active{background:rgba(201,168,76,.12)}
@@ -585,91 +586,97 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
       <div class="guard-subtitle">Guard Portal</div>
+      <div style="display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+        <button class="lang-btn" data-lang="en" onclick="setGuardLang('en')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">English</button>
+        <button class="lang-btn" data-lang="hi" onclick="setGuardLang('hi')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">हिन्दी</button>
+        <button class="lang-btn" data-lang="ur" onclick="setGuardLang('ur')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">اردو</button>
+        <button class="lang-btn" data-lang="ar" onclick="setGuardLang('ar')" style="padding:4px 12px;border-radius:20px;font-size:12px;border:1px solid rgba(255,255,255,.2);background:transparent;color:rgba(255,255,255,.6);cursor:pointer">العربية</button>
+      </div>
       <div id="offline-queue-badge" class="hidden" style="margin-top:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;padding:8px 12px;border-radius:8px;font-size:12px;text-align:center"></div>
-      <button id="panic-btn" class="hidden" onclick="openPanicConfirm()" style="margin-top:12px;width:100%;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">🆘 Emergency</button>
+      <button id="panic-btn" class="hidden" data-i18n="emergency_btn" onclick="openPanicConfirm()" style="margin-top:12px;width:100%;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">🆘 Emergency</button>
     </div>
 
     <!-- Step 0: Guard login -->
     <div class="guard-card" id="step-0">
-      <div class="step-title">Guard Login</div>
+      <div class="step-title" data-i18n="login_title">Guard Login</div>
       <div id="glogin-err" style="display:none;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
       <div class="form-group">
-        <label class="form-label">Email Address</label>
+        <label class="form-label" data-i18n="login_email_label">Email Address</label>
         <input type="email" id="glogin-email" class="form-control" placeholder="you@example.com" autocomplete="email"
                onkeydown="if(event.key==='Enter')document.getElementById('glogin-pass').focus()">
       </div>
       <div class="form-group">
-        <label class="form-label">Password</label>
+        <label class="form-label" data-i18n="login_password_label">Password</label>
         <input type="password" id="glogin-pass" class="form-control" placeholder="••••••••" autocomplete="current-password"
                onkeydown="if(event.key==='Enter')guardDoLogin()">
       </div>
-      <button class="nav-btn nav-next" onclick="guardDoLogin()" style="width:100%;margin-top:8px">Login →</button>
-      <p style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
+      <button class="nav-btn nav-next" data-i18n="login_btn" onclick="guardDoLogin()" style="width:100%;margin-top:8px">Login →</button>
+      <p style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px" data-i18n="login_contact_office">
         No account yet, or forgot your password? Contact the office.
       </p>
     </div>
 
     <!-- Mode menu -->
     <div class="guard-card hidden" id="step-menu">
-      <div class="step-title">What would you like to do?</div>
+      <div class="step-title" data-i18n="menu_title">What would you like to do?</div>
       <div class="mode-grid">
         <button class="mode-btn" onclick="startShiftFlow()">
           <span class="mi">🕐</span>
-          <span><div class="mt">My Shifts</div><div class="ms">View your roster &amp; clock in / clock out</div></span>
+          <span><div class="mt" data-i18n="menu_myshifts_title">My Shifts</div><div class="ms" data-i18n="menu_myshifts_sub">View your roster &amp; clock in / clock out</div></span>
         </button>
         <button class="mode-btn" onclick="startPatrolFlow()">
           <span class="mi">🚶</span>
-          <span><div class="mt">Patrol Checkpoints</div><div class="ms">Check in at site checkpoints during your shift</div></span>
+          <span><div class="mt" data-i18n="menu_patrol_title">Patrol Checkpoints</div><div class="ms" data-i18n="menu_patrol_sub">Check in at site checkpoints during your shift</div></span>
         </button>
         <button class="mode-btn" onclick="startIncidentFlow()">
           <span class="mi">🚨</span>
-          <span><div class="mt">Report Incident</div><div class="ms">Log an incident with photo &amp; location</div></span>
+          <span><div class="mt" data-i18n="menu_incident_title">Report Incident</div><div class="ms" data-i18n="menu_incident_sub">Log an incident with photo &amp; location</div></span>
         </button>
         <button class="mode-btn" onclick="startAvailabilityFlow()">
           <span class="mi">📅</span>
-          <span><div class="mt">My Availability</div><div class="ms">Let the office know when you're free</div></span>
+          <span><div class="mt" data-i18n="menu_availability_title">My Availability</div><div class="ms" data-i18n="menu_availability_sub">Let the office know when you're free</div></span>
         </button>
         <button class="mode-btn" onclick="startMessagesFlow()">
           <span class="mi">💬</span>
-          <span><div class="mt">Messages<span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms">Chat directly with the office</div></span>
+          <span><div class="mt"><span data-i18n="menu_messages_title">Messages</span><span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms" data-i18n="menu_messages_sub">Chat directly with the office</div></span>
         </button>
       </div>
-      <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
+      <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" data-i18n="push_enable_btn" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
       <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
-        🔔 Notifications on — <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline">turn off</a>
+        <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
       </div>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
+      <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
     </div>
 
     <!-- My Shifts (roster + clock in/out) -->
     <div class="guard-card hidden" id="step-myshifts">
-      <div class="step-title">🕐 My Shifts</div>
+      <div class="step-title" data-i18n="myshifts_title">🕐 My Shifts</div>
       <div id="myshifts-status" class="geo-status hidden"></div>
       <div id="myshifts-list"></div>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- Clock Out -->
     <div class="guard-card hidden" id="step-clockout">
-      <div class="step-title">Clock Out — <span id="co-site-name"></span></div>
-      <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px">Optional: attach a photo and any notes before finishing this shift.</p>
+      <div class="step-title"><span data-i18n="clockout_title_prefix">Clock Out — </span><span id="co-site-name"></span></div>
+      <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px" data-i18n="clockout_sub">Optional: attach a photo and any notes before finishing this shift.</p>
       <div class="form-group">
-        <label class="form-label">Notes (optional)</label>
-        <textarea id="co-notes" class="form-control" rows="2" placeholder="Any incidents or additional info..."></textarea>
+        <label class="form-label" data-i18n="notes_label">Notes (optional)</label>
+        <textarea id="co-notes" class="form-control" rows="2" data-i18n-placeholder="notes_placeholder" placeholder="Any incidents or additional info..."></textarea>
       </div>
       <div class="photo-btns">
         <label class="photo-btn" id="co-cam-btn">
-          <span class="icon">📷</span><span>Take Photo</span>
+          <span class="icon">📷</span><span data-i18n="take_photo">Take Photo</span>
           <input type="file" accept="image/*" capture="environment" style="display:none" onchange="handleClockOutPhoto(this,'cam')">
         </label>
         <label class="photo-btn" id="co-gal-btn">
-          <span class="icon">🖼️</span><span>From Gallery</span>
+          <span class="icon">🖼️</span><span data-i18n="from_gallery">From Gallery</span>
           <input type="file" accept="image/*" style="display:none" onchange="handleClockOutPhoto(this,'gal')">
         </label>
       </div>
       <img id="co-photo-preview" class="photo-preview hidden" src="" alt="">
-      <button class="submit-btn" id="co-submit-btn" onclick="confirmClockOut()">✓ Confirm Clock Out</button>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showGuardCard('step-myshifts')">← Back</button>
+      <button class="submit-btn" id="co-submit-btn" data-i18n="confirm_clockout_btn" onclick="confirmClockOut()">✓ Confirm Clock Out</button>
+      <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:10px" onclick="showGuardCard('step-myshifts')">← Back</button>
     </div>
 
     <!-- Success -->
@@ -678,17 +685,17 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <div class="success-icon">✅</div>
         <div class="success-title" id="success-title">Shift Completed!</div>
         <div class="success-sub" id="success-sub">Your hours have been recorded and are pending review.</div>
-        <button class="nav-btn nav-next" style="width:100%;margin-top:4px" onclick="startShiftFlow()">← Back to My Shifts</button>
+        <button class="nav-btn nav-next" data-i18n="back_to_myshifts" style="width:100%;margin-top:4px" onclick="startShiftFlow()">← Back to My Shifts</button>
       </div>
     </div>
 
     <!-- Patrol Checkpoints -->
     <div class="guard-card hidden" id="step-patrol">
-      <div class="step-title">🚶 Patrol Checkpoints</div>
+      <div class="step-title" data-i18n="patrol_title">🚶 Patrol Checkpoints</div>
       <div class="form-group">
-        <label class="form-label">Site</label>
+        <label class="form-label" data-i18n="site_label">Site</label>
         <div class="search-wrap">
-          <input type="text" id="patrol-site-input" class="form-control" placeholder="Search site name..." autocomplete="off"
+          <input type="text" id="patrol-site-input" class="form-control" data-i18n-placeholder="search_site_placeholder" placeholder="Search site name..." autocomplete="off"
                  oninput="filterPatrolSites(this.value)" onfocus="filterPatrolSites(this.value)" onblur="setTimeout(()=>closePatrolSiteDD(),200)">
           <div id="patrol-site-dropdown" class="search-dropdown hidden"></div>
         </div>
@@ -698,16 +705,16 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div id="patrol-map" class="map-box hidden" style="height:170px"></div>
       <div id="patrol-list" style="margin-top:12px"></div>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- Report Incident -->
     <div class="guard-card hidden" id="step-incident">
-      <div class="step-title">🚨 Report Incident</div>
+      <div class="step-title" data-i18n="incident_title">🚨 Report Incident</div>
       <div class="form-group">
-        <label class="form-label">Site</label>
+        <label class="form-label" data-i18n="site_label">Site</label>
         <div class="search-wrap">
-          <input type="text" id="incident-site-input" class="form-control" placeholder="Search site name..." autocomplete="off"
+          <input type="text" id="incident-site-input" class="form-control" data-i18n-placeholder="search_site_placeholder" placeholder="Search site name..." autocomplete="off"
                  oninput="filterIncidentSites(this.value)" onfocus="filterIncidentSites(this.value)" onblur="setTimeout(()=>closeIncidentSiteDD(),200)">
           <div id="incident-site-dropdown" class="search-dropdown hidden"></div>
         </div>
@@ -716,88 +723,88 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Incident Type</label>
+        <label class="form-label" data-i18n="incident_type_label">Incident Type</label>
         <select id="incident-type" class="form-control">
-          <option value="Suspicious Activity">Suspicious Activity</option>
-          <option value="Theft">Theft</option>
-          <option value="Vandalism">Vandalism</option>
-          <option value="Medical">Medical</option>
-          <option value="Trespassing">Trespassing</option>
-          <option value="Alarm Activation">Alarm Activation</option>
-          <option value="Equipment Fault">Equipment Fault</option>
-          <option value="Other">Other</option>
+          <option value="Suspicious Activity" data-i18n="incident_type_suspicious">Suspicious Activity</option>
+          <option value="Theft" data-i18n="incident_type_theft">Theft</option>
+          <option value="Vandalism" data-i18n="incident_type_vandalism">Vandalism</option>
+          <option value="Medical" data-i18n="incident_type_medical">Medical</option>
+          <option value="Trespassing" data-i18n="incident_type_trespassing">Trespassing</option>
+          <option value="Alarm Activation" data-i18n="incident_type_alarm">Alarm Activation</option>
+          <option value="Equipment Fault" data-i18n="incident_type_equipment">Equipment Fault</option>
+          <option value="Other" data-i18n="incident_type_other">Other</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Description</label>
-        <textarea id="incident-desc" class="form-control" rows="3" placeholder="What happened? Include as much detail as possible..."></textarea>
+        <label class="form-label" data-i18n="description_label">Description</label>
+        <textarea id="incident-desc" class="form-control" rows="3" data-i18n-placeholder="incident_desc_placeholder" placeholder="What happened? Include as much detail as possible..."></textarea>
       </div>
       <div id="incident-geo-status" class="geo-status hidden"></div>
       <div class="photo-btns">
         <label class="photo-btn" id="inc-cam-btn">
-          <span class="icon">📷</span><span>Take Photo</span>
+          <span class="icon">📷</span><span data-i18n="take_photo">Take Photo</span>
           <input type="file" accept="image/*" capture="environment" style="display:none" onchange="handleIncidentPhoto(this,'cam')">
         </label>
         <label class="photo-btn" id="inc-gal-btn">
-          <span class="icon">🖼️</span><span>From Gallery</span>
+          <span class="icon">🖼️</span><span data-i18n="from_gallery">From Gallery</span>
           <input type="file" accept="image/*" style="display:none" onchange="handleIncidentPhoto(this,'gal')">
         </label>
       </div>
       <img id="incident-photo-preview" class="photo-preview hidden" src="" alt="">
-      <button class="submit-btn" id="incident-submit-btn" onclick="submitIncident()">🚨 Report Incident</button>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
+      <button class="submit-btn" id="incident-submit-btn" data-i18n="report_incident_btn" onclick="submitIncident()">🚨 Report Incident</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- Incident success -->
     <div class="guard-card hidden" id="step-incident-success">
       <div class="success-card">
         <div class="success-icon">✅</div>
-        <div class="success-title">Incident Reported</div>
-        <div class="success-sub">Your incident report has been logged and sent to the office.</div>
-        <button class="nav-btn nav-next" onclick="resetIncidentForm()" style="width:100%;margin-top:4px">+ Report Another</button>
-        <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
+        <div class="success-title" data-i18n="incident_reported_title">Incident Reported</div>
+        <div class="success-sub" data-i18n="incident_reported_sub">Your incident report has been logged and sent to the office.</div>
+        <button class="nav-btn nav-next" data-i18n="report_another" onclick="resetIncidentForm()" style="width:100%;margin-top:4px">+ Report Another</button>
+        <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
       </div>
     </div>
 
     <!-- My Availability: week list -->
     <div class="guard-card hidden" id="step-availability">
-      <div class="step-title">📅 My Availability</div>
+      <div class="step-title" data-i18n="availability_title">📅 My Availability</div>
       <div class="gavail-nav">
         <button class="nav-btn nav-back" style="flex:0" onclick="gaShiftWeek(-1)">‹</button>
         <span id="gavail-range" class="gavail-range"></span>
         <button class="nav-btn nav-back" style="flex:0" onclick="gaShiftWeek(1)">›</button>
       </div>
       <p id="gavail-updated" style="font-size:11px;color:rgba(255,255,255,.4);text-align:center;margin:8px 0 14px"></p>
-      <button class="nav-btn nav-next" style="width:100%;margin-bottom:16px" onclick="gaConfirmNoChanges()">✓ Nothing's changed — confirm as-is</button>
+      <button class="nav-btn nav-next" data-i18n="confirm_no_changes" style="width:100%;margin-bottom:16px" onclick="gaConfirmNoChanges()">✓ Nothing's changed — confirm as-is</button>
       <div id="gavail-days"></div>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- My Availability: edit one day -->
     <div class="guard-card hidden" id="step-avail-edit">
-      <div class="step-title" id="gae-title">Set Availability</div>
-      <label class="gavm-opt"><input type="radio" name="gae-mode" value="free" onchange="gaeSync()"><span><strong>Available all day</strong><br><small>Clears any unavailability for this day</small></span></label>
-      <label class="gavm-opt"><input type="radio" name="gae-mode" value="partial" onchange="gaeSync()"><span><strong>Free from a time</strong><br><small>Busy earlier, available after this</small></span></label>
+      <div class="step-title" id="gae-title" data-i18n="avail_edit_title">Set Availability</div>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="free" onchange="gaeSync()"><span><strong data-i18n="avail_free_all_day">Available all day</strong><br><small data-i18n="avail_free_all_day_sub">Clears any unavailability for this day</small></span></label>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="partial" onchange="gaeSync()"><span><strong data-i18n="avail_free_from">Free from a time</strong><br><small data-i18n="avail_free_from_sub">Busy earlier, available after this</small></span></label>
       <div id="gae-time-row" style="margin:0 0 10px 32px">
         <input type="time" id="gae-from" class="form-control" style="width:150px" value="18:00" onfocus="gaePick('partial')">
       </div>
-      <label class="gavm-opt"><input type="radio" name="gae-mode" value="off" onchange="gaeSync()"><span><strong>Unavailable all day</strong><br><small>Won't be offered shifts this day</small></span></label>
-      <button class="nav-btn nav-next" style="width:100%;margin-top:16px" onclick="gaeSave()">Save</button>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showGuardCard('step-availability')">← Cancel</button>
+      <label class="gavm-opt"><input type="radio" name="gae-mode" value="off" onchange="gaeSync()"><span><strong data-i18n="avail_unavailable">Unavailable all day</strong><br><small data-i18n="avail_unavailable_sub">Won't be offered shifts this day</small></span></label>
+      <button class="nav-btn nav-next" data-i18n="save_btn" style="width:100%;margin-top:16px" onclick="gaeSave()">Save</button>
+      <button class="nav-btn nav-back" data-i18n="cancel_btn" style="width:100%;margin-top:10px" onclick="showGuardCard('step-availability')">← Cancel</button>
     </div>
 
     <!-- Messages -->
     <div class="guard-card hidden" id="step-messages">
-      <div class="step-title">💬 Messages</div>
+      <div class="step-title" data-i18n="messages_title">💬 Messages</div>
       <div id="msg-thread" class="msg-thread"></div>
       <div class="form-group">
-        <textarea id="msg-input" class="form-control" rows="2" placeholder="Type a message to the office..."></textarea>
+        <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..."></textarea>
       </div>
-      <button class="nav-btn nav-next" style="width:100%" onclick="sendGuardMessage()">Send</button>
-      <button class="nav-btn nav-back" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
+      <button class="nav-btn nav-next" data-i18n="send_btn" style="width:100%" onclick="sendGuardMessage()">Send</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
-    <div class="admin-link"><a href="#" onclick="showLogin();return false">Admin Login</a></div>
+    <div class="admin-link"><a href="#" onclick="showLogin();return false" data-i18n="admin_login_link">Admin Login</a></div>
   </div>
 </div>
 
@@ -1695,27 +1702,27 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 <div id="guard-firstpw-modal" class="modal-overlay hidden" style="z-index:9999">
   <div class="modal" style="max-width:420px">
     <div class="modal-header" style="background:var(--navy);color:#fff;border-radius:12px 12px 0 0">
-      <span class="modal-title" style="color:#fff">🔐 Set Your Password</span>
+      <span class="modal-title" style="color:#fff" data-i18n="first_pw_title">🔐 Set Your Password</span>
     </div>
     <div class="modal-body">
-      <p style="color:var(--muted);font-size:13px;margin-bottom:18px">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:18px" data-i18n="first_pw_body">
         Welcome! For your security, you must create a personal password before continuing.
         Your temporary password will no longer work after this step.
       </p>
       <div class="form-group">
-        <label class="form-label">New Password <span style="color:var(--red)">*</span></label>
-        <input type="password" id="gfp-new" class="form-control" placeholder="Min 6 characters"
+        <label class="form-label"><span data-i18n="new_password_label">New Password</span> <span style="color:var(--red)">*</span></label>
+        <input type="password" id="gfp-new" class="form-control" data-i18n-placeholder="new_password_placeholder" placeholder="Min 6 characters"
                onkeydown="if(event.key==='Enter')guardSubmitFirstPassword()">
       </div>
       <div class="form-group">
-        <label class="form-label">Confirm Password <span style="color:var(--red)">*</span></label>
-        <input type="password" id="gfp-confirm" class="form-control" placeholder="Repeat your password"
+        <label class="form-label"><span data-i18n="confirm_password_label">Confirm Password</span> <span style="color:var(--red)">*</span></label>
+        <input type="password" id="gfp-confirm" class="form-control" data-i18n-placeholder="confirm_password_placeholder" placeholder="Repeat your password"
                onkeydown="if(event.key==='Enter')guardSubmitFirstPassword()">
       </div>
       <div id="gfp-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" style="width:100%" onclick="guardSubmitFirstPassword()">
+      <button class="btn btn-primary" style="width:100%" data-i18n="set_password_continue" onclick="guardSubmitFirstPassword()">
         Set Password &amp; Continue →
       </button>
     </div>
@@ -1726,17 +1733,17 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 <div id="panic-confirm-modal" class="modal-overlay hidden" style="z-index:9999">
   <div class="modal" style="max-width:380px">
     <div class="modal-header" style="background:#dc2626;color:#fff;border-radius:12px 12px 0 0">
-      <span class="modal-title" style="color:#fff">🆘 Send Emergency Alert?</span>
+      <span class="modal-title" style="color:#fff" data-i18n="panic_confirm_title">🆘 Send Emergency Alert?</span>
     </div>
     <div class="modal-body">
-      <p style="color:var(--muted);font-size:14px;line-height:1.5">
+      <p style="color:var(--muted);font-size:14px;line-height:1.5" data-i18n="panic_confirm_body">
         This will immediately notify the office with your name and current location. Only use this if you need urgent help.
       </p>
       <div id="panic-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:10px">
-      <button class="btn btn-ghost" style="flex:1" onclick="closeModal('panic-confirm-modal')">Cancel</button>
-      <button id="panic-send-btn" class="btn" style="flex:1;background:#dc2626;color:#fff" onclick="sendPanicAlert()">Yes, Send Alert</button>
+      <button class="btn btn-ghost" style="flex:1" data-i18n="panic_cancel" onclick="closeModal('panic-confirm-modal')">Cancel</button>
+      <button id="panic-send-btn" class="btn" style="flex:1;background:#dc2626;color:#fff" data-i18n="panic_send" onclick="sendPanicAlert()">Yes, Send Alert</button>
     </div>
   </div>
 </div>
@@ -1771,6 +1778,365 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 </div>
 
 <script>
+// ── Guard Portal translations ────────────────────────────────────────────────
+// Scoped to the Guard Portal only — admin stays English. Covers fixed UI
+// chrome (labels, buttons, headers, status text); business data a guard
+// reads (site names, guard names, admin message bodies, FAQ answers) is
+// left as-is since translating free-form content needs a live translation
+// service, not a static dictionary. Machine-translated: worth a native
+// speaker's review before guards rely on it for anything pay- or
+// safety-critical, same as any first pass at this would be.
+const TRANSLATIONS = {
+  en: {
+    login_title: "Guard Login", login_email_label: "Email Address", login_password_label: "Password",
+    login_btn: "Login →", login_contact_office: "No account yet, or forgot your password? Contact the office.",
+    menu_title: "What would you like to do?",
+    menu_myshifts_title: "My Shifts", menu_myshifts_sub: "View your roster & clock in / clock out",
+    menu_patrol_title: "Patrol Checkpoints", menu_patrol_sub: "Check in at site checkpoints during your shift",
+    menu_incident_title: "Report Incident", menu_incident_sub: "Log an incident with photo & location",
+    menu_availability_title: "My Availability", menu_availability_sub: "Let the office know when you're free",
+    menu_messages_title: "Messages", menu_messages_sub: "Chat directly with the office",
+    push_enable_btn: "🔔 Enable Notifications", push_enabled_prefix: "🔔 Notifications on —", push_turn_off: "turn off",
+    logout_btn: "Logout",
+    myshifts_title: "🕐 My Shifts", back_to_menu: "← Back to Menu",
+    clockout_title_prefix: "Clock Out — ", clockout_sub: "Optional: attach a photo and any notes before finishing this shift.",
+    notes_label: "Notes (optional)", notes_placeholder: "Any incidents or additional info...",
+    take_photo: "Take Photo", from_gallery: "From Gallery",
+    confirm_clockout_btn: "✓ Confirm Clock Out", back_btn: "← Back",
+    shift_completed_title: "Shift Completed!", shift_completed_sub: "Your hours have been recorded and are pending review.",
+    back_to_myshifts: "← Back to My Shifts",
+    patrol_title: "🚶 Patrol Checkpoints", site_label: "Site", search_site_placeholder: "Search site name...",
+    incident_title: "🚨 Report Incident", incident_type_label: "Incident Type",
+    incident_type_suspicious: "Suspicious Activity", incident_type_theft: "Theft", incident_type_vandalism: "Vandalism",
+    incident_type_medical: "Medical", incident_type_trespassing: "Trespassing", incident_type_alarm: "Alarm Activation",
+    incident_type_equipment: "Equipment Fault", incident_type_other: "Other",
+    description_label: "Description", incident_desc_placeholder: "What happened? Include as much detail as possible...",
+    report_incident_btn: "🚨 Report Incident",
+    incident_reported_title: "Incident Reported", incident_reported_sub: "Your incident report has been logged and sent to the office.",
+    report_another: "+ Report Another",
+    availability_title: "📅 My Availability", confirm_no_changes: "✓ Nothing's changed — confirm as-is",
+    avail_edit_title: "Set Availability",
+    avail_free_all_day: "Available all day", avail_free_all_day_sub: "Clears any unavailability for this day",
+    avail_free_from: "Free from a time", avail_free_from_sub: "Busy earlier, available after this",
+    avail_unavailable: "Unavailable all day", avail_unavailable_sub: "Won't be offered shifts this day",
+    save_btn: "Save", cancel_btn: "← Cancel",
+    messages_title: "💬 Messages", msg_input_placeholder: "Type a message to the office...", send_btn: "Send",
+    admin_login_link: "Admin Login",
+    emergency_btn: "🆘 Emergency", panic_confirm_title: "🆘 Send Emergency Alert?",
+    panic_confirm_body: "This will immediately notify the office with your name and current location. Only use this if you need urgent help.",
+    panic_cancel: "Cancel", panic_send: "Yes, Send Alert", panic_sending: "Sending…",
+    first_pw_title: "🔐 Set Your Password",
+    first_pw_body: "Welcome! For your security, you must create a personal password before continuing. Your temporary password will no longer work after this step.",
+    new_password_label: "New Password", new_password_placeholder: "Min 6 characters",
+    confirm_password_label: "Confirm Password", confirm_password_placeholder: "Repeat your password",
+    set_password_continue: "Set Password & Continue →",
+    status_scheduled: "Awaiting Clock In", status_missed: "Missed Clock In", status_in_progress: "Clocked In — On Site",
+    status_completed: "Clocked Out", status_cancelled: "Cancelled",
+    clock_in_btn: "Clock In", clock_out_btn: "Clock Out", done_label: "✓ Done", syncing_label: "🔄 Syncing…",
+    clocked_in_offline: "Clocked in (offline)",
+    no_shifts: "No shifts scheduled for you right now. Check back later or contact the office.",
+    could_not_load_shifts: "Could not load your shifts.",
+    no_checkpoints: "No checkpoints have been set up for this site yet.",
+    check_in_radius: "Check-in radius", check_in_btn: "Check In", checked_in_btn: "Checked In",
+    offline_saved_clockin: "No connection — clock-in saved, will sync automatically",
+    offline_saved_checkin: "No connection — check-in saved, will sync automatically",
+    offline_clockout_title: "Clock-Out Saved!",
+    offline_clockout_sub: "You're offline right now — this will sync automatically once you're back online.",
+    offline_showing_cached: "You appear to be offline — showing your last known info",
+    clocked_in_toast: "Clocked in ✓", checked_in_toast: "Checked in ✓", shift_required_label: "Required",
+    panic_alert_sent_toast: "🆘 Emergency alert sent — the office has been notified",
+    notifications_enabled_toast: "Notifications enabled ✓", notifications_disabled_toast: "Notifications turned off",
+    set_availability_prefix: "Set Availability — ",
+    geo_not_supported: "Your device does not support location", getting_location: "📍 Getting your location…",
+    could_not_get_location_prefix: "⚠️ Could not get your location: ", clocking_out_btn: "Clocking out…",
+    photo_attached_toast: "Photo attached ✓", please_log_in_first: "Please log in first",
+    from_checkpoint_suffix: "from checkpoint",
+    offline_action_singular: "action", offline_action_plural: "actions",
+    offline_waiting_suffix: "waiting to sync — will send automatically once you're back online",
+    notifications_unavailable: "Notifications are not available right now",
+    notifications_permission_denied: "Notifications permission was not granted",
+    could_not_enable_notifications_prefix: "Could not enable notifications: ",
+    could_not_disable_notifications_prefix: "Could not turn off notifications: ",
+    queued_action_failed_prefix: "A queued action couldn't be completed: ",
+    queued_action_failed_suffix: ". Please contact your supervisor.",
+    unknown_error: "unknown error", email_password_required: "Email and password are required",
+    avail_updated_prefix: "You last updated this ", avail_not_set_yet: "You haven't set your availability yet",
+    avail_working_prefix: "Working — ", avail_free_from_time_prefix: "Free from ",
+    avail_unavailable_label: "Unavailable", avail_available_all_day_label: "Available all day", change_btn: "Change",
+    incident_select_site: "Please select a site", submitting_btn: "Submitting…",
+    no_messages_yet: "No messages yet. Say hello 👋", office_label: "Office", guard_label: "Guard",
+    loading_label: "Loading…", could_not_load_messages: "Could not load messages.",
+    could_not_send_message: "Could not send message",
+  },
+  hi: {
+    login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
+    login_btn: "लॉगिन →", login_contact_office: "अभी तक खाता नहीं है, या पासवर्ड भूल गए? कार्यालय से संपर्क करें।",
+    menu_title: "आप क्या करना चाहेंगे?",
+    menu_myshifts_title: "मेरी शिफ्ट", menu_myshifts_sub: "अपना रोस्टर देखें और क्लॉक इन / क्लॉक आउट करें",
+    menu_patrol_title: "पेट्रोल चेकपॉइंट", menu_patrol_sub: "अपनी शिफ्ट के दौरान साइट चेकपॉइंट पर चेक इन करें",
+    menu_incident_title: "घटना दर्ज करें", menu_incident_sub: "फोटो और स्थान के साथ घटना दर्ज करें",
+    menu_availability_title: "मेरी उपलब्धता", menu_availability_sub: "कार्यालय को बताएं कि आप कब खाली हैं",
+    menu_messages_title: "संदेश", menu_messages_sub: "कार्यालय से सीधे बात करें",
+    push_enable_btn: "🔔 सूचनाएं चालू करें", push_enabled_prefix: "🔔 सूचनाएं चालू हैं —", push_turn_off: "बंद करें",
+    logout_btn: "लॉगआउट",
+    myshifts_title: "🕐 मेरी शिफ्ट", back_to_menu: "← मेनू पर वापस जाएं",
+    clockout_title_prefix: "क्लॉक आउट — ", clockout_sub: "वैकल्पिक: यह शिफ्ट समाप्त करने से पहले एक फोटो और कोई भी नोट्स जोड़ें।",
+    notes_label: "नोट्स (वैकल्पिक)", notes_placeholder: "कोई भी घटना या अतिरिक्त जानकारी...",
+    take_photo: "फोटो लें", from_gallery: "गैलरी से",
+    confirm_clockout_btn: "✓ क्लॉक आउट की पुष्टि करें", back_btn: "← वापस",
+    shift_completed_title: "शिफ्ट पूरी हुई!", shift_completed_sub: "आपके घंटे दर्ज कर लिए गए हैं और समीक्षा के लिए लंबित हैं।",
+    back_to_myshifts: "← मेरी शिफ्ट पर वापस जाएं",
+    patrol_title: "🚶 पेट्रोल चेकपॉइंट", site_label: "साइट", search_site_placeholder: "साइट का नाम खोजें...",
+    incident_title: "🚨 घटना दर्ज करें", incident_type_label: "घटना का प्रकार",
+    incident_type_suspicious: "संदिग्ध गतिविधि", incident_type_theft: "चोरी", incident_type_vandalism: "तोड़फोड़",
+    incident_type_medical: "चिकित्सा", incident_type_trespassing: "अतिक्रमण", incident_type_alarm: "अलार्म सक्रियण",
+    incident_type_equipment: "उपकरण खराबी", incident_type_other: "अन्य",
+    description_label: "विवरण", incident_desc_placeholder: "क्या हुआ? जितना संभव हो उतना विवरण शामिल करें...",
+    report_incident_btn: "🚨 घटना दर्ज करें",
+    incident_reported_title: "घटना दर्ज हो गई", incident_reported_sub: "आपकी घटना रिपोर्ट दर्ज की जा चुकी है और कार्यालय को भेज दी गई है।",
+    report_another: "+ एक और दर्ज करें",
+    availability_title: "📅 मेरी उपलब्धता", confirm_no_changes: "✓ कुछ नहीं बदला — जैसा है वैसे पुष्टि करें",
+    avail_edit_title: "उपलब्धता सेट करें",
+    avail_free_all_day: "पूरे दिन उपलब्ध", avail_free_all_day_sub: "इस दिन की कोई भी अनुपलब्धता हटा देता है",
+    avail_free_from: "एक समय से खाली", avail_free_from_sub: "पहले व्यस्त, इसके बाद उपलब्ध",
+    avail_unavailable: "पूरे दिन अनुपलब्ध", avail_unavailable_sub: "इस दिन शिफ्ट की पेशकश नहीं की जाएगी",
+    save_btn: "सहेजें", cancel_btn: "← रद्द करें",
+    messages_title: "💬 संदेश", msg_input_placeholder: "कार्यालय को संदेश लिखें...", send_btn: "भेजें",
+    admin_login_link: "एडमिन लॉगिन",
+    emergency_btn: "🆘 आपातकाल", panic_confirm_title: "🆘 आपातकालीन अलर्ट भेजें?",
+    panic_confirm_body: "इससे तुरंत कार्यालय को आपके नाम और वर्तमान स्थान के साथ सूचित किया जाएगा। केवल तभी उपयोग करें जब आपको तत्काल मदद चाहिए।",
+    panic_cancel: "रद्द करें", panic_send: "हां, अलर्ट भेजें", panic_sending: "भेजा जा रहा है…",
+    first_pw_title: "🔐 अपना पासवर्ड सेट करें",
+    first_pw_body: "स्वागत है! आपकी सुरक्षा के लिए, आगे बढ़ने से पहले आपको एक व्यक्तिगत पासवर्ड बनाना होगा। इस चरण के बाद आपका अस्थायी पासवर्ड काम नहीं करेगा।",
+    new_password_label: "नया पासवर्ड", new_password_placeholder: "कम से कम 6 अक्षर",
+    confirm_password_label: "पासवर्ड की पुष्टि करें", confirm_password_placeholder: "अपना पासवर्ड दोबारा लिखें",
+    set_password_continue: "पासवर्ड सेट करें और जारी रखें →",
+    status_scheduled: "क्लॉक इन की प्रतीक्षा", status_missed: "क्लॉक इन छूट गया", status_in_progress: "क्लॉक इन — साइट पर",
+    status_completed: "क्लॉक आउट हो गया", status_cancelled: "रद्द",
+    clock_in_btn: "क्लॉक इन", clock_out_btn: "क्लॉक आउट", done_label: "✓ पूर्ण", syncing_label: "🔄 सिंक हो रहा है…",
+    clocked_in_offline: "क्लॉक इन (ऑफ़लाइन)",
+    no_shifts: "अभी आपके लिए कोई शिफ्ट निर्धारित नहीं है। बाद में देखें या कार्यालय से संपर्क करें।",
+    could_not_load_shifts: "आपकी शिफ्ट लोड नहीं हो सकीं।",
+    no_checkpoints: "इस साइट के लिए अभी तक कोई चेकपॉइंट सेट नहीं किए गए हैं।",
+    check_in_radius: "चेक-इन दायरा", check_in_btn: "चेक इन", checked_in_btn: "चेक इन हो गया",
+    offline_saved_clockin: "कोई कनेक्शन नहीं — क्लॉक-इन सहेजा गया, यह अपने आप सिंक हो जाएगा",
+    offline_saved_checkin: "कोई कनेक्शन नहीं — चेक-इन सहेजा गया, यह अपने आप सिंक हो जाएगा",
+    offline_clockout_title: "क्लॉक-आउट सहेजा गया!",
+    offline_clockout_sub: "आप अभी ऑफ़लाइन हैं — वापस ऑनलाइन आने पर यह अपने आप सिंक हो जाएगा।",
+    offline_showing_cached: "लगता है आप ऑफ़लाइन हैं — आपकी आख़िरी ज्ञात जानकारी दिखाई जा रही है",
+    clocked_in_toast: "क्लॉक इन हो गया ✓", checked_in_toast: "चेक इन हो गया ✓", shift_required_label: "आवश्यक",
+    panic_alert_sent_toast: "🆘 आपातकालीन अलर्ट भेजा गया — कार्यालय को सूचित कर दिया गया है",
+    notifications_enabled_toast: "सूचनाएं चालू हो गईं ✓", notifications_disabled_toast: "सूचनाएं बंद कर दी गईं",
+    set_availability_prefix: "उपलब्धता सेट करें — ",
+    geo_not_supported: "आपका डिवाइस स्थान का समर्थन नहीं करता", getting_location: "📍 आपका स्थान प्राप्त किया जा रहा है…",
+    could_not_get_location_prefix: "⚠️ आपका स्थान प्राप्त नहीं किया जा सका: ", clocking_out_btn: "क्लॉक आउट किया जा रहा है…",
+    photo_attached_toast: "फोटो जोड़ी गई ✓", please_log_in_first: "कृपया पहले लॉगिन करें",
+    from_checkpoint_suffix: "चेकपॉइंट से",
+    offline_action_singular: "कार्रवाई", offline_action_plural: "कार्रवाइयां",
+    offline_waiting_suffix: "सिंक होने की प्रतीक्षा में — वापस ऑनलाइन आने पर यह अपने आप भेज दी जाएगी",
+    notifications_unavailable: "सूचनाएं अभी उपलब्ध नहीं हैं",
+    notifications_permission_denied: "सूचनाओं की अनुमति नहीं दी गई",
+    could_not_enable_notifications_prefix: "सूचनाएं चालू नहीं की जा सकीं: ",
+    could_not_disable_notifications_prefix: "सूचनाएं बंद नहीं की जा सकीं: ",
+    queued_action_failed_prefix: "एक कार्रवाई पूरी नहीं हो सकी: ",
+    queued_action_failed_suffix: "। कृपया अपने पर्यवेक्षक से संपर्क करें।",
+    unknown_error: "अज्ञात त्रुटि", email_password_required: "ईमेल और पासवर्ड आवश्यक हैं",
+    avail_updated_prefix: "आपने इसे आख़िरी बार अपडेट किया ", avail_not_set_yet: "आपने अभी तक अपनी उपलब्धता सेट नहीं की है",
+    avail_working_prefix: "काम पर — ", avail_free_from_time_prefix: "इस समय से खाली ",
+    avail_unavailable_label: "अनुपलब्ध", avail_available_all_day_label: "पूरे दिन उपलब्ध", change_btn: "बदलें",
+    incident_select_site: "कृपया एक साइट चुनें", submitting_btn: "जमा किया जा रहा है…",
+    no_messages_yet: "अभी तक कोई संदेश नहीं। नमस्ते कहें 👋", office_label: "कार्यालय", guard_label: "गार्ड",
+    loading_label: "लोड हो रहा है…", could_not_load_messages: "संदेश लोड नहीं हो सके।",
+    could_not_send_message: "संदेश भेजा नहीं जा सका",
+  },
+  ur: {
+    login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
+    login_btn: "لاگ ان ←", login_contact_office: "ابھی تک اکاؤنٹ نہیں ہے، یا پاس ورڈ بھول گئے؟ دفتر سے رابطہ کریں۔",
+    menu_title: "آپ کیا کرنا چاہیں گے؟",
+    menu_myshifts_title: "میری شفٹس", menu_myshifts_sub: "اپنا روسٹر دیکھیں اور کلاک ان / کلاک آؤٹ کریں",
+    menu_patrol_title: "پٹرول چیک پوائنٹس", menu_patrol_sub: "اپنی شفٹ کے دوران سائٹ چیک پوائنٹس پر چیک ان کریں",
+    menu_incident_title: "واقعہ رپورٹ کریں", menu_incident_sub: "تصویر اور مقام کے ساتھ واقعہ درج کریں",
+    menu_availability_title: "میری دستیابی", menu_availability_sub: "دفتر کو بتائیں کہ آپ کب فارغ ہیں",
+    menu_messages_title: "پیغامات", menu_messages_sub: "دفتر سے براہ راست بات کریں",
+    push_enable_btn: "🔔 اطلاعات فعال کریں", push_enabled_prefix: "🔔 اطلاعات فعال ہیں —", push_turn_off: "بند کریں",
+    logout_btn: "لاگ آؤٹ",
+    myshifts_title: "🕐 میری شفٹس", back_to_menu: "→ مینو پر واپس جائیں",
+    clockout_title_prefix: "کلاک آؤٹ — ", clockout_sub: "اختیاری: یہ شفٹ ختم کرنے سے پہلے ایک تصویر اور کوئی نوٹس شامل کریں۔",
+    notes_label: "نوٹس (اختیاری)", notes_placeholder: "کوئی واقعہ یا اضافی معلومات...",
+    take_photo: "تصویر لیں", from_gallery: "گیلری سے",
+    confirm_clockout_btn: "✓ کلاک آؤٹ کی تصدیق کریں", back_btn: "→ واپس",
+    shift_completed_title: "شفٹ مکمل ہوگئی!", shift_completed_sub: "آپ کے اوقات درج کر لیے گئے ہیں اور جائزے کے لیے زیر التوا ہیں۔",
+    back_to_myshifts: "→ میری شفٹس پر واپس جائیں",
+    patrol_title: "🚶 پٹرول چیک پوائنٹس", site_label: "سائٹ", search_site_placeholder: "سائٹ کا نام تلاش کریں...",
+    incident_title: "🚨 واقعہ رپورٹ کریں", incident_type_label: "واقعے کی قسم",
+    incident_type_suspicious: "مشکوک سرگرمی", incident_type_theft: "چوری", incident_type_vandalism: "توڑ پھوڑ",
+    incident_type_medical: "طبی", incident_type_trespassing: "غیر قانونی داخلہ", incident_type_alarm: "الارم ایکٹیویشن",
+    incident_type_equipment: "آلات کی خرابی", incident_type_other: "دیگر",
+    description_label: "تفصیل", incident_desc_placeholder: "کیا ہوا؟ ہو سکے تو زیادہ سے زیادہ تفصیل شامل کریں...",
+    report_incident_btn: "🚨 واقعہ رپورٹ کریں",
+    incident_reported_title: "واقعہ رپورٹ ہوگیا", incident_reported_sub: "آپ کی واقعہ رپورٹ درج کر لی گئی ہے اور دفتر کو بھیج دی گئی ہے۔",
+    report_another: "+ ایک اور رپورٹ کریں",
+    availability_title: "📅 میری دستیابی", confirm_no_changes: "✓ کچھ نہیں بدلا — جیسا ہے ویسے تصدیق کریں",
+    avail_edit_title: "دستیابی سیٹ کریں",
+    avail_free_all_day: "پورا دن دستیاب", avail_free_all_day_sub: "اس دن کی کوئی بھی عدم دستیابی ختم کر دیتا ہے",
+    avail_free_from: "ایک وقت سے فارغ", avail_free_from_sub: "پہلے مصروف، اس کے بعد دستیاب",
+    avail_unavailable: "پورا دن دستیاب نہیں", avail_unavailable_sub: "اس دن شفٹ کی پیشکش نہیں کی جائے گی",
+    save_btn: "محفوظ کریں", cancel_btn: "→ منسوخ کریں",
+    messages_title: "💬 پیغامات", msg_input_placeholder: "دفتر کو پیغام لکھیں...", send_btn: "بھیجیں",
+    admin_login_link: "ایڈمن لاگ ان",
+    emergency_btn: "🆘 ہنگامی صورتحال", panic_confirm_title: "🆘 ہنگامی الرٹ بھیجیں؟",
+    panic_confirm_body: "اس سے فوری طور پر دفتر کو آپ کے نام اور موجودہ مقام کے ساتھ مطلع کیا جائے گا۔ صرف اسی وقت استعمال کریں جب آپ کو فوری مدد درکار ہو۔",
+    panic_cancel: "منسوخ کریں", panic_send: "جی ہاں، الرٹ بھیجیں", panic_sending: "بھیجا جا رہا ہے…",
+    first_pw_title: "🔐 اپنا پاس ورڈ سیٹ کریں",
+    first_pw_body: "خوش آمدید! آپ کی سیکیورٹی کے لیے، آگے بڑھنے سے پہلے آپ کو ایک ذاتی پاس ورڈ بنانا ہوگا۔ اس مرحلے کے بعد آپ کا عارضی پاس ورڈ کام نہیں کرے گا۔",
+    new_password_label: "نیا پاس ورڈ", new_password_placeholder: "کم از کم 6 حروف",
+    confirm_password_label: "پاس ورڈ کی تصدیق کریں", confirm_password_placeholder: "اپنا پاس ورڈ دوبارہ لکھیں",
+    set_password_continue: "پاس ورڈ سیٹ کریں اور جاری رکھیں ←",
+    status_scheduled: "کلاک ان کا انتظار", status_missed: "کلاک ان چھوٹ گیا", status_in_progress: "کلاک ان — سائٹ پر",
+    status_completed: "کلاک آؤٹ ہوگیا", status_cancelled: "منسوخ",
+    clock_in_btn: "کلاک ان", clock_out_btn: "کلاک آؤٹ", done_label: "✓ مکمل", syncing_label: "🔄 سنک ہو رہا ہے…",
+    clocked_in_offline: "کلاک ان (آف لائن)",
+    no_shifts: "ابھی آپ کے لیے کوئی شفٹ طے شدہ نہیں ہے۔ بعد میں دیکھیں یا دفتر سے رابطہ کریں۔",
+    could_not_load_shifts: "آپ کی شفٹس لوڈ نہیں ہو سکیں۔",
+    no_checkpoints: "اس سائٹ کے لیے ابھی تک کوئی چیک پوائنٹ سیٹ نہیں کیا گیا۔",
+    check_in_radius: "چیک ان کا دائرہ", check_in_btn: "چیک ان", checked_in_btn: "چیک ان ہوگیا",
+    offline_saved_clockin: "کوئی کنکشن نہیں — کلاک ان محفوظ ہوگیا، یہ خود بخود سنک ہو جائے گا",
+    offline_saved_checkin: "کوئی کنکشن نہیں — چیک ان محفوظ ہوگیا، یہ خود بخود سنک ہو جائے گا",
+    offline_clockout_title: "کلاک آؤٹ محفوظ ہوگیا!",
+    offline_clockout_sub: "آپ ابھی آف لائن ہیں — واپس آن لائن آنے پر یہ خود بخود سنک ہو جائے گا۔",
+    offline_showing_cached: "لگتا ہے آپ آف لائن ہیں — آپ کی آخری معلوم معلومات دکھائی جا رہی ہیں",
+    clocked_in_toast: "کلاک ان ہوگیا ✓", checked_in_toast: "چیک ان ہوگیا ✓", shift_required_label: "درکار",
+    panic_alert_sent_toast: "🆘 ہنگامی الرٹ بھیج دیا گیا — دفتر کو مطلع کر دیا گیا ہے",
+    notifications_enabled_toast: "اطلاعات فعال ہوگئیں ✓", notifications_disabled_toast: "اطلاعات بند کر دی گئیں",
+    set_availability_prefix: "دستیابی سیٹ کریں — ",
+    geo_not_supported: "آپ کا ڈیوائس مقام کی سہولت فراہم نہیں کرتا", getting_location: "📍 آپ کا مقام حاصل کیا جا رہا ہے…",
+    could_not_get_location_prefix: "⚠️ آپ کا مقام حاصل نہیں ہو سکا: ", clocking_out_btn: "کلاک آؤٹ کیا جا رہا ہے…",
+    photo_attached_toast: "تصویر منسلک ہوگئی ✓", please_log_in_first: "براہ کرم پہلے لاگ ان کریں",
+    from_checkpoint_suffix: "چیک پوائنٹ سے",
+    offline_action_singular: "کارروائی", offline_action_plural: "کارروائیاں",
+    offline_waiting_suffix: "سنک ہونے کی منتظر — واپس آن لائن آنے پر یہ خود بخود بھیج دی جائے گی",
+    notifications_unavailable: "اطلاعات ابھی دستیاب نہیں ہیں",
+    notifications_permission_denied: "اطلاعات کی اجازت نہیں دی گئی",
+    could_not_enable_notifications_prefix: "اطلاعات فعال نہیں کی جا سکیں: ",
+    could_not_disable_notifications_prefix: "اطلاعات بند نہیں کی جا سکیں: ",
+    queued_action_failed_prefix: "ایک زیر التوا کارروائی مکمل نہیں ہو سکی: ",
+    queued_action_failed_suffix: "۔ براہ کرم اپنے سپروائزر سے رابطہ کریں۔",
+    unknown_error: "نامعلوم خرابی", email_password_required: "ای میل اور پاس ورڈ درکار ہیں",
+    avail_updated_prefix: "آپ نے آخری بار یہ اپ ڈیٹ کیا ", avail_not_set_yet: "آپ نے ابھی تک اپنی دستیابی سیٹ نہیں کی",
+    avail_working_prefix: "کام پر — ", avail_free_from_time_prefix: "اس وقت سے فارغ ",
+    avail_unavailable_label: "دستیاب نہیں", avail_available_all_day_label: "پورا دن دستیاب", change_btn: "تبدیل کریں",
+    incident_select_site: "براہ کرم ایک سائٹ منتخب کریں", submitting_btn: "جمع کیا جا رہا ہے…",
+    no_messages_yet: "ابھی تک کوئی پیغام نہیں۔ سلام کہیں 👋", office_label: "دفتر", guard_label: "گارڈ",
+    loading_label: "لوڈ ہو رہا ہے…", could_not_load_messages: "پیغامات لوڈ نہیں ہو سکے۔",
+    could_not_send_message: "پیغام بھیجا نہیں جا سکا",
+  },
+  ar: {
+    login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
+    login_btn: "تسجيل الدخول ←", login_contact_office: "ليس لديك حساب بعد، أو نسيت كلمة المرور؟ تواصل مع المكتب.",
+    menu_title: "ماذا تريد أن تفعل؟",
+    menu_myshifts_title: "مناوباتي", menu_myshifts_sub: "عرض جدولك وتسجيل الحضور / الانصراف",
+    menu_patrol_title: "نقاط تفتيش الدورية", menu_patrol_sub: "سجّل حضورك عند نقاط التفتيش أثناء مناوبتك",
+    menu_incident_title: "الإبلاغ عن حادثة", menu_incident_sub: "سجّل حادثة مع صورة والموقع",
+    menu_availability_title: "أوقات توفري", menu_availability_sub: "أخبر المكتب متى تكون متاحًا",
+    menu_messages_title: "الرسائل", menu_messages_sub: "تحدث مباشرة مع المكتب",
+    push_enable_btn: "🔔 تفعيل الإشعارات", push_enabled_prefix: "🔔 الإشعارات مفعّلة —", push_turn_off: "إيقاف",
+    logout_btn: "تسجيل الخروج",
+    myshifts_title: "🕐 مناوباتي", back_to_menu: "→ العودة إلى القائمة",
+    clockout_title_prefix: "تسجيل الانصراف — ", clockout_sub: "اختياري: أرفق صورة وأي ملاحظات قبل إنهاء هذه المناوبة.",
+    notes_label: "ملاحظات (اختياري)", notes_placeholder: "أي حوادث أو معلومات إضافية...",
+    take_photo: "التقاط صورة", from_gallery: "من المعرض",
+    confirm_clockout_btn: "✓ تأكيد الانصراف", back_btn: "→ رجوع",
+    shift_completed_title: "اكتملت المناوبة!", shift_completed_sub: "تم تسجيل ساعاتك وهي قيد المراجعة.",
+    back_to_myshifts: "→ العودة إلى مناوباتي",
+    patrol_title: "🚶 نقاط تفتيش الدورية", site_label: "الموقع", search_site_placeholder: "ابحث عن اسم الموقع...",
+    incident_title: "🚨 الإبلاغ عن حادثة", incident_type_label: "نوع الحادثة",
+    incident_type_suspicious: "نشاط مشبوه", incident_type_theft: "سرقة", incident_type_vandalism: "تخريب",
+    incident_type_medical: "حالة طبية", incident_type_trespassing: "تعدٍ", incident_type_alarm: "تفعيل الإنذار",
+    incident_type_equipment: "عطل في المعدات", incident_type_other: "أخرى",
+    description_label: "الوصف", incident_desc_placeholder: "ماذا حدث؟ يرجى تضمين أكبر قدر ممكن من التفاصيل...",
+    report_incident_btn: "🚨 الإبلاغ عن حادثة",
+    incident_reported_title: "تم الإبلاغ عن الحادثة", incident_reported_sub: "تم تسجيل تقرير الحادثة وإرساله إلى المكتب.",
+    report_another: "+ إضافة تقرير آخر",
+    availability_title: "📅 أوقات توفري", confirm_no_changes: "✓ لا شيء تغيّر — تأكيد كما هو",
+    avail_edit_title: "تحديد التوفر",
+    avail_free_all_day: "متاح طوال اليوم", avail_free_all_day_sub: "يزيل أي عدم توفر لهذا اليوم",
+    avail_free_from: "متاح ابتداءً من وقت معين", avail_free_from_sub: "مشغول قبل ذلك، متاح بعده",
+    avail_unavailable: "غير متاح طوال اليوم", avail_unavailable_sub: "لن يتم عرض مناوبات عليك هذا اليوم",
+    save_btn: "حفظ", cancel_btn: "→ إلغاء",
+    messages_title: "💬 الرسائل", msg_input_placeholder: "اكتب رسالة إلى المكتب...", send_btn: "إرسال",
+    admin_login_link: "تسجيل دخول المسؤول",
+    emergency_btn: "🆘 طوارئ", panic_confirm_title: "🆘 إرسال تنبيه طوارئ؟",
+    panic_confirm_body: "سيؤدي هذا إلى إخطار المكتب فورًا باسمك وموقعك الحالي. استخدم هذا فقط إذا كنت بحاجة إلى مساعدة عاجلة.",
+    panic_cancel: "إلغاء", panic_send: "نعم، أرسل التنبيه", panic_sending: "جارٍ الإرسال…",
+    first_pw_title: "🔐 عيّن كلمة المرور الخاصة بك",
+    first_pw_body: "مرحبًا! لأمانك، يجب عليك إنشاء كلمة مرور شخصية قبل المتابعة. لن تعمل كلمة المرور المؤقتة بعد هذه الخطوة.",
+    new_password_label: "كلمة المرور الجديدة", new_password_placeholder: "6 أحرف على الأقل",
+    confirm_password_label: "تأكيد كلمة المرور", confirm_password_placeholder: "أعد كتابة كلمة المرور",
+    set_password_continue: "تعيين كلمة المرور والمتابعة ←",
+    status_scheduled: "بانتظار تسجيل الحضور", status_missed: "فات تسجيل الحضور", status_in_progress: "تم تسجيل الحضور — في الموقع",
+    status_completed: "تم تسجيل الانصراف", status_cancelled: "ملغاة",
+    clock_in_btn: "تسجيل الحضور", clock_out_btn: "تسجيل الانصراف", done_label: "✓ منتهية", syncing_label: "🔄 جارٍ المزامنة…",
+    clocked_in_offline: "تم تسجيل الحضور (دون اتصال)",
+    no_shifts: "لا توجد مناوبات مجدولة لك الآن. تحقق لاحقًا أو تواصل مع المكتب.",
+    could_not_load_shifts: "تعذّر تحميل مناوباتك.",
+    no_checkpoints: "لم يتم إعداد أي نقاط تفتيش لهذا الموقع بعد.",
+    check_in_radius: "نطاق تسجيل الحضور", check_in_btn: "تسجيل الحضور", checked_in_btn: "تم تسجيل الحضور",
+    offline_saved_clockin: "لا يوجد اتصال — تم حفظ تسجيل الحضور، وستتم المزامنة تلقائيًا",
+    offline_saved_checkin: "لا يوجد اتصال — تم حفظ تسجيل الحضور، وستتم المزامنة تلقائيًا",
+    offline_clockout_title: "تم حفظ الانصراف!",
+    offline_clockout_sub: "أنت غير متصل الآن — ستتم المزامنة تلقائيًا عند عودة الاتصال.",
+    offline_showing_cached: "يبدو أنك غير متصل — يتم عرض آخر المعلومات المعروفة",
+    clocked_in_toast: "تم تسجيل الحضور ✓", checked_in_toast: "تم تسجيل الحضور ✓", shift_required_label: "مطلوب",
+    panic_alert_sent_toast: "🆘 تم إرسال تنبيه الطوارئ — تم إخطار المكتب",
+    notifications_enabled_toast: "تم تفعيل الإشعارات ✓", notifications_disabled_toast: "تم إيقاف الإشعارات",
+    set_availability_prefix: "تحديد التوفر — ",
+    geo_not_supported: "جهازك لا يدعم تحديد الموقع", getting_location: "📍 جارٍ تحديد موقعك…",
+    could_not_get_location_prefix: "⚠️ تعذّر تحديد موقعك: ", clocking_out_btn: "جارٍ تسجيل الانصراف…",
+    photo_attached_toast: "تم إرفاق الصورة ✓", please_log_in_first: "يرجى تسجيل الدخول أولاً",
+    from_checkpoint_suffix: "من نقطة التفتيش",
+    offline_action_singular: "إجراء", offline_action_plural: "إجراءات",
+    offline_waiting_suffix: "بانتظار المزامنة — سيتم الإرسال تلقائيًا عند عودة الاتصال",
+    notifications_unavailable: "الإشعارات غير متاحة حاليًا",
+    notifications_permission_denied: "لم يتم منح إذن الإشعارات",
+    could_not_enable_notifications_prefix: "تعذّر تفعيل الإشعارات: ",
+    could_not_disable_notifications_prefix: "تعذّر إيقاف الإشعارات: ",
+    queued_action_failed_prefix: "تعذّر إكمال أحد الإجراءات المعلّقة: ",
+    queued_action_failed_suffix: ". يرجى التواصل مع مشرفك.",
+    unknown_error: "خطأ غير معروف", email_password_required: "البريد الإلكتروني وكلمة المرور مطلوبان",
+    avail_updated_prefix: "آخر تحديث لك كان ", avail_not_set_yet: "لم تحدد أوقات توفرك بعد",
+    avail_working_prefix: "العمل — ", avail_free_from_time_prefix: "متاح ابتداءً من ",
+    avail_unavailable_label: "غير متاح", avail_available_all_day_label: "متاح طوال اليوم", change_btn: "تغيير",
+    incident_select_site: "يرجى اختيار موقع", submitting_btn: "جارٍ الإرسال…",
+    no_messages_yet: "لا توجد رسائل بعد. قل مرحبًا 👋", office_label: "المكتب", guard_label: "الحارس",
+    loading_label: "جارٍ التحميل…", could_not_load_messages: "تعذّر تحميل الرسائل.",
+    could_not_send_message: "تعذّر إرسال الرسالة",
+  },
+};
+const RTL_LANGS = new Set(['ur','ar']);
+let guardLang = localStorage.getItem('sg_guard_lang') || 'en';
+function t(key){ return (TRANSLATIONS[guardLang] && TRANSLATIONS[guardLang][key]) || TRANSLATIONS.en[key] || key; }
+function applyTranslations(){
+  document.querySelectorAll('#guard-page [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('#guard-page [data-i18n-placeholder]').forEach(el=>{ el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
+  document.querySelectorAll('#panic-confirm-modal [data-i18n], #guard-firstpw-modal [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
+  const langBtns = document.querySelectorAll('.lang-btn');
+  langBtns.forEach(b=>b.classList.toggle('active', b.dataset.lang===guardLang));
+  // Urdu/Arabic are RTL scripts — scope the direction to the guard portal and
+  // its modals only, so the rest of the app (admin, client portal) is unaffected.
+  const dir = RTL_LANGS.has(guardLang) ? 'rtl' : 'ltr';
+  ['guard-page','panic-confirm-modal','guard-firstpw-modal'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.dir = dir;
+  });
+}
+function setGuardLang(lang){
+  guardLang = lang;
+  try{ localStorage.setItem('sg_guard_lang', lang); }catch(e){}
+  applyTranslations();
+  // Re-render whatever's currently showing dynamic, translated content
+  if(myShiftsData && myShiftsData.length && !document.getElementById('step-myshifts').classList.contains('hidden')) renderMyShiftsList();
+  if(typeof patrolCheckpoints!=='undefined' && patrolCheckpoints.length && !document.getElementById('step-patrol').classList.contains('hidden')) renderPatrolList();
+}
+
 // ── State ──────────────────────────────────────────────────────────────────────
 let authToken = localStorage.getItem('sg_token') || null;
 let guardAuthToken = localStorage.getItem('sg_guard_token') || null;
@@ -1885,7 +2251,8 @@ async function updateOfflineBadge(){
   offlinePendingShiftIds = new Set(queue.filter(a=>a.type==='clock_in').map(a=>a.shiftId));
   const badge = document.getElementById('offline-queue-badge');
   if(!queue.length){ badge.classList.add('hidden'); return; }
-  badge.textContent = `🔄 ${queue.length} action${queue.length>1?'s':''} waiting to sync — will send automatically once you're back online`;
+  const actionWord = queue.length>1 ? t('offline_action_plural') : t('offline_action_singular');
+  badge.textContent = `🔄 ${queue.length} ${actionWord} ${t('offline_waiting_suffix')}`;
   badge.classList.remove('hidden');
 }
 let offlineSyncing = false;
@@ -1913,7 +2280,7 @@ async function syncPendingActions(){
       await removeOfflineAction(action.id);
       if(alreadyDone){ syncedAny = true; }
       else{
-        toast(`A queued action couldn't be completed: ${errBody.error||'unknown error'}. Please contact your supervisor.`, 'error', 6000);
+        toast(`${t('queued_action_failed_prefix')}${errBody.error||t('unknown_error')}${t('queued_action_failed_suffix')}`, 'error', 6000);
       }
     }
   } finally {
@@ -1956,18 +2323,18 @@ async function refreshPushUI(){
 async function enablePushNotifications(){
   try{
     const cfg = await guardApiFetch('/api/guard/push/vapid-key');
-    if(!cfg.enabled || !cfg.public_key){ toast('Notifications are not available right now','error'); return; }
+    if(!cfg.enabled || !cfg.public_key){ toast(t('notifications_unavailable'),'error'); return; }
     const perm = await Notification.requestPermission();
-    if(perm !== 'granted'){ toast('Notifications permission was not granted','error'); return; }
+    if(perm !== 'granted'){ toast(t('notifications_permission_denied'),'error'); return; }
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(cfg.public_key)
     });
     await guardApiFetch('/api/guard/push/subscribe', {method:'POST', body: JSON.stringify({subscription: sub.toJSON()})});
-    toast('Notifications enabled ✓','success');
+    toast(t('notifications_enabled_toast'),'success');
     refreshPushUI();
-  }catch(e){ toast('Could not enable notifications: '+e.message,'error'); }
+  }catch(e){ toast(t('could_not_enable_notifications_prefix')+e.message,'error'); }
 }
 async function disablePushNotifications(){
   try{
@@ -1977,32 +2344,32 @@ async function disablePushNotifications(){
       await guardApiFetch('/api/guard/push/unsubscribe', {method:'POST', body: JSON.stringify({endpoint: sub.endpoint})});
       await sub.unsubscribe();
     }
-    toast('Notifications turned off','info');
+    toast(t('notifications_disabled_toast'),'info');
     refreshPushUI();
-  }catch(e){ toast('Could not turn off notifications: '+e.message,'error'); }
+  }catch(e){ toast(t('could_not_disable_notifications_prefix')+e.message,'error'); }
 }
 
 // ── Emergency alert ──────────────────────────────────────────────────────────
 function openPanicConfirm(){
   document.getElementById('panic-err').style.display='none';
   const btn = document.getElementById('panic-send-btn');
-  btn.disabled=false; btn.textContent='Yes, Send Alert';
+  btn.disabled=false; btn.textContent=t('panic_send');
   openModal('panic-confirm-modal');
 }
 function sendPanicAlert(){
   const btn = document.getElementById('panic-send-btn');
   const errEl = document.getElementById('panic-err');
   errEl.style.display='none';
-  btn.disabled=true; btn.textContent='Sending…';
+  btn.disabled=true; btn.textContent=t('panic_sending');
   const submit = (lat, lng) => {
     guardApiFetch('/api/guard/panic', {method:'POST', body: JSON.stringify({lat, lng})})
       .then(()=>{
         closeModal('panic-confirm-modal');
-        toast('🆘 Emergency alert sent — the office has been notified','success',6000);
+        toast(t('panic_alert_sent_toast'),'success',6000);
       })
       .catch(e=>{
         errEl.textContent = e.message; errEl.style.display='block';
-        btn.disabled=false; btn.textContent='Yes, Send Alert';
+        btn.disabled=false; btn.textContent=t('panic_send');
       });
   };
   if(!navigator.geolocation){ submit(null, null); return; }
@@ -2155,6 +2522,7 @@ function showTab(name){
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init(){
+  applyTranslations();
   try{
     const cfg = await apiFetch('/api/config');
     document.querySelectorAll('#guard-company,#topbar-company,#login-company-name')
@@ -2218,7 +2586,7 @@ async function init(){
           selectedGuard = cached;
           showModeMenu();
           updateOfflineBadge();
-          toast('You appear to be offline — showing your last known info', 'info', 4000);
+          toast(t('offline_showing_cached'), 'info', 4000);
         }
       } else {
         guardAuthToken=null; localStorage.removeItem('sg_guard_token');
@@ -2322,33 +2690,34 @@ async function loadMyShifts(){
     myShiftsData = await guardApiFetch('/api/guard/shifts');
     renderMyShiftsList();
   }catch(e){
-    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Could not load your shifts.</p>`;
+    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('could_not_load_shifts')}</p>`;
   }
 }
 function renderMyShiftsList(){
   const listEl = document.getElementById('myshifts-list');
   if(!myShiftsData.length){
-    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">No shifts scheduled for you right now. Check back later or contact the office.</p>`;
+    listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('no_shifts')}</p>`;
     return;
   }
   listEl.innerHTML = myShiftsData.map(sh=>{
     const pendingSync = offlinePendingShiftIds.has(sh.id) && (sh.status==='scheduled' || sh.status==='missed');
     const st = SHIFT_STATUS_LABEL[sh.status] || {label:sh.status, badge:'pending'};
+    const statusLabel = SHIFT_STATUS_LABEL[sh.status] ? t('status_'+sh.status) : sh.status;
     let action = '';
     if(pendingSync){
-      action = `<span style="font-size:11px;color:#fbbf24">🔄 Syncing…</span>`;
+      action = `<span style="font-size:11px;color:#fbbf24">${t('syncing_label')}</span>`;
     } else if(sh.status==='scheduled' || sh.status==='missed'){
-      action = `<button class="btn btn-sm btn-gold" onclick="clockIn('${sh.id}')">Clock In</button>`;
+      action = `<button class="btn btn-sm btn-gold" onclick="clockIn('${sh.id}')">${t('clock_in_btn')}</button>`;
     } else if(sh.status==='in_progress'){
-      action = `<button class="btn btn-sm btn-gold" onclick="openClockOut('${sh.id}')">Clock Out</button>`;
+      action = `<button class="btn btn-sm btn-gold" onclick="openClockOut('${sh.id}')">${t('clock_out_btn')}</button>`;
     } else if(sh.status==='completed'){
-      action = `<span style="font-size:11px;color:rgba(255,255,255,.4)">✓ Done</span>`;
+      action = `<span style="font-size:11px;color:rgba(255,255,255,.4)">${t('done_label')}</span>`;
     }
     return `<div class="cp-row ${sh.status==='completed'?'done':''}">
       <div>
         <div class="cp-name">${sh.site_name}${sh.position?' · '+sh.position:''}</div>
-        <div class="cp-sub">${sh.shift_date} · ${sh.start_time}–${sh.end_time||'Required'}
-          <span class="badge badge-${pendingSync?'pending':st.badge}" style="margin-left:6px">${pendingSync?'Clocked in (offline)':st.label}</span>
+        <div class="cp-sub"><span dir="ltr" style="unicode-bidi:isolate">${sh.shift_date} · ${sh.start_time}–${sh.end_time||t('shift_required_label')}</span>
+          <span class="badge badge-${pendingSync?'pending':st.badge}" style="margin-left:6px">${pendingSync?t('clocked_in_offline'):statusLabel}</span>
         </div>
       </div>
       ${action}
@@ -2381,11 +2750,11 @@ function renderGuardAvailability(){
   const days = Array.from({length:7},(_,i)=>new Date(gaWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
   const todayISO = fmtISO(new Date());
-  document.getElementById('gavail-range').textContent =
-    `${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}`;
+  document.getElementById('gavail-range').innerHTML =
+    `<span dir="ltr" style="unicode-bidi:isolate">${days[0].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})} – ${days[6].toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</span>`;
   document.getElementById('gavail-updated').textContent = gaConfirmedAt
-    ? `You last updated this ${fmtRelativeDays(gaConfirmedAt)}`
-    : `You haven't set your availability yet`;
+    ? `${t('avail_updated_prefix')}${fmtRelativeDays(gaConfirmedAt)}`
+    : t('avail_not_set_yet');
   document.getElementById('gavail-days').innerHTML = dayISO.map((iso,i)=>{
     // A shift always wins the row — same rule as the admin board. Availability
     // is only for days nothing's booked yet, so a working day isn't editable
@@ -2394,13 +2763,13 @@ function renderGuardAvailability(){
     const leaveRec = gaLeave.find(l=>iso>=l.start_date && iso<=l.end_date);
     const dayLabel = `${SCHED_DAY_NAMES[i]} ${days[i].getDate()}/${days[i].getMonth()+1}`;
     let status, cls, editable = true;
-    if(shift){ status = `Working — ${shift.site_name}`; cls='st-working'; editable=false; }
-    else if(leaveRec && leaveRec.available_from){ status = `Free from ${leaveRec.available_from}`; cls='st-partial'; }
-    else if(leaveRec){ status = 'Unavailable'; cls='st-off'; }
-    else { status = 'Available all day'; cls='st-free'; }
+    if(shift){ status = `${t('avail_working_prefix')}${shift.site_name}`; cls='st-working'; editable=false; }
+    else if(leaveRec && leaveRec.available_from){ status = `${t('avail_free_from_time_prefix')}${leaveRec.available_from}`; cls='st-partial'; }
+    else if(leaveRec){ status = t('avail_unavailable_label'); cls='st-off'; }
+    else { status = t('avail_available_all_day_label'); cls='st-free'; }
     return `<div class="gaday-row ${iso===todayISO?'is-today':''}">
-      <div><div class="gaday-date">${dayLabel}</div><div class="gaday-status ${cls}">${status}</div></div>
-      ${editable ? `<button class="btn btn-sm btn-gold" onclick="gaOpenEdit('${iso}')">Change</button>` : ''}
+      <div><div class="gaday-date"><span dir="ltr" style="unicode-bidi:isolate">${dayLabel}</span></div><div class="gaday-status ${cls}">${status}</div></div>
+      ${editable ? `<button class="btn btn-sm btn-gold" onclick="gaOpenEdit('${iso}')">${t('change_btn')}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -2408,7 +2777,7 @@ function gaOpenEdit(iso){
   gaEditDate = iso;
   const leaveRec = gaLeave.find(l=>iso>=l.start_date && iso<=l.end_date);
   const d = new Date(iso+'T00:00:00');
-  document.getElementById('gae-title').textContent = 'Set Availability — ' + d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('gae-title').textContent = t('set_availability_prefix') + d.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
   const mode = !leaveRec ? 'free' : (leaveRec.available_from ? 'partial' : 'off');
   document.querySelector(`input[name="gae-mode"][value="${mode}"]`).checked = true;
   document.getElementById('gae-from').value = (leaveRec && leaveRec.available_from) || '18:00';
@@ -2441,29 +2810,29 @@ async function gaConfirmNoChanges(){
 }
 
 function clockIn(shiftId){
-  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  if(!navigator.geolocation){ toast(t('geo_not_supported'),'error'); return; }
   const statusEl = document.getElementById('myshifts-status');
-  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
+  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML=t('getting_location');
   navigator.geolocation.getCurrentPosition(async pos=>{
     const body = {lat:pos.coords.latitude, lng:pos.coords.longitude};
     try{
       await guardApiFetch(`/api/guard/shifts/${shiftId}/clock-in`,{method:'POST',body:JSON.stringify(body)});
       statusEl.classList.add('hidden');
-      toast('Clocked in ✓','success');
+      toast(t('clocked_in_toast'),'success');
       loadMyShifts();
     }catch(e){
       if(isNetworkError(e)){
         await queueOfflineAction({id:crypto.randomUUID(), type:'clock_in', shiftId,
           url:`/api/guard/shifts/${shiftId}/clock-in`, body, created_at:Date.now()});
         statusEl.classList.add('hidden');
-        toast('No connection — clock-in saved, will sync automatically','info',5000);
+        toast(t('offline_saved_clockin'),'info',5000);
         renderMyShiftsList();  // local re-render only — a network reload would just fail right now
         return;
       }
       statusEl.className='geo-status bad'; statusEl.innerHTML=e.message;
     }
   }, err=>{
-    statusEl.className='geo-status bad'; statusEl.innerHTML='⚠️ Could not get your location: '+err.message;
+    statusEl.className='geo-status bad'; statusEl.innerHTML=t('could_not_get_location_prefix')+err.message;
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
 }
 
@@ -2479,7 +2848,7 @@ function openClockOut(shiftId){
   photoB64=null; photoExt=null;
   document.getElementById('co-geo-status').classList.add('hidden');
   document.getElementById('co-submit-btn').disabled=false;
-  document.getElementById('co-submit-btn').textContent='✓ Confirm Clock Out';
+  document.getElementById('co-submit-btn').textContent=t('confirm_clockout_btn');
   showGuardCard('step-clockout');
 }
 function handleClockOutPhoto(input, src){
@@ -2491,16 +2860,16 @@ function handleClockOutPhoto(input, src){
     document.getElementById('co-photo-preview').src = e.target.result;
     document.getElementById('co-photo-preview').classList.remove('hidden');
     document.getElementById(src==='cam'?'co-cam-btn':'co-gal-btn').classList.add('has-photo');
-    toast('Photo attached ✓','success');
+    toast(t('photo_attached_toast'),'success');
   };
   reader.readAsDataURL(file);
 }
 async function confirmClockOut(){
-  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  if(!navigator.geolocation){ toast(t('geo_not_supported'),'error'); return; }
   const btn = document.getElementById('co-submit-btn');
-  btn.disabled=true; btn.textContent='Clocking out…';
+  btn.disabled=true; btn.textContent=t('clocking_out_btn');
   const statusEl = document.getElementById('co-geo-status');
-  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML='📍 Getting your location…';
+  statusEl.classList.remove('hidden'); statusEl.className='geo-status wait'; statusEl.innerHTML=t('getting_location');
   navigator.geolocation.getCurrentPosition(async pos=>{
     const body = {
       lat:pos.coords.latitude, lng:pos.coords.longitude,
@@ -2509,25 +2878,25 @@ async function confirmClockOut(){
     if(photoB64){ body.photo_b64=photoB64; body.photo_ext=photoExt; }
     try{
       await guardApiFetch(`/api/guard/shifts/${clockOutShiftId}/clock-out`,{method:'POST',body:JSON.stringify(body)});
-      document.getElementById('success-title').textContent='Shift Completed!';
-      document.getElementById('success-sub').textContent='Your hours have been recorded and are pending review.';
+      document.getElementById('success-title').textContent=t('shift_completed_title');
+      document.getElementById('success-sub').textContent=t('shift_completed_sub');
       showGuardCard('step-success');
       loadMyShifts();
     }catch(e){
       if(isNetworkError(e)){
         await queueOfflineAction({id:crypto.randomUUID(), type:'clock_out', shiftId:clockOutShiftId,
           url:`/api/guard/shifts/${clockOutShiftId}/clock-out`, body, created_at:Date.now()});
-        document.getElementById('success-title').textContent='Clock-Out Saved!';
-        document.getElementById('success-sub').textContent="You're offline right now — this will sync automatically once you're back online.";
+        document.getElementById('success-title').textContent=t('offline_clockout_title');
+        document.getElementById('success-sub').textContent=t('offline_clockout_sub');
         showGuardCard('step-success');
         return;
       }
       statusEl.className='geo-status bad'; statusEl.innerHTML=e.message;
-      btn.disabled=false; btn.textContent='✓ Confirm Clock Out';
+      btn.disabled=false; btn.textContent=t('confirm_clockout_btn');
     }
   }, err=>{
-    statusEl.className='geo-status bad'; statusEl.innerHTML='⚠️ Could not get your location: '+err.message;
-    btn.disabled=false; btn.textContent='✓ Confirm Clock Out';
+    statusEl.className='geo-status bad'; statusEl.innerHTML=t('could_not_get_location_prefix')+err.message;
+    btn.disabled=false; btn.textContent=t('confirm_clockout_btn');
   }, {enableHighAccuracy:true, timeout:12000, maximumAge:0});
 }
 
@@ -2537,7 +2906,7 @@ async function guardDoLogin(){
   const pass = document.getElementById('glogin-pass').value;
   const errEl = document.getElementById('glogin-err');
   errEl.style.display = 'none';
-  if(!email || !pass){ errEl.textContent='Email and password are required'; errEl.style.display='block'; return; }
+  if(!email || !pass){ errEl.textContent=t('email_password_required'); errEl.style.display='block'; return; }
   try{
     const res = await fetch('/api/guard/login', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email, password: pass})});
@@ -2622,15 +2991,15 @@ function clearPatrolSite(){
 function renderPatrolList(){
   const wrap = document.getElementById('patrol-list');
   if(!patrolCheckpoints.length){
-    wrap.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">No checkpoints have been set up for this site yet.</p>`;
+    wrap.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('no_checkpoints')}</p>`;
     document.getElementById('patrol-map').classList.add('hidden');
     return;
   }
   wrap.innerHTML = patrolCheckpoints.map(cp=>{
     const done = patrolScanned.has(cp.id);
     return `<div class="cp-row ${done?'done':''}" id="cp-row-${cp.id}">
-      <div><div class="cp-name">${done?'✅ ':''}${cp.name}</div><div class="cp-sub">Check-in radius ${cp.radius_m}m</div></div>
-      <button class="btn btn-sm ${done?'btn-ghost':'btn-gold'}" ${done?'disabled':''} onclick="scanCheckpoint('${cp.id}')">${done?'Checked In':'Check In'}</button>
+      <div><div class="cp-name">${done?'✅ ':''}${cp.name}</div><div class="cp-sub">${t('check_in_radius')} ${cp.radius_m}m</div></div>
+      <button class="btn btn-sm ${done?'btn-ghost':'btn-gold'}" ${done?'disabled':''} onclick="scanCheckpoint('${cp.id}')">${done?t('checked_in_btn'):t('check_in_btn')}</button>
     </div>`;
   }).join('');
   if(patrolSite && patrolSite.lat!=null){
@@ -2645,15 +3014,15 @@ function renderPatrolList(){
   }
 }
 function scanCheckpoint(cpId){
-  if(!selectedGuard){ toast('Please log in first','error'); return; }
-  if(!navigator.geolocation){ toast('Your device does not support location','error'); return; }
+  if(!selectedGuard){ toast(t('please_log_in_first'),'error'); return; }
+  if(!navigator.geolocation){ toast(t('geo_not_supported'),'error'); return; }
   navigator.geolocation.getCurrentPosition(async pos=>{
     const body = {checkpoint_id:cpId, lat:pos.coords.latitude, lng:pos.coords.longitude};
     try{
       const d = await guardApiFetch('/api/guard/checkpoints/scan',{method:'POST',body:JSON.stringify(body)});
       patrolScanned.add(cpId);
       renderPatrolList();
-      toast(`Checked in ✓ (${d.distance_m}m from checkpoint)`,'success');
+      toast(`${t('checked_in_toast')} (${d.distance_m}m ${t('from_checkpoint_suffix')})`,'success');
     }catch(e){
       if(isNetworkError(e)){
         const clientScanId = crypto.randomUUID();
@@ -2661,12 +3030,12 @@ function scanCheckpoint(cpId){
           url:'/api/guard/checkpoints/scan', body:{...body, client_scan_id:clientScanId}, created_at:Date.now()});
         patrolScanned.add(cpId);
         renderPatrolList();
-        toast('No connection — check-in saved, will sync automatically','info',5000);
+        toast(t('offline_saved_checkin'),'info',5000);
         return;
       }
       toast(e.message,'error');
     }
-  }, err=>{ toast('Could not get your location: '+err.message,'error'); }, {enableHighAccuracy:true, timeout:12000});
+  }, err=>{ toast(t('could_not_get_location_prefix')+err.message,'error'); }, {enableHighAccuracy:true, timeout:12000});
 }
 
 // ── Incident Reporting ────────────────────────────────────────────────────────
@@ -2721,10 +3090,10 @@ function handleIncidentPhoto(input, src){
   reader.readAsDataURL(file);
 }
 async function submitIncident(){
-  if(!selectedGuard){ toast('Please log in first','error'); return; }
-  if(!incidentSite){ toast('Please select a site','error'); return; }
+  if(!selectedGuard){ toast(t('please_log_in_first'),'error'); return; }
+  if(!incidentSite){ toast(t('incident_select_site'),'error'); return; }
   const btn = document.getElementById('incident-submit-btn');
-  btn.disabled=true; btn.textContent='Submitting…';
+  btn.disabled=true; btn.textContent=t('submitting_btn');
   const body = {
     site_id:incidentSite.id,
     type:document.getElementById('incident-type').value,
@@ -2736,7 +3105,7 @@ async function submitIncident(){
     await guardApiFetch('/api/guard/incidents',{method:'POST',body:JSON.stringify(body)});
     showGuardCard('step-incident-success');
   }catch(e){ toast(e.message,'error'); }
-  btn.disabled=false; btn.textContent='🚨 Report Incident';
+  btn.disabled=false; btn.textContent=t('report_incident_btn');
 }
 function resetIncidentForm(){
   incidentPhotoB64=null; incidentPhotoExt=null; incidentGeo=null;
@@ -2773,16 +3142,16 @@ function escapeHtml(s){
 }
 function renderMsgThread(box, rows, viewerRole){
   if(!rows.length){
-    box.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">No messages yet. Say hello 👋</p>';
+    box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${viewerRole==='guard'?t('no_messages_yet'):'No messages yet. Say hello 👋'}</p>`;
     return;
   }
   box.innerHTML = rows.map(m=>{
     const mine = m.sender===viewerRole;
     const isAuto = m.sender_name==='FAQ Auto-Reply';
-    const who = m.sender==='admin' ? (m.sender_name||'Office') : (m.sender_name||'Guard');
+    const who = m.sender==='admin' ? (m.sender_name||(viewerRole==='guard'?t('office_label'):'Office')) : (m.sender_name||(viewerRole==='guard'?t('guard_label'):'Guard'));
     return `<div class="msg-bubble ${mine?'mine':'theirs'}">
       <div>${isAuto?'🤖 ':''}${escapeHtml(m.body)}</div>
-      <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}${fmtDateTime(m.created_at)}</div>
+      <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}<span dir="ltr" style="unicode-bidi:isolate">${fmtDateTime(m.created_at)}</span></div>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
@@ -2796,7 +3165,7 @@ async function checkUnreadMessages(){
 }
 async function loadGuardMessages(){
   const box = document.getElementById('msg-thread');
-  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('loading_label')}</p>`;
   try{
     const rows = await guardApiFetch('/api/guard/messages');
     renderMsgThread(box, rows, 'guard');
@@ -2804,7 +3173,7 @@ async function loadGuardMessages(){
       await guardApiFetch('/api/guard/messages/read', {method:'POST'});
       document.getElementById('msg-unread-dot')?.classList.add('hidden');
     }
-  }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load messages.</p>'; }
+  }catch(e){ box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('could_not_load_messages')}</p>`; }
 }
 async function sendGuardMessage(){
   const input = document.getElementById('msg-input');
@@ -2814,7 +3183,7 @@ async function sendGuardMessage(){
     await guardApiFetch('/api/guard/messages', {method:'POST', body: JSON.stringify({body})});
     input.value='';
     loadGuardMessages();
-  }catch(e){ toast('Could not send message','error'); }
+  }catch(e){ toast(t('could_not_send_message'),'error'); }
 }
 
 // ── Admin Auth ─────────────────────────────────────────────────────────────────
