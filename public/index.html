@@ -797,17 +797,41 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <!-- Messages -->
     <div class="guard-card hidden" id="step-messages">
       <div class="step-title" data-i18n="messages_title">💬 Messages</div>
-      <div id="msg-status-banner" class="hidden" style="margin-bottom:10px;padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <span id="msg-status-text" style="font-size:13px;font-weight:600"></span>
-        <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="clearGuardChat()">
-          <span id="msg-status-clear-label" data-i18n="clear_chat_btn">Clear Chat</span>
-        </button>
+
+      <!-- New-query wizard, step 1: pick a category -->
+      <div id="msg-wizard-categories" class="hidden">
+        <div id="msg-wizard-greeting" style="margin-bottom:14px;font-size:15px;font-weight:600;color:#fff"></div>
+        <div id="msg-wizard-cat-list" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
-      <div id="msg-thread" class="msg-thread"></div>
-      <div class="form-group">
-        <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..."></textarea>
+
+      <!-- New-query wizard, step 2: describe the issue -->
+      <div id="msg-wizard-details" class="hidden">
+        <div id="msg-wizard-chosen-category" style="margin-bottom:10px;font-size:14px;font-weight:600;color:var(--gold)"></div>
+        <div class="form-group">
+          <textarea id="msg-wizard-textarea" class="form-control" rows="5"></textarea>
+        </div>
+        <button class="nav-btn nav-next" data-i18n="submit_ticket_btn" style="width:100%" onclick="submitTicket()">Submit</button>
+        <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:10px" onclick="msgWizardBackToCategories()">← Back</button>
       </div>
-      <button class="nav-btn nav-next" data-i18n="send_btn" style="width:100%" onclick="sendGuardMessage()">Send</button>
+
+      <!-- Existing/active ticket thread -->
+      <div id="msg-thread-view" class="hidden">
+        <div id="msg-status-banner" class="hidden" style="margin-bottom:10px;padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:140px">
+            <div id="msg-status-ticket" class="hidden" style="font-size:11px;opacity:.85;margin-bottom:2px"></div>
+            <span id="msg-status-text" style="font-size:13px;font-weight:600"></span>
+          </div>
+          <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="clearGuardChat()">
+            <span id="msg-status-clear-label" data-i18n="clear_chat_btn">Clear Chat</span>
+          </button>
+        </div>
+        <div id="msg-thread" class="msg-thread"></div>
+        <div class="form-group">
+          <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..."></textarea>
+        </div>
+        <button class="nav-btn nav-next" data-i18n="send_btn" style="width:100%" onclick="sendGuardMessage()">Send</button>
+      </div>
+
       <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
@@ -1275,7 +1299,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <div id="msg-admin-empty" style="margin:auto;color:var(--muted);font-size:13px">Select a guard to view the conversation.</div>
             <div id="msg-admin-panel" class="hidden" style="display:flex;flex-direction:column;height:100%;min-height:0">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-                <span class="section-title" id="msg-admin-guard-name"></span>
+                <div>
+                  <span class="section-title" id="msg-admin-guard-name"></span>
+                  <div id="msg-admin-ticket-info" style="font-size:11px;color:var(--muted)"></div>
+                </div>
                 <span style="flex:1"></span>
                 <label style="font-size:12px;color:var(--muted)">Query status</label>
                 <select id="msg-admin-status" class="form-control" style="width:auto;font-size:12px;padding:4px 8px" onchange="setMessageStatus()">
@@ -1911,6 +1938,20 @@ const TRANSLATIONS = {
     clear_chat_confirm: "Clear this conversation and start a new query? The office can still see the full history for their records — this only clears your own view.",
     chat_cleared_toast: "Chat cleared — send a new message to start a fresh query",
     could_not_clear_chat: "Could not clear chat",
+    wizard_greeting_prefix: "Hey ", wizard_greeting_suffix: ", how can we help you today?",
+    cat_roster: "Roster / Schedule Inquiry", cat_pay: "Pay Issue", cat_timesheet: "Timesheet Issue",
+    cat_job_apply: "Job Application / Vacancy", cat_shift_swap: "Shift Swap Request",
+    cat_equipment: "Uniform / Equipment", cat_leave: "Leave / Availability", cat_other: "Something Else",
+    cat_placeholder_roster: "Which shift or date is this about? Tell us what's wrong or what you need.",
+    cat_placeholder_pay: "Which pay period is this about, and what looks incorrect?",
+    cat_placeholder_timesheet: "Which shift's timesheet needs fixing, and what's wrong with it?",
+    cat_placeholder_job_apply: "Tell us which role you're interested in and your availability.",
+    cat_placeholder_shift_swap: "Which shift do you need covered? Include the date and, if you have one, who could cover it.",
+    cat_placeholder_equipment: "What equipment or uniform item do you need, and why?",
+    cat_placeholder_leave: "What dates are you requesting time off, and why?",
+    cat_placeholder_other: "Describe your question or issue.",
+    submit_ticket_btn: "Submit", please_describe_issue: "Please describe your issue before submitting",
+    ticket_submitted_prefix: "Ticket submitted — ", ticket_label_prefix: "Ticket ",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -1998,6 +2039,20 @@ const TRANSLATIONS = {
     clear_chat_confirm: "इस बातचीत को साफ़ करके नई क्वेरी शुरू करें? कार्यालय अपने रिकॉर्ड के लिए पूरा इतिहास अभी भी देख सकता है — यह केवल आपका दृश्य साफ़ करता है।",
     chat_cleared_toast: "चैट साफ़ हो गई — नई क्वेरी शुरू करने के लिए एक नया संदेश भेजें",
     could_not_clear_chat: "चैट साफ़ नहीं की जा सकी",
+    wizard_greeting_prefix: "नमस्ते ", wizard_greeting_suffix: ", आज हम आपकी कैसे मदद कर सकते हैं?",
+    cat_roster: "रोस्टर / शेड्यूल पूछताछ", cat_pay: "वेतन समस्या", cat_timesheet: "टाइमशीट समस्या",
+    cat_job_apply: "नौकरी आवेदन / रिक्ति", cat_shift_swap: "शिफ्ट अदला-बदली अनुरोध",
+    cat_equipment: "यूनिफॉर्म / उपकरण", cat_leave: "छुट्टी / उपलब्धता", cat_other: "कुछ और",
+    cat_placeholder_roster: "यह किस शिफ्ट या तारीख के बारे में है? हमें बताएं कि क्या गलत है या आपको क्या चाहिए।",
+    cat_placeholder_pay: "यह किस वेतन अवधि के बारे में है, और क्या गलत लग रहा है?",
+    cat_placeholder_timesheet: "किस शिफ्ट की टाइमशीट ठीक करनी है, और उसमें क्या गलत है?",
+    cat_placeholder_job_apply: "हमें बताएं कि आप किस भूमिका में रुचि रखते हैं और आपकी उपलब्धता क्या है।",
+    cat_placeholder_shift_swap: "आपको किस शिफ्ट को कवर करवाना है? तारीख बताएं, और अगर कोई है तो कौन कवर कर सकता है।",
+    cat_placeholder_equipment: "आपको कौन सा उपकरण या यूनिफॉर्म आइटम चाहिए, और क्यों?",
+    cat_placeholder_leave: "आप किन तारीखों की छुट्टी माँग रहे हैं, और क्यों?",
+    cat_placeholder_other: "अपना सवाल या समस्या बताएं।",
+    submit_ticket_btn: "सबमिट करें", please_describe_issue: "सबमिट करने से पहले कृपया अपनी समस्या बताएं",
+    ticket_submitted_prefix: "टिकट सबमिट किया गया — ", ticket_label_prefix: "टिकट ",
   },
   ur: {
     login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
@@ -2085,6 +2140,20 @@ const TRANSLATIONS = {
     clear_chat_confirm: "اس گفتگو کو صاف کر کے نئی درخواست شروع کریں؟ دفتر اپنے ریکارڈ کے لیے مکمل تاریخ اب بھی دیکھ سکتا ہے — یہ صرف آپ کا منظر صاف کرتا ہے۔",
     chat_cleared_toast: "چیٹ صاف ہو گئی — نئی درخواست شروع کرنے کے لیے ایک نیا پیغام بھیجیں",
     could_not_clear_chat: "چیٹ صاف نہیں ہو سکی",
+    wizard_greeting_prefix: "ہیلو ", wizard_greeting_suffix: "، آج ہم آپ کی کیسے مدد کر سکتے ہیں؟",
+    cat_roster: "روسٹر / شیڈول سوال", cat_pay: "تنخواہ کا مسئلہ", cat_timesheet: "ٹائم شیٹ کا مسئلہ",
+    cat_job_apply: "نوکری کی درخواست / خالی آسامی", cat_shift_swap: "شفٹ تبدیلی کی درخواست",
+    cat_equipment: "یونیفارم / سامان", cat_leave: "چھٹی / دستیابی", cat_other: "کچھ اور",
+    cat_placeholder_roster: "یہ کس شفٹ یا تاریخ کے بارے میں ہے؟ ہمیں بتائیں کیا غلط ہے یا آپ کو کیا چاہیے۔",
+    cat_placeholder_pay: "یہ کس تنخواہ کی مدت کے بارے میں ہے، اور کیا غلط لگ رہا ہے؟",
+    cat_placeholder_timesheet: "کس شفٹ کی ٹائم شیٹ ٹھیک کرنی ہے، اور اس میں کیا غلط ہے؟",
+    cat_placeholder_job_apply: "ہمیں بتائیں آپ کس عہدے میں دلچسپی رکھتے ہیں اور آپ کی دستیابی کیا ہے۔",
+    cat_placeholder_shift_swap: "آپ کو کون سی شفٹ کور کروانی ہے؟ تاریخ بتائیں، اور اگر کوئی ہے تو کون کور کر سکتا ہے۔",
+    cat_placeholder_equipment: "آپ کو کون سا سامان یا یونیفارم چاہیے، اور کیوں؟",
+    cat_placeholder_leave: "آپ کن تاریخوں کی چھٹی مانگ رہے ہیں، اور کیوں؟",
+    cat_placeholder_other: "اپنا سوال یا مسئلہ بیان کریں۔",
+    submit_ticket_btn: "جمع کریں", please_describe_issue: "جمع کرنے سے پہلے براہ کرم اپنا مسئلہ بیان کریں",
+    ticket_submitted_prefix: "ٹکٹ جمع ہو گیا — ", ticket_label_prefix: "ٹکٹ ",
   },
   ar: {
     login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
@@ -2172,6 +2241,20 @@ const TRANSLATIONS = {
     clear_chat_confirm: "مسح هذه المحادثة وبدء استفسار جديد؟ لا يزال بإمكان المكتب رؤية السجل الكامل لسجلاته — هذا يمسح عرضك فقط.",
     chat_cleared_toast: "تم مسح المحادثة — أرسل رسالة جديدة لبدء استفسار جديد",
     could_not_clear_chat: "تعذّر مسح المحادثة",
+    wizard_greeting_prefix: "مرحبًا ", wizard_greeting_suffix: "، كيف يمكننا مساعدتك اليوم؟",
+    cat_roster: "استفسار عن الروستر / الجدول", cat_pay: "مشكلة في الراتب", cat_timesheet: "مشكلة في سجل الدوام",
+    cat_job_apply: "طلب توظيف / شاغر وظيفي", cat_shift_swap: "طلب تبديل مناوبة",
+    cat_equipment: "الزي الموحد / المعدات", cat_leave: "إجازة / التوفر", cat_other: "شيء آخر",
+    cat_placeholder_roster: "ما هي المناوبة أو التاريخ المعني؟ أخبرنا بما هو خاطئ أو ما تحتاجه.",
+    cat_placeholder_pay: "ما هي فترة الراتب المعنية، وما الذي يبدو غير صحيح؟",
+    cat_placeholder_timesheet: "سجل دوام أي مناوبة يحتاج إلى تصحيح، وما الخطأ فيه؟",
+    cat_placeholder_job_apply: "أخبرنا بالوظيفة التي تهتم بها ومدى توفرك.",
+    cat_placeholder_shift_swap: "ما المناوبة التي تحتاج تغطيتها؟ اذكر التاريخ، ومن يمكنه التغطية إن وُجد.",
+    cat_placeholder_equipment: "ما المعدات أو قطعة الزي التي تحتاجها، ولماذا؟",
+    cat_placeholder_leave: "ما التواريخ التي تطلب إجازة فيها، ولماذا؟",
+    cat_placeholder_other: "صف سؤالك أو مشكلتك.",
+    submit_ticket_btn: "إرسال", please_describe_issue: "يرجى وصف مشكلتك قبل الإرسال",
+    ticket_submitted_prefix: "تم إرسال التذكرة — ", ticket_label_prefix: "تذكرة ",
   },
 };
 const RTL_LANGS = new Set(['ur','ar']);
@@ -2197,6 +2280,11 @@ function setGuardLang(lang){
   // Re-render whatever's currently showing dynamic, translated content
   if(myShiftsData && myShiftsData.length && !document.getElementById('step-myshifts').classList.contains('hidden')) renderMyShiftsList();
   if(typeof patrolCheckpoints!=='undefined' && patrolCheckpoints.length && !document.getElementById('step-patrol').classList.contains('hidden')) renderPatrolList();
+  if(!document.getElementById('msg-wizard-categories').classList.contains('hidden')) showMsgWizardCategories();
+  if(!document.getElementById('msg-wizard-details').classList.contains('hidden') && selectedTicketCategory){
+    document.getElementById('msg-wizard-chosen-category').textContent = t('cat_'+selectedTicketCategory);
+    document.getElementById('msg-wizard-textarea').placeholder = t('cat_placeholder_'+selectedTicketCategory);
+  }
 }
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -2718,7 +2806,7 @@ function startShiftFlow(){
 function startPatrolFlow(){ showGuardCard('step-patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
 function startAvailabilityFlow(){ showGuardCard('step-availability'); loadGuardAvailability(); }
-function startMessagesFlow(){ showGuardCard('step-messages'); loadGuardMessages(); }
+function startMessagesFlow(){ showGuardCard('step-messages'); loadGuardMessagesEntry(); }
 
 // ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
 const VIC_CENTER = [-37.4713, 144.7852];
@@ -3270,11 +3358,68 @@ const GUARD_QUERY_STATUS_STYLE = {
   noted:       {bg:'#e5e7eb',         fg:'#374151'},
   rejected:    {bg:'var(--red-bg)',   fg:'var(--red)'},
 };
+const TICKET_CATEGORIES = [
+  {key:'roster',     icon:'📅'}, {key:'pay',        icon:'💰'},
+  {key:'timesheet',  icon:'🕐'}, {key:'job_apply',  icon:'📋'},
+  {key:'shift_swap', icon:'🔄'}, {key:'equipment',  icon:'🦺'},
+  {key:'leave',      icon:'🌴'}, {key:'other',      icon:'❓'},
+];
+let selectedTicketCategory = null;
+async function loadGuardMessagesEntry(){
+  try{
+    const status = await guardApiFetch('/api/guard/query-status').catch(()=>({status:null}));
+    if(!status || !status.status){ showMsgWizardCategories(); }
+    else { showMsgThreadView(); await loadGuardMessages(); }
+  }catch(e){ showMsgWizardCategories(); }
+}
+function showMsgWizardCategories(){
+  document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-thread-view').classList.add('hidden');
+  document.getElementById('msg-wizard-categories').classList.remove('hidden');
+  const identity = cachedGuardIdentity();
+  const firstName = ((identity && identity.name) || '').split(' ')[0] || '';
+  document.getElementById('msg-wizard-greeting').textContent = `${t('wizard_greeting_prefix')}${firstName}${t('wizard_greeting_suffix')}`;
+  document.getElementById('msg-wizard-cat-list').innerHTML = TICKET_CATEGORIES.map(c=>
+    `<button class="btn btn-ghost" style="text-align:left;justify-content:flex-start;padding:12px 14px;display:flex;align-items:center;gap:10px" onclick="selectTicketCategory('${c.key}')"><span>${c.icon}</span><span>${t('cat_'+c.key)}</span></button>`
+  ).join('');
+}
+function showMsgThreadView(){
+  document.getElementById('msg-wizard-categories').classList.add('hidden');
+  document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-thread-view').classList.remove('hidden');
+}
+function selectTicketCategory(key){
+  selectedTicketCategory = key;
+  document.getElementById('msg-wizard-categories').classList.add('hidden');
+  document.getElementById('msg-wizard-details').classList.remove('hidden');
+  document.getElementById('msg-wizard-chosen-category').textContent = t('cat_'+key);
+  const ta = document.getElementById('msg-wizard-textarea');
+  ta.value = ''; ta.placeholder = t('cat_placeholder_'+key);
+}
+function msgWizardBackToCategories(){
+  document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-wizard-categories').classList.remove('hidden');
+}
+async function submitTicket(){
+  const details = document.getElementById('msg-wizard-textarea').value.trim();
+  if(!details){ toast(t('please_describe_issue'),'error'); return; }
+  try{
+    const res = await guardApiFetch('/api/guard/tickets', {method:'POST', body: JSON.stringify({category:selectedTicketCategory, body:details})});
+    toast(`${t('ticket_submitted_prefix')}#${res.ticket_number}`,'success');
+    loadGuardMessagesEntry();
+  }catch(e){ toast(t('could_not_send_message'),'error'); }
+}
 function renderGuardQueryStatus(s){
   const banner = document.getElementById('msg-status-banner');
   if(!s || !s.status){ banner.classList.add('hidden'); return; }
   const style = GUARD_QUERY_STATUS_STYLE[s.status] || GUARD_QUERY_STATUS_STYLE.open;
   banner.style.background = style.bg; banner.style.color = style.fg;
+  const ticketEl = document.getElementById('msg-status-ticket');
+  const bits = [];
+  if(s.ticket_number) bits.push(`${t('ticket_label_prefix')}#${s.ticket_number}`);
+  if(s.category) bits.push(t('cat_'+s.category));
+  ticketEl.textContent = bits.join(' · ');
+  ticketEl.classList.toggle('hidden', bits.length===0);
   document.getElementById('msg-status-text').textContent = t('status_'+s.status);
   const clearLabel = document.getElementById('msg-status-clear-label');
   clearLabel.textContent = (s.status==='resolved'||s.status==='noted'||s.status==='rejected') ? t('new_query_btn') : t('clear_chat_btn');
@@ -3301,7 +3446,7 @@ async function clearGuardChat(){
   try{
     await guardApiFetch('/api/guard/messages/clear', {method:'POST'});
     toast(t('chat_cleared_toast'),'success');
-    loadGuardMessages();
+    loadGuardMessagesEntry();
   }catch(e){ toast(t('could_not_clear_chat'),'error'); }
 }
 async function sendGuardMessage(){
@@ -5089,7 +5234,7 @@ function renderMsgThreadsList(){
         return `
         <div class="msg-thread-item ${msgActiveGuard===t.guard_id?'active':''}" onclick="openMessageThread('${t.guard_id}')">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <strong class="mti-name">${escapeHtml(t.guard_name)}</strong>
+            <strong class="mti-name">${escapeHtml(t.guard_name)}${t.ticket_number?` <span style="font-weight:400;color:var(--muted);font-size:11px">#${t.ticket_number}</span>`:''}</strong>
             ${t.unread>0?`<span class="msg-dot">${t.unread}</span>`:''}
           </div>
           <div class="mti-preview">${t.last_sender==='admin'?'You: ':''}${escapeHtml(t.last_body||'')}</div>
@@ -5101,6 +5246,11 @@ function startNewMessageThread(){
   if(!sel.value) return;
   openMessageThread(sel.value);
 }
+const TICKET_CATEGORY_LABELS = {
+  roster:'Roster / Schedule Inquiry', pay:'Pay Issue', timesheet:'Timesheet Issue',
+  job_apply:'Job Application / Vacancy', shift_swap:'Shift Swap Request',
+  equipment:'Uniform / Equipment', leave:'Leave / Availability', other:'Something Else',
+};
 async function openMessageThread(guardId){
   msgActiveGuard = guardId;
   const guard = allGuardsAdmin.find(g=>g.id===guardId);
@@ -5109,6 +5259,10 @@ async function openMessageThread(guardId){
   document.getElementById('msg-admin-guard-name').textContent = guard ? guard.name : 'Guard';
   const thread = msgThreads.find(t=>t.guard_id===guardId);
   document.getElementById('msg-admin-status').value = thread ? thread.query_status : 'open';
+  const ticketBits = [];
+  if(thread && thread.ticket_number) ticketBits.push(`Ticket #${thread.ticket_number}`);
+  if(thread && thread.category) ticketBits.push(TICKET_CATEGORY_LABELS[thread.category] || thread.category);
+  document.getElementById('msg-admin-ticket-info').textContent = ticketBits.join(' · ');
   renderMsgThreadsList();
   const box = document.getElementById('msg-admin-thread');
   box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';

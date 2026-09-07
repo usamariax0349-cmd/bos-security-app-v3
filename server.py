@@ -303,6 +303,12 @@ QUERY_STATUS_LABELS = {
     'noted': 'Noted', 'rejected': 'Rejected',
 }
 
+TICKET_CATEGORIES = {
+    'roster': 'Roster / Schedule Inquiry', 'pay': 'Pay Issue', 'timesheet': 'Timesheet Issue',
+    'job_apply': 'Job Application / Vacancy', 'shift_swap': 'Shift Swap Request',
+    'equipment': 'Uniform / Equipment', 'leave': 'Leave / Availability', 'other': 'Something Else',
+}
+
 def notify_guard_status_change(guard, new_status):
     """Email the guard when an ADMIN action changes their query status.
     Deliberately never called from the guard's own message-send path —
@@ -560,6 +566,15 @@ def init_db():
             updated_by  TEXT
         );
 
+        -- Singleton counter for guard support-ticket numbers. A dedicated
+        -- table (rather than MAX(ticket_number) over guard_query_status)
+        -- because that table's rows get deleted on "Clear Chat" — numbers
+        -- must never be reused once issued.
+        CREATE TABLE IF NOT EXISTS ticket_counter (
+            id          INTEGER PRIMARY KEY CHECK (id=1),
+            next_number INTEGER NOT NULL DEFAULT 1001
+        );
+
         -- Singleton row — one VAPID keypair for the whole app, generated once
         -- (see init_db) and reused forever so existing push subscriptions
         -- don't silently break on the next restart/redeploy.
@@ -743,6 +758,11 @@ def init_db():
         # still see the full thread (compliance), but the guard's own view
         # only shows messages sent after this cutoff.
         ("guards", "messages_cleared_before", "ALTER TABLE guards ADD COLUMN messages_cleared_before TEXT"),
+        # Categorized support tickets — a guard's active query now carries a
+        # human-facing reference number and a category picked from a fixed
+        # list (see TICKET_CATEGORIES), set once when the ticket is opened.
+        ("guard_query_status", "ticket_number", "ALTER TABLE guard_query_status ADD COLUMN ticket_number INTEGER"),
+        ("guard_query_status", "category",      "ALTER TABLE guard_query_status ADD COLUMN category TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -916,6 +936,9 @@ def init_db():
     # Offline checkpoint-scan replay dedup — see the migrations list above.
     conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS checkpoint_scans_client_scan_id
                     ON checkpoint_scans(client_scan_id) WHERE client_scan_id IS NOT NULL''')
+    conn.commit()
+
+    conn.execute('INSERT OR IGNORE INTO ticket_counter (id, next_number) VALUES (1, 1001)')
     conn.commit()
 
     # One-time VAPID keypair generation for Web Push — see push_config above.
@@ -1957,7 +1980,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
             if path == '/api/guard/query-status':
                 db = get_db()
-                row = R(db.execute('SELECT status, updated_at FROM guard_query_status WHERE guard_id=?',
+                row = R(db.execute('SELECT status, updated_at, ticket_number, category FROM guard_query_status WHERE guard_id=?',
                                    (gsx['guard_id'],)).fetchone())
                 db.close(); self.send_json(row or {'status': None}); return
 
@@ -2281,7 +2304,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (SELECT sender FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_sender,
                        (SELECT created_at FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_at,
                        (SELECT COUNT(*) FROM messages WHERE guard_id=g.id AND sender='guard' AND read_at IS NULL) as unread,
-                       COALESCE(qs.status, 'open') as query_status
+                       COALESCE(qs.status, 'open') as query_status, qs.ticket_number, qs.category
                 FROM guards g
                 LEFT JOIN guard_query_status qs ON qs.guard_id=g.id
                 WHERE EXISTS (SELECT 1 FROM messages m WHERE m.guard_id=g.id)
@@ -2751,6 +2774,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (datetime.now().isoformat(), gsx['guard_id']))
             db.commit(); db.close()
             self.send_json({'ok':True}); return
+
+        if path == '/api/guard/tickets':
+            category = data.get('category')
+            body = (data.get('body') or '').strip()
+            if category not in TICKET_CATEGORIES:
+                self.err('Invalid category'); return
+            if not body:
+                self.err('body required'); return
+            db = get_db()
+            mid = str(uuid.uuid4())
+            db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
+                       (mid, gsx['guard_id'], 'guard', gsx['name'], body))
+            # Atomically claim the next ticket number: one UPDATE...RETURNING
+            # under SQLite's write lock, so two guards submitting at the same
+            # moment (server is threaded) can never claim the same number.
+            ticket_row = R(db.execute(
+                'UPDATE ticket_counter SET next_number=next_number+1 WHERE id=1 RETURNING next_number-1 AS n').fetchone())
+            ticket_number = ticket_row['n']
+            now = datetime.now().isoformat()
+            # A categorized ticket always goes straight to admin — no FAQ
+            # auto-match here, unlike a plain follow-up message. The guard
+            # already picked a category and wrote details expecting a human
+            # to look at it, not an instant bot answer.
+            db.execute('''INSERT INTO guard_query_status (guard_id,status,ticket_number,category,updated_at,updated_by)
+                          VALUES (?,?,?,?,?,?)
+                          ON CONFLICT(guard_id) DO UPDATE SET status=excluded.status,
+                              ticket_number=excluded.ticket_number, category=excluded.category,
+                              updated_at=excluded.updated_at, updated_by=excluded.updated_by''',
+                       (gsx['guard_id'], 'open', ticket_number, category, now, gsx['name']))
+            audit(db, {'admin_id':'','name':gsx['name']}, 'TICKET_CREATED',
+                  f"#{ticket_number} ({TICKET_CATEGORIES[category]}) by {gsx['name']}")
+            db.commit(); db.close()
+            self.send_json({'id':mid,'ok':True,'ticket_number':ticket_number}, 201); return
 
         if path == '/api/guard/messages':
             if not (data.get('body') or '').strip():
