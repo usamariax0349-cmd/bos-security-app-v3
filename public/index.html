@@ -118,6 +118,7 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 .badge-pending{background:var(--amber-bg);color:var(--amber)}
 .badge-approved{background:var(--green-bg);color:#16a34a}
 .badge-rejected{background:var(--red-bg);color:var(--red)}
+.badge-noted{background:#e5e7eb;color:#374151}
 .badge-role-superadmin{background:#ede9fe;color:#7c3aed}
 .badge-role-administrator{background:#fef3c7;color:#d97706}
 .badge-role-manager{background:var(--blue-bg);color:var(--blue)}
@@ -796,6 +797,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <!-- Messages -->
     <div class="guard-card hidden" id="step-messages">
       <div class="step-title" data-i18n="messages_title">💬 Messages</div>
+      <div id="msg-status-banner" class="hidden" style="margin-bottom:10px;padding:10px 12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="msg-status-text" style="font-size:13px;font-weight:600"></span>
+        <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="clearGuardChat()">
+          <span id="msg-status-clear-label" data-i18n="clear_chat_btn">Clear Chat</span>
+        </button>
+      </div>
       <div id="msg-thread" class="msg-thread"></div>
       <div class="form-group">
         <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..."></textarea>
@@ -1267,7 +1274,18 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <div style="flex:1;display:flex;flex-direction:column;padding:18px;min-width:0">
             <div id="msg-admin-empty" style="margin:auto;color:var(--muted);font-size:13px">Select a guard to view the conversation.</div>
             <div id="msg-admin-panel" class="hidden" style="display:flex;flex-direction:column;height:100%;min-height:0">
-              <div class="section-title" id="msg-admin-guard-name" style="margin-bottom:12px"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+                <span class="section-title" id="msg-admin-guard-name"></span>
+                <span style="flex:1"></span>
+                <label style="font-size:12px;color:var(--muted)">Query status</label>
+                <select id="msg-admin-status" class="form-control" style="width:auto;font-size:12px;padding:4px 8px" onchange="setMessageStatus()">
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Solved</option>
+                  <option value="noted">Noted</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
               <div id="msg-admin-thread" class="msg-thread"></div>
               <div style="display:flex;gap:8px;margin-top:12px">
                 <textarea id="msg-admin-input" class="form-control" rows="2" placeholder="Type a reply..." style="flex:1"></textarea>
@@ -1887,6 +1905,12 @@ const TRANSLATIONS = {
     no_messages_yet: "No messages yet. Say hello 👋", office_label: "Office", guard_label: "Guard",
     loading_label: "Loading…", could_not_load_messages: "Could not load messages.",
     could_not_send_message: "Could not send message",
+    status_open: "Awaiting Review", status_in_progress: "In Progress", status_resolved: "Solved",
+    status_noted: "Noted", status_rejected: "Rejected",
+    clear_chat_btn: "Clear Chat", new_query_btn: "Start New Query",
+    clear_chat_confirm: "Clear this conversation and start a new query? The office can still see the full history for their records — this only clears your own view.",
+    chat_cleared_toast: "Chat cleared — send a new message to start a fresh query",
+    could_not_clear_chat: "Could not clear chat",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -1968,6 +1992,12 @@ const TRANSLATIONS = {
     no_messages_yet: "अभी तक कोई संदेश नहीं। नमस्ते कहें 👋", office_label: "कार्यालय", guard_label: "गार्ड",
     loading_label: "लोड हो रहा है…", could_not_load_messages: "संदेश लोड नहीं हो सके।",
     could_not_send_message: "संदेश भेजा नहीं जा सका",
+    status_open: "समीक्षा की प्रतीक्षा है", status_in_progress: "प्रगति पर है", status_resolved: "हल हो गया",
+    status_noted: "नोट कर लिया गया", status_rejected: "अस्वीकृत",
+    clear_chat_btn: "चैट साफ़ करें", new_query_btn: "नई क्वेरी शुरू करें",
+    clear_chat_confirm: "इस बातचीत को साफ़ करके नई क्वेरी शुरू करें? कार्यालय अपने रिकॉर्ड के लिए पूरा इतिहास अभी भी देख सकता है — यह केवल आपका दृश्य साफ़ करता है।",
+    chat_cleared_toast: "चैट साफ़ हो गई — नई क्वेरी शुरू करने के लिए एक नया संदेश भेजें",
+    could_not_clear_chat: "चैट साफ़ नहीं की जा सकी",
   },
   ur: {
     login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
@@ -2049,6 +2079,12 @@ const TRANSLATIONS = {
     no_messages_yet: "ابھی تک کوئی پیغام نہیں۔ سلام کہیں 👋", office_label: "دفتر", guard_label: "گارڈ",
     loading_label: "لوڈ ہو رہا ہے…", could_not_load_messages: "پیغامات لوڈ نہیں ہو سکے۔",
     could_not_send_message: "پیغام بھیجا نہیں جا سکا",
+    status_open: "جائزے کا منتظر", status_in_progress: "زیر عمل", status_resolved: "حل ہو گیا",
+    status_noted: "نوٹ کر لیا گیا", status_rejected: "مسترد",
+    clear_chat_btn: "چیٹ صاف کریں", new_query_btn: "نئی درخواست شروع کریں",
+    clear_chat_confirm: "اس گفتگو کو صاف کر کے نئی درخواست شروع کریں؟ دفتر اپنے ریکارڈ کے لیے مکمل تاریخ اب بھی دیکھ سکتا ہے — یہ صرف آپ کا منظر صاف کرتا ہے۔",
+    chat_cleared_toast: "چیٹ صاف ہو گئی — نئی درخواست شروع کرنے کے لیے ایک نیا پیغام بھیجیں",
+    could_not_clear_chat: "چیٹ صاف نہیں ہو سکی",
   },
   ar: {
     login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
@@ -2130,6 +2166,12 @@ const TRANSLATIONS = {
     no_messages_yet: "لا توجد رسائل بعد. قل مرحبًا 👋", office_label: "المكتب", guard_label: "الحارس",
     loading_label: "جارٍ التحميل…", could_not_load_messages: "تعذّر تحميل الرسائل.",
     could_not_send_message: "تعذّر إرسال الرسالة",
+    status_open: "بانتظار المراجعة", status_in_progress: "قيد المعالجة", status_resolved: "تم الحل",
+    status_noted: "تم التسجيل", status_rejected: "مرفوض",
+    clear_chat_btn: "مسح المحادثة", new_query_btn: "بدء استفسار جديد",
+    clear_chat_confirm: "مسح هذه المحادثة وبدء استفسار جديد؟ لا يزال بإمكان المكتب رؤية السجل الكامل لسجلاته — هذا يمسح عرضك فقط.",
+    chat_cleared_toast: "تم مسح المحادثة — أرسل رسالة جديدة لبدء استفسار جديد",
+    could_not_clear_chat: "تعذّر مسح المحادثة",
   },
 };
 const RTL_LANGS = new Set(['ur','ar']);
@@ -3221,17 +3263,46 @@ async function checkUnreadMessages(){
     document.getElementById('msg-unread-dot')?.classList.toggle('hidden', unread===0);
   }catch(e){}
 }
+const GUARD_QUERY_STATUS_STYLE = {
+  open:        {bg:'var(--amber-bg)', fg:'var(--amber)'},
+  in_progress: {bg:'var(--amber-bg)', fg:'var(--amber)'},
+  resolved:    {bg:'var(--green-bg)', fg:'#16a34a'},
+  noted:       {bg:'#e5e7eb',         fg:'#374151'},
+  rejected:    {bg:'var(--red-bg)',   fg:'var(--red)'},
+};
+function renderGuardQueryStatus(s){
+  const banner = document.getElementById('msg-status-banner');
+  if(!s || !s.status){ banner.classList.add('hidden'); return; }
+  const style = GUARD_QUERY_STATUS_STYLE[s.status] || GUARD_QUERY_STATUS_STYLE.open;
+  banner.style.background = style.bg; banner.style.color = style.fg;
+  document.getElementById('msg-status-text').textContent = t('status_'+s.status);
+  const clearLabel = document.getElementById('msg-status-clear-label');
+  clearLabel.textContent = (s.status==='resolved'||s.status==='noted'||s.status==='rejected') ? t('new_query_btn') : t('clear_chat_btn');
+  banner.classList.remove('hidden');
+}
 async function loadGuardMessages(){
   const box = document.getElementById('msg-thread');
   box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('loading_label')}</p>`;
   try{
-    const rows = await guardApiFetch('/api/guard/messages');
+    const [rows, status] = await Promise.all([
+      guardApiFetch('/api/guard/messages'),
+      guardApiFetch('/api/guard/query-status').catch(()=>null),
+    ]);
     renderMsgThread(box, rows, 'guard');
+    renderGuardQueryStatus(status);
     if(rows.some(m=>m.sender==='admin' && !m.read_at)){
       await guardApiFetch('/api/guard/messages/read', {method:'POST'});
       document.getElementById('msg-unread-dot')?.classList.add('hidden');
     }
   }catch(e){ box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('could_not_load_messages')}</p>`; }
+}
+async function clearGuardChat(){
+  if(!confirm(t('clear_chat_confirm'))) return;
+  try{
+    await guardApiFetch('/api/guard/messages/clear', {method:'POST'});
+    toast(t('chat_cleared_toast'),'success');
+    loadGuardMessages();
+  }catch(e){ toast(t('could_not_clear_chat'),'error'); }
 }
 async function sendGuardMessage(){
   const input = document.getElementById('msg-input');
@@ -5001,6 +5072,11 @@ async function loadMessageThreads(){
     updateMsgTabBadge();
   }catch(e){}
 }
+const MSG_STATUS_BADGE = {
+  open: {cls:'badge-pending', label:'Open'}, in_progress: {cls:'badge-pending', label:'In Progress'},
+  resolved: {cls:'badge-approved', label:'Solved'}, rejected: {cls:'badge-rejected', label:'Rejected'},
+  noted: {cls:'badge-noted', label:'Noted'},
+};
 function renderMsgThreadsList(){
   const sel = document.getElementById('msg-new-guard');
   if(sel) sel.innerHTML = '<option value="">Select a guard…</option>' +
@@ -5008,14 +5084,17 @@ function renderMsgThreadsList(){
   const box = document.getElementById('msg-threads-list');
   box.innerHTML = msgThreads.length===0
     ? '<p style="padding:14px 16px;font-size:12px;color:var(--muted)">No conversations yet.</p>'
-    : msgThreads.map(t=>`
+    : msgThreads.map(t=>{
+        const st = MSG_STATUS_BADGE[t.query_status] || MSG_STATUS_BADGE.open;
+        return `
         <div class="msg-thread-item ${msgActiveGuard===t.guard_id?'active':''}" onclick="openMessageThread('${t.guard_id}')">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
             <strong class="mti-name">${escapeHtml(t.guard_name)}</strong>
             ${t.unread>0?`<span class="msg-dot">${t.unread}</span>`:''}
           </div>
           <div class="mti-preview">${t.last_sender==='admin'?'You: ':''}${escapeHtml(t.last_body||'')}</div>
-        </div>`).join('');
+          <span class="badge ${st.cls}" style="margin-top:4px;font-size:10px">${st.label}</span>
+        </div>`;}).join('');
 }
 function startNewMessageThread(){
   const sel = document.getElementById('msg-new-guard');
@@ -5028,6 +5107,8 @@ async function openMessageThread(guardId){
   document.getElementById('msg-admin-empty').classList.add('hidden');
   document.getElementById('msg-admin-panel').classList.remove('hidden');
   document.getElementById('msg-admin-guard-name').textContent = guard ? guard.name : 'Guard';
+  const thread = msgThreads.find(t=>t.guard_id===guardId);
+  document.getElementById('msg-admin-status').value = thread ? thread.query_status : 'open';
   renderMsgThreadsList();
   const box = document.getElementById('msg-admin-thread');
   box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
@@ -5050,6 +5131,15 @@ async function sendAdminMessage(){
     const box = document.getElementById('msg-admin-thread');
     const rows = await apiFetch(`/api/messages?guard_id=${msgActiveGuard}`);
     renderMsgThread(box, rows, 'admin');
+    loadMessageThreads();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function setMessageStatus(){
+  if(!msgActiveGuard) return;
+  const status = document.getElementById('msg-admin-status').value;
+  try{
+    await apiFetch('/api/messages/status', {method:'POST', body: JSON.stringify({guard_id:msgActiveGuard, status})});
+    toast('Status updated','success');
     loadMessageThreads();
   }catch(e){ toast(e.message,'error'); }
 }
