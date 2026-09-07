@@ -1782,6 +1782,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ORDER BY on_site_now DESC, s.name, g.name''', site_ids).fetchall())
             db.close(); self.send_json(rows); return
 
+        if path == '/api/client/schedule':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_ids = self.client_site_ids(s3['admin_id'])
+            if not site_ids: self.send_json([]); return
+            ph = ','.join('?'*len(site_ids))
+            db = get_db()
+            # Upcoming rostered shifts at this client's own site(s) only — same
+            # guard-facing fields as /api/client/guards (no rate/contact info).
+            rows = RL(db.execute(f'''
+                SELECT sh.shift_date, sh.start_time, sh.end_time, sh.position,
+                       g.name as guard_name, s.name as site_name
+                FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id
+                JOIN sites s ON s.id=sh.site_id
+                WHERE sh.site_id IN ({ph}) AND sh.cancelled=0 AND g.active=1
+                  AND sh.shift_date >= date('now')
+                ORDER BY sh.shift_date, sh.start_time LIMIT 200''', site_ids).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/client/incidents':
             s3 = self.require_client()
             if s3 is None: return

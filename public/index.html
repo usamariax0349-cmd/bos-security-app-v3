@@ -1380,11 +1380,22 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
     </div>
     <div id="ctab-guards" class="tab-content">
-      <div class="section">
+      <div class="section" style="margin-bottom:20px">
         <div class="section-head"><span class="section-title">Guards Assigned to Your Sites</span>
           <button class="btn btn-ghost btn-sm" onclick="loadClientGuards()">↻ Refresh</button>
         </div>
         <div id="client-guards-list"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><span class="section-title">Upcoming Schedule</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadClientSchedule()">↻ Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Start</th><th>End</th><th>Position</th></tr></thead>
+            <tbody id="client-schedule-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div id="ctab-patrol" class="tab-content">
@@ -2425,7 +2436,7 @@ function showClientTab(name){
   document.querySelectorAll('#client-tabs .tab-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById(`ctab-${name}`)?.classList.add('active');
   document.querySelector(`[data-ctab="${name}"]`)?.classList.add('active');
-  if(name==='guards') loadClientGuards();
+  if(name==='guards'){ loadClientGuards(); loadClientSchedule(); }
   else if(name==='patrol') loadClientActivity();
   else if(name==='cincidents') loadClientIncidents();
   else if(name==='coverage') loadClientCoverage();
@@ -2490,6 +2501,17 @@ async function loadClientGuards(){
             </div>`).join('')}
         </div>
       </div>`).join('');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientSchedule(){
+  try{
+    const rows = await apiFetch('/api/client/schedule');
+    document.getElementById('client-schedule-tbody').innerHTML = rows.length===0
+      ? `<tr><td colspan="6" class="empty-state"><div class="ei">🗓️</div><p>No upcoming shifts scheduled</p></td></tr>`
+      : rows.map(r=>`<tr>
+        <td>${r.shift_date}</td><td>${r.guard_name}</td><td>${r.site_name}</td>
+        <td>${r.start_time}</td><td>${r.end_time||'Open-ended'}</td><td>${r.position||'—'}</td>
+      </tr>`).join('');
   }catch(e){ toast(e.message,'error'); }
 }
 async function loadClientIncidents(){
