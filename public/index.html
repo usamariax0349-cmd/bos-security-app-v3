@@ -1366,6 +1366,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
   <div class="tabs" id="client-tabs">
     <button class="tab-btn active" onclick="showClientTab('overview')" data-ctab="overview">📊 Overview</button>
+    <button class="tab-btn" onclick="showClientTab('guards')" data-ctab="guards">👮 Your Guards</button>
     <button class="tab-btn" onclick="showClientTab('patrol')" data-ctab="patrol">🚶 Patrol Log</button>
     <button class="tab-btn" onclick="showClientTab('cincidents')" data-ctab="cincidents">🚨 Incidents</button>
     <button class="tab-btn" onclick="showClientTab('coverage')" data-ctab="coverage">🗓️ Shift Coverage</button>
@@ -1376,6 +1377,25 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div class="section">
         <div class="section-head"><span class="section-title">🗺️ Your Sites</span></div>
         <div class="section-body"><div id="client-map" class="map-box light" style="height:320px"></div></div>
+      </div>
+    </div>
+    <div id="ctab-guards" class="tab-content">
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head"><span class="section-title">Guards Assigned to Your Sites</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadClientGuards()">↻ Refresh</button>
+        </div>
+        <div id="client-guards-list"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><span class="section-title">Upcoming Schedule</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadClientSchedule()">↻ Refresh</button>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Start</th><th>End</th><th>Position</th></tr></thead>
+            <tbody id="client-schedule-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div id="ctab-patrol" class="tab-content">
@@ -2416,7 +2436,8 @@ function showClientTab(name){
   document.querySelectorAll('#client-tabs .tab-btn').forEach(el=>el.classList.remove('active'));
   document.getElementById(`ctab-${name}`)?.classList.add('active');
   document.querySelector(`[data-ctab="${name}"]`)?.classList.add('active');
-  if(name==='patrol') loadClientActivity();
+  if(name==='guards'){ loadClientGuards(); loadClientSchedule(); }
+  else if(name==='patrol') loadClientActivity();
   else if(name==='cincidents') loadClientIncidents();
   else if(name==='coverage') loadClientCoverage();
 }
@@ -2454,6 +2475,43 @@ async function loadClientActivity(){
         <div class="activity-time">${fmtDateTime(r.at)}</div>
       </div>`;
     }).join('');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientGuards(){
+  try{
+    const rows = await apiFetch('/api/client/guards');
+    const wrap = document.getElementById('client-guards-list');
+    if(!rows.length){ wrap.innerHTML = `<div class="empty-state"><div class="ei">👮</div><p>No guards have been rostered to your site(s) yet</p></div>`; return; }
+    const bySite = {};
+    rows.forEach(r=>{ (bySite[r.site_name] = bySite[r.site_name]||[]).push(r); });
+    wrap.innerHTML = Object.keys(bySite).sort().map(siteName => `
+      <div style="margin-bottom:18px">
+        <div style="font-weight:600;color:var(--navy);margin-bottom:8px">${siteName}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
+          ${bySite[siteName].map(g => `
+            <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:#fff">
+              <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+                <div style="font-weight:600">${g.name}</div>
+                ${g.on_site_now ? '<span class="badge badge-approved">On Site Now</span>' : ''}
+              </div>
+              ${g.license_number ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">Lic. ${g.license_number}</div>` : ''}
+              <div style="font-size:12px;color:var(--muted);margin-top:6px">
+                ${g.next_shift_date ? `Next shift: ${g.next_shift_date}` : (g.last_shift_date ? `Last on site: ${g.last_shift_date}` : '')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function loadClientSchedule(){
+  try{
+    const rows = await apiFetch('/api/client/schedule');
+    document.getElementById('client-schedule-tbody').innerHTML = rows.length===0
+      ? `<tr><td colspan="6" class="empty-state"><div class="ei">🗓️</div><p>No upcoming shifts scheduled</p></td></tr>`
+      : rows.map(r=>`<tr>
+        <td>${r.shift_date}</td><td>${r.guard_name}</td><td>${r.site_name}</td>
+        <td>${r.start_time}</td><td>${r.end_time||'Open-ended'}</td><td>${r.position||'—'}</td>
+      </tr>`).join('');
   }catch(e){ toast(e.message,'error'); }
 }
 async function loadClientIncidents(){
