@@ -531,6 +531,18 @@ def init_db():
             read_at     TEXT
         );
 
+        -- One row per guard: the status of their current/most recent query,
+        -- so the Guard Portal can show "In Progress / Solved / Noted /
+        -- Rejected" instead of a guard having to re-read the whole thread to
+        -- tell whether anyone's actually looked at it. Cleared (deleted) when
+        -- the guard starts a new query.
+        CREATE TABLE IF NOT EXISTS guard_query_status (
+            guard_id    TEXT PRIMARY KEY,
+            status      TEXT NOT NULL DEFAULT 'open',
+            updated_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_by  TEXT
+        );
+
         -- Singleton row — one VAPID keypair for the whole app, generated once
         -- (see init_db) and reused forever so existing push subscriptions
         -- don't silently break on the next restart/redeploy.
@@ -709,6 +721,11 @@ def init_db():
         # if the first attempt actually reached the server but the response
         # never made it back to the guard's phone.
         ("checkpoint_scans", "client_scan_id", "ALTER TABLE checkpoint_scans ADD COLUMN client_scan_id TEXT"),
+        # "Clear Chat / Start New Query" — a guard can hide their own message
+        # history once a query is resolved, without deleting anything: admins
+        # still see the full thread (compliance), but the guard's own view
+        # only shows messages sent after this cutoff.
+        ("guards", "messages_cleared_before", "ALTER TABLE guards ADD COLUMN messages_cleared_before TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -1907,9 +1924,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
             if path == '/api/guard/messages':
                 db = get_db()
-                rows = RL(db.execute(
-                    'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gsx['guard_id'],)).fetchall())
+                # "Clear Chat" hides history from the guard's own view without
+                # deleting it — admins still see everything via /api/messages.
+                cutoff = R(db.execute('SELECT messages_cleared_before FROM guards WHERE id=?',
+                                      (gsx['guard_id'],)).fetchone())
+                cutoff = cutoff['messages_cleared_before'] if cutoff else None
+                if cutoff:
+                    rows = RL(db.execute(
+                        'SELECT * FROM messages WHERE guard_id=? AND created_at>? ORDER BY created_at ASC',
+                        (gsx['guard_id'], cutoff)).fetchall())
+                else:
+                    rows = RL(db.execute(
+                        'SELECT * FROM messages WHERE guard_id=? ORDER BY created_at ASC', (gsx['guard_id'],)).fetchall())
                 db.close(); self.send_json(rows); return
+
+            if path == '/api/guard/query-status':
+                db = get_db()
+                row = R(db.execute('SELECT status, updated_at FROM guard_query_status WHERE guard_id=?',
+                                   (gsx['guard_id'],)).fetchone())
+                db.close(); self.send_json(row or {'status': None}); return
 
             if path == '/api/guard/compliance':
                 db = get_db()
@@ -2230,8 +2263,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (SELECT body FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_body,
                        (SELECT sender FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_sender,
                        (SELECT created_at FROM messages WHERE guard_id=g.id ORDER BY created_at DESC LIMIT 1) as last_at,
-                       (SELECT COUNT(*) FROM messages WHERE guard_id=g.id AND sender='guard' AND read_at IS NULL) as unread
+                       (SELECT COUNT(*) FROM messages WHERE guard_id=g.id AND sender='guard' AND read_at IS NULL) as unread,
+                       COALESCE(qs.status, 'open') as query_status
                 FROM guards g
+                LEFT JOIN guard_query_status qs ON qs.guard_id=g.id
                 WHERE EXISTS (SELECT 1 FROM messages m WHERE m.guard_id=g.id)
                 ORDER BY last_at DESC
             ''').fetchall())
@@ -2712,15 +2747,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # answer instantly and mark it handled instead of leaving it for
             # admin to triage.
             faq = match_faq(db, body)
+            now = datetime.now().isoformat()
             if faq:
-                now = datetime.now().isoformat()
                 db.execute('UPDATE messages SET read_at=? WHERE id=?', (now, mid))
                 db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
                            (str(uuid.uuid4()), gsx['guard_id'], 'admin', 'FAQ Auto-Reply', faq['answer']))
                 audit(db, {'admin_id':'','name':'FAQ Auto-Reply'}, 'FAQ_AUTO_REPLY',
                       f"to {gsx['name']}: matched \"{faq['question']}\"")
+            # Any new guard message reopens the query. An FAQ match gets
+            # 'noted' rather than 'resolved' — some FAQ answers are genuine
+            # answers (pay dates, etc.) but others are just a redirect
+            # ("message the office to arrange a swap"), which isn't actually
+            # resolved; an admin decides that explicitly.
+            db.execute('''INSERT INTO guard_query_status (guard_id,status,updated_at,updated_by) VALUES (?,?,?,?)
+                          ON CONFLICT(guard_id) DO UPDATE SET status=excluded.status,
+                              updated_at=excluded.updated_at, updated_by=excluded.updated_by''',
+                       (gsx['guard_id'], 'noted' if faq else 'open', now,
+                        'FAQ Auto-Reply' if faq else gsx['name']))
             db.commit(); db.close()
             self.send_json({'id':mid,'ok':True,'auto_replied':bool(faq)}, 201); return
+
+        if path == '/api/guard/messages/clear':
+            db = get_db()
+            # Must use SQLite's own CURRENT_TIMESTAMP (not Python's isoformat())
+            # so this compares correctly against messages.created_at, which is
+            # stamped the same way — different formats would compare as plain
+            # strings and silently never match.
+            db.execute('UPDATE guards SET messages_cleared_before=CURRENT_TIMESTAMP WHERE id=?',
+                       (gsx['guard_id'],))
+            db.execute('DELETE FROM guard_query_status WHERE guard_id=?', (gsx['guard_id'],))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         if path == '/api/guard/messages/read':
             db = get_db()
@@ -3160,9 +3217,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             mid = str(uuid.uuid4())
             db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
                        (mid, guard['id'], 'admin', s2['name'], data['body'].strip()))
+            # A reply means someone's actively handling the guard's query —
+            # bump status to In Progress unless it was already at a terminal
+            # state the admin explicitly set (don't silently override that).
+            db.execute('''INSERT INTO guard_query_status (guard_id,status,updated_at,updated_by) VALUES (?,?,?,?)
+                          ON CONFLICT(guard_id) DO UPDATE SET status='in_progress',
+                              updated_at=excluded.updated_at, updated_by=excluded.updated_by
+                          WHERE guard_query_status.status='open' ''',
+                       (guard['id'], 'in_progress', datetime.now().isoformat(), s2['name']))
             audit(db, s2, 'MESSAGE_SEND', f"to {guard['name']}"); db.commit(); db.close()
             send_push(guard['id'], f'New message from {s2["name"]}', data['body'].strip()[:120], '/')
             self.send_json({'id':mid,'ok':True}, 201); return
+
+        if path == '/api/messages/status':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            status = data.get('status')
+            if status not in ('open','in_progress','resolved','noted','rejected'):
+                self.err('Invalid status'); return
+            if not data.get('guard_id'): self.err('guard_id required'); return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            now = datetime.now().isoformat()
+            db.execute('''INSERT INTO guard_query_status (guard_id,status,updated_at,updated_by) VALUES (?,?,?,?)
+                          ON CONFLICT(guard_id) DO UPDATE SET status=excluded.status,
+                              updated_at=excluded.updated_at, updated_by=excluded.updated_by''',
+                       (guard['id'], status, now, s2['name']))
+            audit(db, s2, 'MESSAGE_STATUS_SET', f"{guard['name']} -> {status}")
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         if path == '/api/messages/read':
             if not data.get('guard_id'): self.err('guard_id required'); return
