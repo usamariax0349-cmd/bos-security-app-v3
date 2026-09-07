@@ -1756,6 +1756,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             feed = sorted(scans+incidents, key=lambda r:r['at'], reverse=True)[:100]
             self.send_json(feed); return
 
+        if path == '/api/client/guards':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_ids = self.client_site_ids(s3['admin_id'])
+            if not site_ids: self.send_json([]); return
+            ph = ','.join('?'*len(site_ids))
+            db = get_db()
+            # Only guards who've actually worked (or are scheduled at) one of this
+            # client's sites in the last 90 days — never the full company roster.
+            # Deliberately excludes phone/email/notes/base_rate: a client seeing who
+            # is protecting their site is reasonable, but direct contact details and
+            # pay data are not this endpoint's business to leak.
+            rows = RL(db.execute(f'''
+                SELECT g.id as guard_id, g.name, g.license_number, s.id as site_id, s.name as site_name,
+                       MAX(sh.shift_date) as last_shift_date,
+                       MIN(CASE WHEN sh.shift_date >= date('now') THEN sh.shift_date END) as next_shift_date,
+                       MAX(CASE WHEN sh.clock_in_at IS NOT NULL AND sh.clock_out_at IS NULL THEN 1 ELSE 0 END) as on_site_now
+                FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id
+                JOIN sites s ON s.id=sh.site_id
+                WHERE sh.site_id IN ({ph}) AND sh.cancelled=0 AND g.active=1
+                  AND sh.shift_date >= date('now','-90 days')
+                GROUP BY g.id, s.id
+                ORDER BY on_site_now DESC, s.name, g.name''', site_ids).fetchall())
+            db.close(); self.send_json(rows); return
+
         if path == '/api/client/incidents':
             s3 = self.require_client()
             if s3 is None: return
