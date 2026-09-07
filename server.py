@@ -298,6 +298,23 @@ def send_push(guard_id, title, body, url='/'):
             print(f'  PUSH: unexpected error for guard {guard_id}: {e}')
     db.commit(); db.close()
 
+QUERY_STATUS_LABELS = {
+    'open': 'Awaiting Review', 'in_progress': 'In Progress', 'resolved': 'Solved',
+    'noted': 'Noted', 'rejected': 'Rejected',
+}
+
+def notify_guard_status_change(guard, new_status):
+    """Email the guard when an ADMIN action changes their query status.
+    Deliberately never called from the guard's own message-send path —
+    they already know about the 'open'/'noted' transitions they just
+    triggered themselves (sending a message, or an instant FAQ reply)."""
+    if not guard.get('email'):
+        return
+    label = QUERY_STATUS_LABELS.get(new_status, new_status)
+    body = (f"Hi {guard['name']},\n\nThe status of your message to {COMPANY_NAME} has been "
+            f"updated to: {label}\n\nView the conversation in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
+    send_email(guard['email'], f'{COMPANY_NAME}: Your query is now {label}', body)
+
 # ─── Database ─────────────────────────────────────────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -3212,7 +3229,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not data.get('guard_id') or not (data.get('body') or '').strip():
                 self.err('guard_id and body required'); return
             db = get_db()
-            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
+            guard = R(db.execute('SELECT id,name,email FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
             if not guard: db.close(); self.err('Guard not found', 404); return
             mid = str(uuid.uuid4())
             db.execute('INSERT INTO messages (id,guard_id,sender,sender_name,body) VALUES (?,?,?,?,?)',
@@ -3220,6 +3237,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # A reply means someone's actively handling the guard's query —
             # bump status to In Progress unless it was already at a terminal
             # state the admin explicitly set (don't silently override that).
+            prev = R(db.execute('SELECT status FROM guard_query_status WHERE guard_id=?', (guard['id'],)).fetchone())
             db.execute('''INSERT INTO guard_query_status (guard_id,status,updated_at,updated_by) VALUES (?,?,?,?)
                           ON CONFLICT(guard_id) DO UPDATE SET status='in_progress',
                               updated_at=excluded.updated_at, updated_by=excluded.updated_by
@@ -3227,6 +3245,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (guard['id'], 'in_progress', datetime.now().isoformat(), s2['name']))
             audit(db, s2, 'MESSAGE_SEND', f"to {guard['name']}"); db.commit(); db.close()
             send_push(guard['id'], f'New message from {s2["name"]}', data['body'].strip()[:120], '/')
+            # Only the guard's own query being reopened ('open') actually
+            # bumps here — email that transition, but not a reply into a
+            # thread already in_progress/resolved/noted/rejected (no change).
+            if prev and prev['status'] == 'open':
+                notify_guard_status_change(guard, 'in_progress')
             self.send_json({'id':mid,'ok':True}, 201); return
 
         if path == '/api/messages/status':
@@ -3237,8 +3260,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.err('Invalid status'); return
             if not data.get('guard_id'): self.err('guard_id required'); return
             db = get_db()
-            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
+            guard = R(db.execute('SELECT id,name,email FROM guards WHERE id=?', (data['guard_id'],)).fetchone())
             if not guard: db.close(); self.err('Guard not found', 404); return
+            prev = R(db.execute('SELECT status FROM guard_query_status WHERE guard_id=?', (guard['id'],)).fetchone())
             now = datetime.now().isoformat()
             db.execute('''INSERT INTO guard_query_status (guard_id,status,updated_at,updated_by) VALUES (?,?,?,?)
                           ON CONFLICT(guard_id) DO UPDATE SET status=excluded.status,
@@ -3246,6 +3270,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (guard['id'], status, now, s2['name']))
             audit(db, s2, 'MESSAGE_STATUS_SET', f"{guard['name']} -> {status}")
             db.commit(); db.close()
+            if not prev or prev['status'] != status:
+                notify_guard_status_change(guard, status)
             self.send_json({'ok':True}); return
 
         if path == '/api/messages/read':
