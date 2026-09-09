@@ -1,4 +1,4 @@
-const CACHE = 'bos-v35';
+const CACHE = 'bos-v36';
 const STATIC = ['/', '/index.html', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', e => {
