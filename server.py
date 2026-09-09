@@ -352,6 +352,300 @@ def notify_guard_status_change(guard, new_status):
             f"updated to: {label}\n\nView the conversation in the Guard Portal: {APP_URL}\n\n— {COMPANY_NAME}")
     send_email(guard['email'], f'{COMPANY_NAME}: Your query is now {label}', body)
 
+# ─── Guard Star Rating System (admin-only) ────────────────────────────────────
+# Every category is scored in half-stars, stored internally as 0-10 "half
+# steps" (0 = 0 stars, 10 = 5 stars) so arithmetic stays in integers.
+#
+# 'auto' categories are computed live from real shift/compliance/availability
+# data every time a rating is requested — nothing is cached, so a late
+# clock-in this morning is reflected the moment someone looks. 'manual'
+# categories have no data source anywhere in this app (uniform checks,
+# client feedback, paperwork quality, conduct, versatility) — an admin logs
+# a dated, sourced observation via guard_rating_notes, and the most recent
+# one inside the rating window IS the category's score. No entry in the
+# window means "not assessable": it is excluded from the weighted average
+# (never scored as a 0, per the "never rate on undocumented information"
+# rule) and surfaced back as thin data instead.
+#
+# This system only ever produces a rating and suggested talking points for a
+# human to read — nothing here writes to a guard's roster status, hours, or
+# employment. Rendering the rating and taking action on it are deliberately
+# two separate steps performed by two separate people.
+RATING_WINDOW_DAYS = 90
+RATING_MIN_SHIFTS = 10             # fewer than this and no rating is produced at all
+RATING_ON_TIME_GRACE_MINUTES = 5   # arrival within this many minutes of start counts as on time
+
+RATING_CATEGORIES = [
+    # (key, label, weight, kind)
+    ('punctuality',  'Punctuality',                   0.18, 'auto'),
+    ('attendance',   'Attendance & reliability',       0.17, 'auto'),
+    ('uniform',      'Uniform & presentation',         0.12, 'manual'),
+    ('service',      'Customer & client service',      0.12, 'manual'),
+    ('availability', 'Availability & responsiveness',  0.11, 'auto'),
+    ('compliance',   'Compliance & licensing',         0.10, 'auto'),
+    ('paperwork',    'Paperwork & reporting',          0.08, 'manual'),
+    ('conduct',      'Conduct under pressure',         0.07, 'manual'),
+    ('versatility',  'Versatility & initiative',       0.05, 'manual'),
+]
+RATING_CATEGORY_LABELS = {k: lbl for k, lbl, _, _ in RATING_CATEGORIES}
+RATING_MANUAL_CATEGORIES = [k for k, _, _, kind in RATING_CATEGORIES if kind == 'manual']
+
+RATING_TIER5_QUESTIONS = [
+    'Has something changed in their circumstances?',
+    'Are the shifts they’re offered actually matching their stated availability?',
+    'Is the problem concentrated at one site, one shift type, one time of day?',
+    'Is there a transport, licensing, uniform-cost or training barrier that’s fixable?',
+    'Have they raised something with the office that hasn’t been actioned?',
+]
+
+def stars_label(half_steps):
+    """Render a 0-10 half-step score as a fixed-width 5-glyph star string."""
+    if half_steps is None: return '—'
+    half_steps = max(0, min(10, half_steps))
+    full = half_steps // 2
+    half = half_steps % 2
+    return '★'*full + ('½' if half else '') + '☆'*(5 - full - (1 if half else 0))
+
+def rating_tier(overall_half_steps):
+    if overall_half_steps is None: return 'Unrated'
+    if overall_half_steps >= 9: return 'Tier 1 — Lead'
+    if overall_half_steps >= 7: return 'Tier 2 — Established'
+    if overall_half_steps >= 6: return 'Tier 3 — Solid'
+    if overall_half_steps >= 4: return 'Tier 4 — Developing'
+    return 'Tier 5 — Review'
+
+def _round_half_steps(x):
+    return max(0, min(10, int(x + 0.5)))
+
+def compute_guard_rating(db, guard_id, as_of=None):
+    """Compute a guard's star rating from real shift/compliance/availability
+    data plus any manually-logged observations, over a rolling
+    RATING_WINDOW_DAYS window. Returns {'unrated': True, ...} if the guard
+    hasn't worked RATING_MIN_SHIFTS shifts yet — the sample is too small to
+    mean anything, and one bad early week shouldn't follow a guard around."""
+    as_of = as_of or datetime.now()
+    guard = R(db.execute('SELECT * FROM guards WHERE id=?', (guard_id,)).fetchone())
+    if not guard: return None
+
+    all_time_completed = db.execute(
+        'SELECT COUNT(*) FROM shifts WHERE guard_id=? AND cancelled=0 AND clock_out_at IS NOT NULL',
+        (guard_id,)).fetchone()[0]
+    if all_time_completed < RATING_MIN_SHIFTS:
+        return {'guard_id': guard_id, 'name': guard['name'], 'unrated': True,
+                'all_time_completed': all_time_completed, 'min_shifts': RATING_MIN_SHIFTS}
+
+    leave_rows = RL(db.execute(
+        'SELECT start_date,end_date FROM guard_leave WHERE guard_id=?', (guard_id,)).fetchall())
+    def on_leave(d):
+        return any(lv['start_date'] <= d <= lv['end_date'] for lv in leave_rows)
+
+    comp_rows = RL(db.execute('''
+        SELECT ci.name, gc.expiry_date FROM guard_compliance gc
+        JOIN compliance_items ci ON ci.id=gc.item_id
+        WHERE gc.guard_id=? AND gc.expiry_date IS NOT NULL AND gc.expiry_date != ''
+    ''', (guard_id,)).fetchall())
+
+    def score_window(window_start, window_end):
+        """Score every auto + manual category for one date window. Returns
+        (categories dict, overall half-steps or None, list of thin-data labels)."""
+        shifts = RL(db.execute('''
+            SELECT sh.*, s.name as site_name FROM shifts sh JOIN sites s ON s.id=sh.site_id
+            WHERE sh.guard_id=? AND sh.shift_date>=? AND sh.shift_date<=?
+        ''', (guard_id, window_start.strftime('%Y-%m-%d'), window_end.strftime('%Y-%m-%d'))).fetchall())
+        shifts = [s for s in shifts if not on_leave(s['shift_date'])]
+        for s in shifts: s['_status'] = shift_status(s, now=as_of)
+        eligible = [s for s in shifts if s['_status'] in ('completed', 'missed')]
+        cats = {}
+
+        # Punctuality — % of clocked-in shifts where clock-in was within the
+        # on-time grace of the scheduled start.
+        with_clockin = [s for s in eligible if s['_status'] == 'completed' and s.get('clock_in_at')]
+        if with_clockin:
+            on_time = 0; late_by_site = {}
+            for s in with_clockin:
+                try:
+                    start_dt = datetime.strptime(f"{s['shift_date']} {s['start_time']}", '%Y-%m-%d %H:%M')
+                    actual = datetime.fromisoformat(s['clock_in_at'])
+                except ValueError:
+                    continue
+                if (actual - start_dt).total_seconds() / 60 <= RATING_ON_TIME_GRACE_MINUTES:
+                    on_time += 1
+                else:
+                    late_by_site[s['site_name']] = late_by_site.get(s['site_name'], 0) + 1
+            rate = on_time / len(with_clockin)
+            if rate >= 1.0: stars = 10
+            elif rate >= 0.98: stars = 8
+            elif rate >= 0.93: stars = 6
+            elif rate >= 0.85: stars = 4
+            else: stars = 2
+            flag = None
+            total_late = sum(late_by_site.values())
+            if total_late >= 2 and len(late_by_site) == 1:
+                flag = (f"All lateness this window was at {next(iter(late_by_site))} — check transport/roster "
+                        f"fit before treating this as a reliability issue.")
+            cats['punctuality'] = {'stars': stars, 'detail': f'{on_time}/{len(with_clockin)} shifts on time ({rate*100:.0f}%)',
+                                    'confidence': 'high', 'flag': flag}
+        else:
+            cats['punctuality'] = None
+
+        # Attendance & reliability — completed vs. no-show ('missed') among
+        # eligible shifts. Cancelled shifts and leave-covered dates are
+        # excluded entirely: this app doesn't record who cancelled a shift or
+        # why, so there's no documented basis to count one against a guard.
+        if eligible:
+            completed = [s for s in eligible if s['_status'] == 'completed']
+            missed = [s for s in eligible if s['_status'] == 'missed']
+            rate = len(completed) / len(eligible)
+            if missed:
+                stars = 4  # a no-show caps this category at ★★☆☆☆ for the window
+                detail = f"{len(completed)}/{len(eligible)} completed. {len(missed)} no-show(s) this window"
+            elif rate >= 1.0: stars, detail = 10, f'{len(completed)}/{len(eligible)} completed (100%)'
+            elif rate >= 0.97: stars, detail = 8, f'{len(completed)}/{len(eligible)} completed ({rate*100:.0f}%)'
+            elif rate >= 0.92: stars, detail = 6, f'{len(completed)}/{len(eligible)} completed ({rate*100:.0f}%)'
+            elif rate >= 0.85: stars, detail = 4, f'{len(completed)}/{len(eligible)} completed ({rate*100:.0f}%)'
+            else: stars, detail = 2, f'{len(completed)}/{len(eligible)} completed ({rate*100:.0f}%)'
+            missed_sites = {}
+            for s in missed: missed_sites[s['site_name']] = missed_sites.get(s['site_name'], 0) + 1
+            flag = None
+            if missed and len(missed_sites) == 1:
+                flag = (f"All no-shows this window were at {next(iter(missed_sites))} — check whether this is a "
+                        f"scheduling/transport problem before treating it as a reliability issue.")
+            cats['attendance'] = {'stars': stars, 'detail': detail, 'confidence': 'high', 'flag': flag}
+        else:
+            cats['attendance'] = None
+
+        # Compliance & licensing — snapshot of current expiry dates. An
+        # expired licence or ticket is a hard stop, not a scored deduction.
+        expiries = []
+        if not guard.get('no_license_required') and guard.get('license_expiry'):
+            expiries.append(('Security licence', guard['license_expiry']))
+        expiries += [(r['name'], r['expiry_date']) for r in comp_rows]
+        today_str = as_of.strftime('%Y-%m-%d')
+        expired = [(n, d) for n, d in expiries if d < today_str]
+        if expired:
+            cats['compliance'] = {'stars': 0, 'detail': f"EXPIRED: {', '.join(n for n, _ in expired)}",
+                                   'confidence': 'high', 'blocking': True,
+                                   'flag': 'Guard cannot be rostered until this is renewed.'}
+        elif expiries:
+            name, date_ = min(expiries, key=lambda x: x[1])
+            days_out = (datetime.strptime(date_, '%Y-%m-%d') - as_of).days
+            if days_out <= 30: stars, detail = 4, f'{name} expires in {days_out}d — no renewal lodged'
+            elif days_out <= 90: stars, detail = 6, f'{name} expires in {days_out}d'
+            else: stars, detail = 8, f'All current, next expiry ({name}) in {days_out}d'
+            cats['compliance'] = {'stars': stars, 'detail': detail, 'confidence': 'high',
+                                   'flag': 'Expiring inside 30 days' if days_out <= 30 else None}
+        else:
+            cats['compliance'] = {'stars': 8, 'detail': 'Nothing on file with an expiry date to track',
+                                   'confidence': 'low', 'flag': None}
+
+        # Availability & responsiveness — this app assigns shifts directly
+        # rather than offering-and-tracking-acceptance, so offer response
+        # time can't be measured. Rated on how current the guard's own
+        # availability calendar is instead, and always flagged as thin data.
+        conf_at = guard.get('availability_confirmed_at')
+        days_stale = None
+        if conf_at:
+            try: days_stale = (as_of - datetime.fromisoformat(conf_at)).days
+            except ValueError: days_stale = None
+        if days_stale is None:
+            cats['availability'] = {'stars': 2, 'detail': 'Availability never confirmed',
+                                     'confidence': 'low', 'flag': None}
+        else:
+            if days_stale <= 14: stars = 10
+            elif days_stale <= 30: stars = 8
+            elif days_stale <= 60: stars = 6
+            elif days_stale <= 90: stars = 4
+            else: stars = 2
+            cats['availability'] = {
+                'stars': stars, 'detail': f'Availability last confirmed {days_stale}d ago', 'confidence': 'low',
+                'flag': 'Shift-offer response time isn’t tracked by this system — rated on availability-calendar freshness only.'}
+
+        # Manual categories — most recent dated/sourced entry inside this window.
+        for key in RATING_MANUAL_CATEGORIES:
+            row = R(db.execute('''
+                SELECT * FROM guard_rating_notes WHERE guard_id=? AND category=?
+                  AND entry_date>=? AND entry_date<=? ORDER BY entry_date DESC, created_at DESC LIMIT 1
+            ''', (guard_id, key, window_start.strftime('%Y-%m-%d'), window_end.strftime('%Y-%m-%d'))).fetchone())
+            cats[key] = {'stars': row['stars'], 'detail': row['note'], 'source': row.get('source') or '',
+                         'entry_date': row['entry_date'], 'confidence': 'documented', 'flag': None} if row else None
+
+        total_weight = 0.0; weighted_sum = 0.0; thin = []
+        for key, label, weight, kind in RATING_CATEGORIES:
+            cat = cats.get(key)
+            if cat is None:
+                thin.append(label); continue
+            total_weight += weight; weighted_sum += weight * cat['stars']
+        overall = _round_half_steps(weighted_sum / total_weight) if total_weight > 0 else None
+        return cats, overall, thin, len(eligible)
+
+    window_end = as_of
+    window_start = window_end - timedelta(days=RATING_WINDOW_DAYS)
+    prev_end = window_start
+    prev_start = prev_end - timedelta(days=RATING_WINDOW_DAYS)
+
+    categories, overall, thin, shifts_in_window = score_window(window_start, window_end)
+    _, prev_overall, _, _ = score_window(prev_start, prev_end)
+
+    trend = 'flat'; trend_delta = 0
+    if overall is not None and prev_overall is not None:
+        trend_delta = overall - prev_overall
+        trend = 'up' if trend_delta > 0 else ('down' if trend_delta < 0 else 'flat')
+
+    blocking = bool(categories.get('compliance') and categories['compliance'].get('blocking'))
+    # "Critical" = a genuinely serious category (★☆☆☆☆ or below) other than an
+    # already-blocking compliance issue, which gets its own dedicated line.
+    critical = [k for k, c in categories.items() if c and c['stars'] <= 2 and not c.get('blocking')]
+
+    strengths = [f"{RATING_CATEGORY_LABELS[k]}: {c['detail']}" for k, c in categories.items() if c and c['stars'] >= 9]
+    watch = []; seen_flags = set()
+    for k, c in categories.items():
+        if not c: continue
+        if c.get('blocking'):
+            watch.append(f"{RATING_CATEGORY_LABELS[k]}: {c['detail']} — {c['flag']}")
+            seen_flags.add(c['flag'])
+        elif c['stars'] <= 2:
+            watch.append(f"{RATING_CATEGORY_LABELS[k]}: {c['detail']}")
+        if c.get('flag') and c['flag'] not in seen_flags:
+            watch.append(c['flag']); seen_flags.add(c['flag'])
+    if thin: watch.append('Thin data — no documented observation this window for: ' + ', '.join(thin))
+
+    suggested_actions = []
+    if blocking: suggested_actions.append(f"Chase renewal: {categories['compliance']['detail']}")
+    if thin: suggested_actions.append(f"Log a dated, sourced observation next time something happens for: {', '.join(thin)}")
+    if critical: suggested_actions.append('Discuss with the guard — see Watch above: ' +
+                                           ', '.join(RATING_CATEGORY_LABELS[k] for k in critical))
+    if not suggested_actions: suggested_actions.append('No action needed — keep at current allocation level.')
+
+    tier = rating_tier(overall)
+    tier5_plan = RATING_TIER5_QUESTIONS if tier == 'Tier 5 — Review' else None
+
+    return {
+        'guard_id': guard_id, 'name': guard['name'], 'unrated': False,
+        'overall': overall, 'overall_label': stars_label(overall), 'overall_decimal': round(overall/2, 1) if overall is not None else None,
+        'tier': tier, 'trend': trend, 'trend_delta': trend_delta, 'prev_overall': prev_overall,
+        'window_days': RATING_WINDOW_DAYS,
+        'shifts_in_window': shifts_in_window,
+        'categories': [
+            {'key': k, 'label': lbl, 'weight': weight,
+             'stars': (categories.get(k) or {}).get('stars'),
+             'stars_label': stars_label((categories.get(k) or {}).get('stars')),
+             'detail': (categories.get(k) or {}).get('detail'),
+             'confidence': (categories.get(k) or {}).get('confidence'),
+             'flag': (categories.get(k) or {}).get('flag'),
+             'source': (categories.get(k) or {}).get('source'),
+             'entry_date': (categories.get(k) or {}).get('entry_date'),
+             'assessable': categories.get(k) is not None}
+            for k, lbl, weight, kind in RATING_CATEGORIES
+        ],
+        'blocking': bool(blocking),
+        'strengths': strengths,
+        'watch': watch,
+        'suggested_actions': suggested_actions,
+        'thin_data': thin,
+        'tier5_plan': tier5_plan,
+        'all_time_completed': all_time_completed,
+    }
+
 # ─── Database ─────────────────────────────────────────────────────────────────
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -556,6 +850,24 @@ def init_db():
             start_date TEXT NOT NULL,
             end_date   TEXT NOT NULL,
             notes      TEXT DEFAULT '',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- One dated, sourced observation per row for a star-rating category
+        -- with no data source elsewhere in this app (uniform, service,
+        -- paperwork, conduct, versatility). Append-only history: the most
+        -- recent row inside a rating window is that category's current
+        -- score, older rows stay for trend/audit. 'note' is required — the
+        -- rating system never scores anything without a documented reason.
+        CREATE TABLE IF NOT EXISTS guard_rating_notes (
+            id         TEXT PRIMARY KEY,
+            guard_id   TEXT NOT NULL,
+            category   TEXT NOT NULL,
+            stars      INTEGER NOT NULL,   -- half-star steps, 0-10
+            note       TEXT NOT NULL,
+            source     TEXT DEFAULT '',
+            entry_date TEXT NOT NULL,
+            created_by TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -2395,6 +2707,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'fields': [{'section':sec,'key':k,'label':lbl,'value':rows.get(k,'')}
                                         for sec,k,lbl in BOT_KB_FIELDS]}); return
 
+        # ── Guard Star Ratings (admin-only; guards never see these) ──────────
+        if path == '/api/ratings/guards':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            guard_ids = [r['id'] for r in db.execute('SELECT id FROM guards WHERE active=1 ORDER BY name').fetchall()]
+            out = [compute_guard_rating(db, gid) for gid in guard_ids]
+            db.close()
+            self.send_json([r for r in out if r]); return
+
+        m = re.match(r'^/api/ratings/guards/([^/]+)/notes$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            rows = RL(db.execute(
+                'SELECT * FROM guard_rating_notes WHERE guard_id=? ORDER BY entry_date DESC, created_at DESC',
+                (m.group(1),)).fetchall())
+            db.close(); self.send_json(rows); return
+
+        m = re.match(r'^/api/ratings/guards/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            rating = compute_guard_rating(db, m.group(1))
+            db.close()
+            if not rating: self.err('Guard not found', 404); return
+            self.send_json(rating); return
+
         if path == '/api/admins':
             s2 = self.require_admin('administrator')
             if not s2: return
@@ -3442,6 +3784,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s2, 'BOT_KB_UPDATE', f"{len(fields)} field(s)"); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        m = re.match(r'^/api/ratings/guards/([^/]+)/notes$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            guard_id = m.group(1)
+            category = data.get('category')
+            note = (data.get('note') or '').strip()
+            stars = data.get('stars')
+            if category not in RATING_MANUAL_CATEGORIES:
+                self.err(f"category must be one of: {', '.join(RATING_MANUAL_CATEGORIES)}"); return
+            if not note:
+                self.err('note required — the rating system never scores anything without a documented reason'); return
+            if not isinstance(stars, int) or stars < 0 or stars > 10:
+                self.err('stars required (0-10 half-star steps)'); return
+            db = get_db()
+            if not R(db.execute('SELECT id FROM guards WHERE id=?', (guard_id,)).fetchone()):
+                db.close(); self.err('Guard not found', 404); return
+            entry_date = data.get('entry_date') or datetime.now().strftime('%Y-%m-%d')
+            nid = str(uuid.uuid4())
+            db.execute('''INSERT INTO guard_rating_notes (id,guard_id,category,stars,note,source,entry_date,created_by)
+                          VALUES (?,?,?,?,?,?,?,?)''',
+                       (nid, guard_id, category, stars, note, (data.get('source') or '').strip(), entry_date, s2['name']))
+            audit(db, s2, 'RATING_NOTE_ADD', f"{RATING_CATEGORY_LABELS[category]} for guard {guard_id}: {note[:80]}")
+            db.commit(); db.close()
+            self.send_json({'id': nid, 'ok': True}, 201); return
+
         if path == '/api/submissions/bulk':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -3802,6 +4170,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('DELETE FROM checkpoints WHERE id=?', (m.group(1),))
             audit(db, s, 'CHECKPOINT_DELETE', m.group(1)); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        m = re.match(r'^/api/ratings/notes/([^/]+)$', path)
+        if m:
+            db = get_db()
+            row = R(db.execute('SELECT guard_id,category,note FROM guard_rating_notes WHERE id=?', (m.group(1),)).fetchone())
+            if not row: db.close(); self.err('Note not found', 404); return
+            db.execute('DELETE FROM guard_rating_notes WHERE id=?', (m.group(1),))
+            audit(db, s, 'RATING_NOTE_DELETE', f"{RATING_CATEGORY_LABELS.get(row['category'],row['category'])}: {row['note'][:80]}")
+            db.commit(); db.close()
             self.send_json({'ok':True}); return
         m = re.match(r'^/api/leave/([^/]+)$', path)
         if m:

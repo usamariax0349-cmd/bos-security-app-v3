@@ -933,6 +933,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="tab-dropdown-item" data-tab="guards" onclick="selectOrgTab('guards')">👮 Guards</button>
         <button class="tab-dropdown-item" data-tab="sites" onclick="selectOrgTab('sites')">📍 Sites</button>
         <button class="tab-dropdown-item" data-tab="botkb" onclick="selectOrgTab('botkb')">🤖 Bot Knowledge Base</button>
+        <button class="tab-dropdown-item" data-tab="ratings" onclick="selectOrgTab('ratings')">⭐ Guard Star Ratings</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1148,6 +1149,33 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <a href="#" onclick="selectOrgTab('sites');return false">Sites</a>.
         </p>
         <div id="botkb-form" style="padding:0 20px 20px"></div>
+      </div>
+    </div>
+
+    <!-- GUARD STAR RATINGS -->
+    <div id="tab-ratings" class="tab-content">
+      <div class="section" id="ratings-list-section">
+        <div class="section-head">
+          <span class="section-title">⭐ Guard Star Ratings</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);font-weight:400;cursor:pointer">
+            <input type="checkbox" id="ratings-rank-toggle" onchange="renderRatingsList()"> Show ranked list
+          </label>
+        </div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          Admin-only — guards never see their rating or tier. Punctuality, attendance, availability and compliance
+          are computed live from real shift and licence data over the last 90 days. Uniform, service, paperwork,
+          conduct and versatility have no data source in this app — open a guard's card and log a dated, sourced
+          observation; it becomes that category's score until it ages out of the window. This is an input to a
+          human decision, never the decision itself — nothing here changes a guard's hours or roster on its own.
+        </p>
+        <div id="ratings-list" style="padding:0 20px 20px"></div>
+      </div>
+
+      <div class="section hidden" id="ratings-detail-section">
+        <div style="padding:16px 20px 0">
+          <button class="btn btn-ghost btn-sm" onclick="closeRatingDetail()">← All guards</button>
+        </div>
+        <div id="ratings-detail" style="padding:12px 20px 20px"></div>
       </div>
     </div>
 
@@ -2791,10 +2819,11 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='botkb')  loadBotKb();
+  else if(name==='ratings') loadRatingsTab();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -5046,6 +5075,214 @@ async function saveBotKb(){
   try{
     await apiFetch('/api/bot/knowledge-base', {method:'POST', body: JSON.stringify({fields: values})});
     toast('Knowledge base saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Guard Star Ratings (admin-only) ─────────────────────────────────────────
+const RATING_MANUAL_KEYS = ['uniform','service','paperwork','conduct','versatility'];
+const RATING_TIER_STYLE = {
+  'Tier 1 — Lead':        {bg:'#065f46', fg:'#fff'},
+  'Tier 2 — Established': {bg:'#1e40af', fg:'#fff'},
+  'Tier 3 — Solid':       {bg:'#374151', fg:'#fff'},
+  'Tier 4 — Developing':  {bg:'#b45309', fg:'#fff'},
+  'Tier 5 — Review':      {bg:'#991b1b', fg:'#fff'},
+  'Unrated':              {bg:'#6b7280', fg:'#fff'},
+};
+let ratingsData = [];
+let currentRatingGuardId = null;
+
+function starGlyphs(h){
+  if(h==null) return '—';
+  h = Math.max(0, Math.min(10, h));
+  const full = Math.floor(h/2), half = h%2;
+  return '★'.repeat(full) + (half?'½':'') + '☆'.repeat(5-full-(half?1:0));
+}
+function starSelectOptions(selected){
+  const opts=[];
+  for(let h=0; h<=10; h++) opts.push(`<option value="${h}" ${h===selected?'selected':''}>${starGlyphs(h)} (${(h/2).toFixed(1)})</option>`);
+  return opts.join('');
+}
+
+async function loadRatingsTab(){
+  document.getElementById('ratings-detail-section').classList.add('hidden');
+  document.getElementById('ratings-list-section').classList.remove('hidden');
+  try{
+    ratingsData = await apiFetch('/api/ratings/guards');
+    renderRatingsList();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+function ratingCardHtml(r, rankNum){
+  if(r.unrated){
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;opacity:.7">
+      <div><strong>${escapeHtml(r.name)}</strong><div style="font-size:12px;color:var(--muted)">Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked</div></div>
+    </div>`;
+  }
+  const tierStyle = RATING_TIER_STYLE[r.tier] || RATING_TIER_STYLE['Unrated'];
+  const trendIcon = r.trend==='up' ? '▲' : (r.trend==='down' ? '▼' : '–');
+  const trendColor = r.trend==='up' ? 'var(--green)' : (r.trend==='down' ? 'var(--red)' : 'var(--muted)');
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer" onclick="openRatingDetail('${r.guard_id}')">
+    <div style="display:flex;align-items:center;gap:12px">
+      ${rankNum?`<span style="color:var(--muted);font-size:13px;width:22px">#${rankNum}</span>`:''}
+      <div>
+        <strong>${escapeHtml(r.name)}</strong> ${r.blocking?'<span title="Compliance blocking" style="color:var(--red)">⚠</span>':''}
+        <div style="font-size:12px;color:var(--muted)">${r.overall_label} (${r.overall_decimal}) · ${r.shifts_in_window} shifts in window</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="color:${trendColor};font-size:14px">${trendIcon}</span>
+      <span style="background:${tierStyle.bg};color:${tierStyle.fg};font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;white-space:nowrap">${escapeHtml(r.tier)}</span>
+    </div>
+  </div>`;
+}
+
+// Default view groups by tier (never a leaderboard) — a ranked list is only
+// ever shown when the admin explicitly asks for one via the toggle, per the
+// "never rank guards against each other by default" rule.
+function renderRatingsList(){
+  const box = document.getElementById('ratings-list');
+  if(!ratingsData.length){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">No guards yet.</p>'; return; }
+  const ranked = document.getElementById('ratings-rank-toggle').checked;
+  if(ranked){
+    const rated = ratingsData.filter(r=>!r.unrated).sort((a,b)=>b.overall-a.overall);
+    const unrated = ratingsData.filter(r=>r.unrated).sort((a,b)=>a.name.localeCompare(b.name));
+    box.innerHTML = rated.map((r,i)=>ratingCardHtml(r,i+1)).join('') + unrated.map(r=>ratingCardHtml(r,null)).join('');
+    return;
+  }
+  const TIER_ORDER = ['Tier 1 — Lead','Tier 2 — Established','Tier 3 — Solid','Tier 4 — Developing','Tier 5 — Review','Unrated'];
+  let html = '';
+  TIER_ORDER.forEach(tier=>{
+    const group = ratingsData.filter(r => (r.unrated ? 'Unrated' : r.tier) === tier).sort((a,b)=>a.name.localeCompare(b.name));
+    if(!group.length) return;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px">${escapeHtml(tier)} (${group.length})</div>`;
+    html += group.map(r=>ratingCardHtml(r,null)).join('');
+  });
+  box.innerHTML = html;
+}
+
+async function openRatingDetail(guardId){
+  currentRatingGuardId = guardId;
+  document.getElementById('ratings-list-section').classList.add('hidden');
+  document.getElementById('ratings-detail-section').classList.remove('hidden');
+  const box = document.getElementById('ratings-detail');
+  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  try{
+    const [rating, notes] = await Promise.all([
+      apiFetch(`/api/ratings/guards/${guardId}`),
+      apiFetch(`/api/ratings/guards/${guardId}/notes`)
+    ]);
+    renderRatingDetail(rating, notes);
+  }catch(e){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">Could not load rating.</p>'; toast(e.message,'error'); }
+}
+function closeRatingDetail(){
+  document.getElementById('ratings-detail-section').classList.add('hidden');
+  document.getElementById('ratings-list-section').classList.remove('hidden');
+  loadRatingsTab();
+}
+function ratingSectionBlock(title, items, color){
+  if(!items.length) return '';
+  return `<div style="margin-bottom:14px">
+    <div style="font-weight:700;color:${color};font-size:13px;margin-bottom:6px">${escapeHtml(title)}</div>
+    <ul style="margin:0;padding-left:18px;font-size:13px">${items.map(i=>`<li>${escapeHtml(i)}</li>`).join('')}</ul>
+  </div>`;
+}
+function renderRatingNoteHistory(entries){
+  if(!entries.length) return '';
+  return `<div style="margin-top:8px;font-size:11px;color:var(--muted)">
+    ${entries.slice(0,5).map(n=>`<div style="margin-top:4px;display:flex;justify-content:space-between;gap:8px">
+      <span>${starGlyphs(n.stars)} ${escapeHtml(n.entry_date)} — ${escapeHtml(n.note)}${n.source?' ('+escapeHtml(n.source)+')':''}</span>
+      <a href="#" onclick="deleteRatingNote('${n.id}');return false" style="color:var(--red);flex-shrink:0">✕</a>
+    </div>`).join('')}
+  </div>`;
+}
+function renderRatingDetail(r, notes){
+  const box = document.getElementById('ratings-detail');
+  if(r.unrated){
+    box.innerHTML = `<h3 style="margin:0 0 8px">${escapeHtml(r.name)}</h3>
+      <p style="color:var(--muted);font-size:14px">Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked. Allocate on licence, tickets and availability only until enough shifts have been logged.</p>`;
+    return;
+  }
+  const tierStyle = RATING_TIER_STYLE[r.tier] || RATING_TIER_STYLE['Unrated'];
+  const trendText = r.trend==='up' ? `▲ up from ${starGlyphs(r.prev_overall)}` :
+                     (r.trend==='down' ? `▼ down from ${starGlyphs(r.prev_overall)}` : '– flat vs previous window');
+
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+      <h3 style="margin:0">${escapeHtml(r.name)} — ${r.overall_label} <span style="color:var(--muted);font-weight:400">(${r.overall_decimal})</span></h3>
+      <span style="background:${tierStyle.bg};color:${tierStyle.fg};font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px">${escapeHtml(r.tier)}</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Window: last ${r.window_days} days · ${r.shifts_in_window} shifts · ${trendText}</div>
+  `;
+
+  html += `<div class="tbl-wrap" style="margin-bottom:16px"><table><tbody>`;
+  r.categories.forEach(c=>{
+    const isManual = RATING_MANUAL_KEYS.includes(c.key);
+    html += `<tr>
+      <td style="width:200px;vertical-align:top"><strong>${escapeHtml(c.label)}</strong><div style="font-size:11px;color:var(--muted)">${Math.round(c.weight*100)}%</div></td>
+      <td style="width:100px;color:var(--gold);font-size:15px;vertical-align:top">${c.assessable?c.stars_label:'—'}</td>
+      <td style="vertical-align:top">
+        <div style="font-size:13px">${c.assessable?escapeHtml(c.detail):'<span style="color:var(--muted)">No documented observation in this window</span>'}</div>
+        ${c.flag?`<div style="font-size:12px;color:#b45309;margin-top:2px">⚠ ${escapeHtml(c.flag)}</div>`:''}
+        ${c.assessable && c.source ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Source: ${escapeHtml(c.source)} · ${escapeHtml(c.entry_date||'')}</div>`:''}
+        ${isManual?`<button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:11px" onclick="toggleRatingNoteForm('${c.key}')">+ Add observation</button>
+        <div id="rn-form-${c.key}" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;max-width:340px">
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label" style="font-size:11px">Rating</label>
+            <select id="rn-stars-${c.key}" class="form-control">${starSelectOptions(6)}</select>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label" style="font-size:11px">Date</label>
+            <input type="date" id="rn-date-${c.key}" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label" style="font-size:11px">Source (who / where)</label>
+            <input type="text" id="rn-source-${c.key}" class="form-control" placeholder="e.g. Site manager at Skinny Dog Hotel">
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label" style="font-size:11px">Note (required)</label>
+            <textarea id="rn-note-${c.key}" class="form-control" rows="2" placeholder="What happened — dated and sourced"></textarea>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitRatingNote('${c.key}')">Save observation</button>
+        </div>
+        ${renderRatingNoteHistory(notes.filter(n=>n.category===c.key))}`:''}
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  html += ratingSectionBlock('Strengths', r.strengths, 'var(--green)');
+  html += ratingSectionBlock('Watch', r.watch, '#b45309');
+  html += ratingSectionBlock('Suggested Action', r.suggested_actions, 'var(--gold)');
+  if(r.tier5_plan){
+    html += `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:14px;margin-top:4px">
+      <div style="font-weight:700;color:var(--red);margin-bottom:8px">Tier 5 is a conversation, not a verdict</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">This guard was likely fine six months ago. Something has changed around them — find out what:</div>
+      <ul style="margin:0;padding-left:18px;font-size:13px">${r.tier5_plan.map(q=>`<li>${escapeHtml(q)}</li>`).join('')}</ul>
+    </div>`;
+  }
+  box.innerHTML = html;
+}
+function toggleRatingNoteForm(key){
+  document.getElementById(`rn-form-${key}`).classList.toggle('hidden');
+}
+async function submitRatingNote(key){
+  const stars = parseInt(document.getElementById(`rn-stars-${key}`).value, 10);
+  const entry_date = document.getElementById(`rn-date-${key}`).value;
+  const source = document.getElementById(`rn-source-${key}`).value.trim();
+  const note = document.getElementById(`rn-note-${key}`).value.trim();
+  if(!note){ toast('A note is required — the rating never scores anything without a documented reason','error'); return; }
+  try{
+    await apiFetch(`/api/ratings/guards/${currentRatingGuardId}/notes`,
+      {method:'POST', body: JSON.stringify({category:key, stars, note, source, entry_date})});
+    toast('Observation logged','success');
+    openRatingDetail(currentRatingGuardId);
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteRatingNote(id){
+  if(!confirm('Delete this observation?')) return;
+  try{
+    await apiFetch(`/api/ratings/notes/${id}`, {method:'DELETE'});
+    openRatingDetail(currentRatingGuardId);
   }catch(e){ toast(e.message,'error'); }
 }
 function renderSitesTable(){
