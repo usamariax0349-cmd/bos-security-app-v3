@@ -1527,6 +1527,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <button class="tab-btn" onclick="showClientTab('patrol')" data-ctab="patrol">🚶 Patrol Log</button>
     <button class="tab-btn" onclick="showClientTab('cincidents')" data-ctab="cincidents">🚨 Incidents</button>
     <button class="tab-btn" onclick="showClientTab('coverage')" data-ctab="coverage">🗓️ Shift Coverage</button>
+    <button class="tab-btn" onclick="showClientTab('manage')" data-ctab="manage">🏢 Manage Sites</button>
   </div>
   <div class="admin-content" style="padding:0 20px">
     <div id="ctab-overview" class="tab-content active">
@@ -1585,8 +1586,65 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         </div>
       </div>
     </div>
+    <div id="ctab-manage" class="tab-content">
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head"><span class="section-title">🏢 Your Sites</span></div>
+        <div id="client-manage-site-picker" style="padding:16px 20px;display:flex;gap:10px;flex-wrap:wrap"></div>
+      </div>
+      <div id="client-manage-site-detail" class="hidden">
+        <div class="section" style="margin-bottom:20px">
+          <div class="section-head"><span class="section-title" id="cms-site-title">Site Details</span>
+            <button class="btn btn-primary btn-sm" onclick="saveClientSiteDetails()">Save Changes</button>
+          </div>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:12px;max-width:520px">
+            <div class="form-group"><label class="form-label">Address</label><input id="cms-address" class="form-control" placeholder="Site address"></div>
+            <div class="form-group"><label class="form-label">Contact Name</label><input id="cms-cname" class="form-control" placeholder="Who to contact at this site"></div>
+            <div class="form-group"><label class="form-label">Contact Phone</label><input id="cms-cphone" class="form-control" placeholder="Contact number"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-head"><span class="section-title">Guards &amp; Shifts at This Site</span>
+            <button class="btn btn-primary btn-sm" onclick="openClientShiftModal()">+ Add Shift</button>
+          </div>
+          <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+            You can only book guards who've already worked this site or been approved for it by the office.
+            A new or changed shift joins your team's roster the same way theirs does — the guard is notified once
+            your Brown Owl contact publishes it, the same step used for every shift.
+          </p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>Guard</th><th>Start</th><th>End</th><th>Position</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="client-manage-shifts-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div><!-- /client-page -->
+
+<!-- Client Portal: add/edit shift -->
+<div id="client-shift-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><span class="modal-title" id="csm-title">Add Shift</span><button class="modal-close" onclick="closeModal('client-shift-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="csm-id">
+      <div class="form-group"><label class="form-label">Date *</label><input type="date" id="csm-date" class="form-control"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Start Time *</label><input type="time" id="csm-start" class="form-control"></div>
+        <div class="form-group"><label class="form-label">End Time</label><input type="time" id="csm-end" class="form-control"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Guard *</label><select id="csm-guard" class="form-control"></select></div>
+      <div class="form-group"><label class="form-label">Position (optional)</label><input id="csm-position" class="form-control" placeholder="e.g. Front desk, Patrol"></div>
+      <div class="form-group"><label class="form-label">Notes (optional)</label><textarea id="csm-notes" class="form-control" rows="2"></textarea></div>
+      <div id="csm-err" style="color:var(--red);font-size:13px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('client-shift-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveClientShift()">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════ MODALS ══════ -->
 <!-- Review submission -->
@@ -2738,6 +2796,7 @@ function showClientTab(name){
   else if(name==='patrol') loadClientActivity();
   else if(name==='cincidents') loadClientIncidents();
   else if(name==='coverage') loadClientCoverage();
+  else if(name==='manage') loadClientManage();
 }
 let clientData = null;
 async function loadClientPortal(){
@@ -2836,6 +2895,121 @@ async function loadClientCoverage(){
       </tr>`).join('');
   }catch(e){ toast(e.message,'error'); }
 }
+// ── Client Portal: self-service site & shift management ────────────────────
+let clientManageSiteId = null;
+function loadClientManage(){
+  if(!clientData || !clientData.sites.length){
+    document.getElementById('client-manage-site-picker').innerHTML = `<p style="color:var(--muted);font-size:13px">No sites on file — contact the office.</p>`;
+    return;
+  }
+  if(!clientManageSiteId || !clientData.sites.some(s=>s.id===clientManageSiteId)) clientManageSiteId = clientData.sites[0].id;
+  renderClientSitePicker();
+  selectClientManageSite(clientManageSiteId);
+}
+function renderClientSitePicker(){
+  document.getElementById('client-manage-site-picker').innerHTML = clientData.sites.map(s=>
+    `<button class="btn ${s.id===clientManageSiteId?'btn-primary':'btn-ghost'} btn-sm" onclick="selectClientManageSite('${s.id}')">${s.name}</button>`
+  ).join('');
+}
+function selectClientManageSite(siteId){
+  clientManageSiteId = siteId;
+  renderClientSitePicker();
+  const site = clientData.sites.find(s=>s.id===siteId);
+  if(!site) return;
+  document.getElementById('client-manage-site-detail').classList.remove('hidden');
+  document.getElementById('cms-site-title').textContent = site.name;
+  document.getElementById('cms-address').value = site.address||'';
+  document.getElementById('cms-cname').value = site.contact_name||'';
+  document.getElementById('cms-cphone').value = site.contact_phone||'';
+  loadClientManageShifts();
+}
+async function saveClientSiteDetails(){
+  try{
+    const site = await apiFetch(`/api/client/sites/${clientManageSiteId}`, {method:'PUT', body: JSON.stringify({
+      address: document.getElementById('cms-address').value.trim(),
+      contact_name: document.getElementById('cms-cname').value.trim(),
+      contact_phone: document.getElementById('cms-cphone').value.trim(),
+    })});
+    const idx = clientData.sites.findIndex(s=>s.id===clientManageSiteId);
+    if(idx>=0) clientData.sites[idx] = {...clientData.sites[idx], ...site};
+    toast('Site details saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+const CLIENT_SHIFT_BADGE = {scheduled:'pending', missed:'rejected', in_progress:'approved', completed:'approved'};
+async function loadClientManageShifts(){
+  const tbody = document.getElementById('client-manage-shifts-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><p>Loading…</p></td></tr>`;
+  try{
+    const rows = await apiFetch(`/api/client/site-shifts?site_id=${clientManageSiteId}`);
+    tbody.innerHTML = rows.length===0
+      ? `<tr><td colspan="7" class="empty-state"><div class="ei">🗓️</div><p>No shifts scheduled at this site yet</p></td></tr>`
+      : rows.map(r=>{
+          const canEdit = !r.clock_in_at;
+          return `<tr>
+            <td>${r.shift_date}</td><td>${r.guard_name}</td><td>${r.start_time}</td><td>${r.end_time||'Open-ended'}</td>
+            <td>${r.position||'—'}</td>
+            <td><span class="badge badge-${CLIENT_SHIFT_BADGE[r.status]||'pending'}">${r.status.replace('_',' ')}</span>${!r.published?' <span title="Not yet published to the guard" style="font-size:11px;color:var(--muted)">(draft)</span>':''}</td>
+            <td>${canEdit ? `
+              <button class="btn btn-ghost btn-sm" onclick='openClientShiftModal(${JSON.stringify(r)})'>Edit</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="cancelClientShift('${r.id}')">Cancel</button>
+            ` : '<span style="color:var(--muted);font-size:12px">—</span>'}</td>
+          </tr>`;
+        }).join('');
+  }catch(e){ tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><p>Could not load shifts</p></td></tr>`; toast(e.message,'error'); }
+}
+async function openClientShiftModal(shift){
+  document.getElementById('csm-err').style.display='none';
+  document.getElementById('csm-id').value = shift ? shift.id : '';
+  document.getElementById('csm-title').textContent = shift ? 'Edit Shift' : 'Add Shift';
+  document.getElementById('csm-date').value = shift ? shift.shift_date : '';
+  document.getElementById('csm-start').value = shift ? shift.start_time : '';
+  document.getElementById('csm-end').value = shift ? (shift.end_time||'') : '';
+  document.getElementById('csm-position').value = shift ? (shift.position||'') : '';
+  document.getElementById('csm-notes').value = shift ? (shift.notes||'') : '';
+  const guardSel = document.getElementById('csm-guard');
+  guardSel.innerHTML = `<option value="">Loading guards…</option>`;
+  openModal('client-shift-modal');
+  try{
+    const guards = await apiFetch(`/api/client/site-guards?site_id=${clientManageSiteId}`);
+    guardSel.innerHTML = guards.length
+      ? guards.map(g=>`<option value="${g.id}">${g.name}${g.license_number?' · Lic. '+g.license_number:''}</option>`).join('')
+      : `<option value="">No eligible guards — contact the office</option>`;
+    if(shift) guardSel.value = shift.guard_id;
+  }catch(e){ guardSel.innerHTML = `<option value="">Could not load guards</option>`; }
+}
+async function saveClientShift(){
+  const errEl = document.getElementById('csm-err');
+  errEl.style.display='none';
+  const id = document.getElementById('csm-id').value;
+  const body = {
+    site_id: clientManageSiteId,
+    guard_id: document.getElementById('csm-guard').value,
+    shift_date: document.getElementById('csm-date').value,
+    start_time: document.getElementById('csm-start').value,
+    end_time: document.getElementById('csm-end').value,
+    position: document.getElementById('csm-position').value.trim(),
+    notes: document.getElementById('csm-notes').value.trim(),
+  };
+  if(!body.guard_id || !body.shift_date || !body.start_time){
+    errEl.textContent = 'Date, start time and guard are required.'; errEl.style.display='block'; return;
+  }
+  try{
+    if(id) await apiFetch(`/api/client/shifts/${id}`, {method:'PUT', body: JSON.stringify(body)});
+    else await apiFetch('/api/client/shifts', {method:'POST', body: JSON.stringify(body)});
+    closeModal('client-shift-modal');
+    toast(id ? 'Shift updated' : 'Shift added','success');
+    loadClientManageShifts();
+  }catch(e){ errEl.textContent = e.message; errEl.style.display='block'; }
+}
+async function cancelClientShift(id){
+  if(!confirm('Cancel this shift?')) return;
+  try{
+    await apiFetch(`/api/client/shifts/${id}`, {method:'DELETE'});
+    toast('Shift cancelled','success');
+    loadClientManageShifts();
+  }catch(e){ toast(e.message,'error'); }
+}
+
 function toggleOrgDropdown(e){
   e.stopPropagation();
   const menu = document.getElementById('org-menu');
