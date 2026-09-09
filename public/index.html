@@ -11,29 +11,36 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BOS">
 <link rel="apple-touch-icon" href="/icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --navy:#1a2744;--navy-l:#243459;--navy-d:#0f172a;
-  --gold:#c9a84c;--gold-l:#e8c76a;
+  --gold:#c9a84c;--gold-l:#e8c76a;--gold-d:#a8863a;
   --green:#22c55e;--green-bg:#dcfce7;
   --red:#ef4444;--red-bg:#fee2e2;
   --amber:#f59e0b;--amber-bg:#fef3c7;
   --blue:#3b82f6;--blue-bg:#dbeafe;
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;
-  --text:#1e293b;--muted:#64748b;
-  --sh:0 1px 3px rgba(0,0,0,.1);
-  --sh-md:0 4px 6px -1px rgba(0,0,0,.1);
-  --sh-lg:0 10px 40px rgba(0,0,0,.15);
+  --bg:#f4f6fa;--card:#fff;--border:#e3e8ef;
+  --text:#1c2333;--muted:#66708a;
+  --font-display:'Fraunces','Iowan Old Style',Georgia,serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --sh:0 1px 2px rgba(15,23,42,.06),0 1px 1px rgba(15,23,42,.04);
+  --sh-md:0 6px 16px -4px rgba(15,23,42,.1),0 2px 6px -2px rgba(15,23,42,.06);
+  --sh-lg:0 24px 60px -12px rgba(10,15,30,.35),0 8px 24px -8px rgba(10,15,30,.18);
+  --sh-gold:0 8px 20px -6px rgba(201,168,76,.45);
   --r:12px;
   --ease-spring:cubic-bezier(.34,1.56,.64,1);
   --ease-out:cubic-bezier(.16,1,.3,1);
   --ease-in-out:cubic-bezier(.65,0,.35,1);
   --dur-fast:.15s;--dur-base:.22s;--dur-slow:.36s
 }
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:15px}
+html,body{height:100%;font-family:var(--font-body);background:var(--bg);color:var(--text);font-size:15px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,.font-display{font-family:var(--font-display)}
 button{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-weight:600}
 input,select,textarea{font-family:inherit;font-size:14px;width:100%}
 input[type=checkbox],input[type=radio]{width:auto;flex-shrink:0}
@@ -92,8 +99,8 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-spring),box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-fast);white-space:nowrap;font-weight:600}
-.btn-primary{background:var(--navy);color:#fff}.btn-primary:hover{background:var(--navy-l);transform:translateY(-1px)}
-.btn-gold{background:var(--gold);color:#fff}.btn-gold:hover{background:var(--gold-l);color:var(--navy)}
+.btn-primary{background:linear-gradient(135deg,var(--navy-l),var(--navy));color:#fff;box-shadow:0 2px 6px rgba(26,39,68,.25)}.btn-primary:hover{background:linear-gradient(135deg,#2d4266,var(--navy-l));transform:translateY(-1px);box-shadow:0 6px 16px rgba(26,39,68,.3)}
+.btn-gold{background:linear-gradient(135deg,var(--gold-l),var(--gold));color:var(--navy-d);box-shadow:var(--sh-gold)}.btn-gold:hover{filter:brightness(1.06);transform:translateY(-1px)}
 .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg)}
 .btn-green{background:var(--green);color:#fff}.btn-red{background:var(--red);color:#fff}
 .btn-amber{background:var(--amber);color:#fff}
@@ -139,7 +146,7 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 .modal-header{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:center}
 .modal-body{padding:20px}
 .modal-footer{padding:0 20px 20px;display:flex;gap:10px;justify-content:flex-end}
-.modal-title{font-size:18px;font-weight:700;color:var(--navy)}
+.modal-title{font-family:var(--font-display);font-size:19px;font-weight:600;color:var(--navy)}
 .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1}
 
 /* Lightbox */
@@ -174,18 +181,20 @@ tr:hover td{background:#f8fafc}
 .step-dot.done{background:var(--gold)}
 
 /* Cards */
-.stat-card{background:#fff;border-radius:var(--r);padding:20px;box-shadow:var(--sh);display:flex;align-items:center;gap:16px;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);width:100%;text-align:left;border:none;font:inherit}
-.stat-card:hover{transform:translateY(-2px);box-shadow:var(--sh-md)}
+.stat-card{background:#fff;border-radius:var(--r);padding:20px;box-shadow:var(--sh);display:flex;align-items:center;gap:16px;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);width:100%;text-align:left;border:1px solid rgba(15,23,42,.04);font:inherit;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold-l),var(--gold));opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+.stat-card:hover{transform:translateY(-3px);box-shadow:var(--sh-md)}
+.stat-card:hover::before{opacity:1}
 button.stat-card{cursor:pointer}
 button.stat-card:hover .stat-lbl{color:var(--navy)}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-.stat-val{font-size:28px;font-weight:800;color:var(--navy);line-height:1}
-.stat-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+.stat-val{font-family:var(--font-display);font-size:29px;font-weight:600;color:var(--navy);line-height:1}
+.stat-lbl{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 
 /* Section */
-.section{background:#fff;border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-bottom:20px}
+.section{background:#fff;border-radius:var(--r);box-shadow:var(--sh);overflow:hidden;margin-bottom:20px;border:1px solid rgba(15,23,42,.04)}
 .section-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
-.section-title{font-size:16px;font-weight:700;color:var(--navy)}
+.section-title{font-family:var(--font-display);font-size:17px;font-weight:600;color:var(--navy);letter-spacing:.1px}
 .section-body{padding:20px}
 
 /* Filter bar */
@@ -193,11 +202,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .filter-bar select,.filter-bar input{background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:auto;min-width:120px}
 
 /* Topbar */
-.topbar{background:var(--navy);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.topbar{background:linear-gradient(180deg,var(--navy-l),var(--navy));padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:62px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.28);border-bottom:1px solid rgba(232,199,106,.22)}
 .topbar-brand{display:flex;align-items:center;gap:12px;color:#fff}
-.topbar-logo{width:36px;height:36px;border-radius:8px;object-fit:cover}
-.brand-name{font-weight:700;font-size:15px}
-.brand-sub{font-size:11px;color:rgba(255,255,255,.5);font-weight:400}
+.topbar-logo{width:36px;height:36px;border-radius:8px;object-fit:cover;box-shadow:0 0 0 1px rgba(232,199,106,.3)}
+.brand-name{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.15px}
+.brand-sub{font-size:10.5px;color:var(--gold-l);font-weight:600;text-transform:uppercase;letter-spacing:.09em}
 .topbar-actions{display:flex;align-items:center;gap:8px}
 .topbar-user{color:rgba(255,255,255,.8);font-size:13px}
 
@@ -280,16 +289,22 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 /* ════════════════════════════════════════
    LOGIN
 ════════════════════════════════════════ */
-#login-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0a0f1e 0%,#1a2744 100%);padding:16px}
-.login-card{background:rgba(255,255,255,.05);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:40px 36px;width:100%;max-width:400px;box-shadow:var(--sh-lg)}
-.login-logo{font-size:52px;text-align:center;margin-bottom:12px}
-.login-title{font-size:22px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px}
-.login-sub{font-size:13px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:28px}
-.login-card .form-label{color:rgba(255,255,255,.6)}
-.login-card .form-control{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff}
-.login-card .form-control::placeholder{color:rgba(255,255,255,.3)}
-.login-card .form-control:focus{background:rgba(255,255,255,.12);border-color:var(--gold)}
-.login-card .btn-primary{background:linear-gradient(135deg,var(--gold),var(--gold-l));color:var(--navy)}
+#login-page{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#080b14 0%,#151f38 55%,#1a2744 100%);padding:16px;overflow:hidden}
+.login-hero{position:absolute;inset:0;background-image:url('/img/login-hero.jpg');background-size:cover;background-position:center;opacity:.55;filter:saturate(1.1) contrast(1.05);animation:heroZoom 26s ease-in-out infinite alternate}
+.login-hero::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 32%,rgba(10,15,30,.15) 0%,rgba(8,11,20,.72) 62%,#080b14 100%)}
+@keyframes heroZoom{from{transform:scale(1)}to{transform:scale(1.06)}}
+@media(prefers-reduced-motion:reduce){.login-hero{animation:none}}
+.login-card{position:relative;z-index:1;background:rgba(20,27,46,.55);backdrop-filter:blur(18px) saturate(140%);border:1px solid rgba(232,199,106,.18);border-radius:20px;padding:44px 38px;width:100%;max-width:400px;box-shadow:var(--sh-lg)}
+.login-card::before{content:'';position:absolute;top:0;left:14%;right:14%;height:1px;background:linear-gradient(90deg,transparent,rgba(232,199,106,.55),transparent)}
+.login-logo{display:flex;align-items:center;justify-content:center;margin-bottom:14px;filter:drop-shadow(0 4px 16px rgba(201,168,76,.25))}
+.login-title{font-size:24px;font-weight:700;color:#fff;text-align:center;margin-bottom:5px;letter-spacing:.2px}
+.login-sub{font-size:12px;color:rgba(232,199,106,.65);text-align:center;margin-bottom:30px;text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+.login-card .form-label{color:rgba(255,255,255,.55)}
+.login-card .form-control{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:#fff}
+.login-card .form-control::placeholder{color:rgba(255,255,255,.28)}
+.login-card .form-control:focus{background:rgba(255,255,255,.1);border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.12)}
+.login-card .btn-primary{background:linear-gradient(135deg,var(--gold-l),var(--gold) 55%,var(--gold-d));color:var(--navy-d);box-shadow:var(--sh-gold);letter-spacing:.2px}
+.login-card .btn-primary:hover{filter:brightness(1.08)}
 
 /* ════════════════════════════════════════
    ADMIN DASHBOARD
@@ -587,7 +602,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="guard-header">
       <div class="guard-logo-wrap">
         <img id="guard-logo" src="/logo" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="display:none">
-        <span id="guard-logo-emoji" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">🦉</span>
+        <span id="guard-logo-emoji" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%">
+          <svg viewBox="0 0 100 100" width="42" height="42" xmlns="http://www.w3.org/2000/svg">
+            <path d="M50 8 L74 8 Q80 8 80 15 L80 46 Q80 68 50 82 Q20 68 20 46 L20 15 Q20 8 26 8 Z" fill="rgba(201,168,76,.14)" stroke="#e8c76a" stroke-width="2.2"/>
+            <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
+          </svg>
+        </span>
       </div>
       <div id="guard-company" class="guard-title">Brown Owl Security</div>
       <div class="guard-subtitle">Guard Portal</div>
@@ -904,9 +924,15 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
 <!-- ══════════════════════════════════════════ ADMIN LOGIN -->
 <div id="login-page" class="hidden">
+  <div class="login-hero" aria-hidden="true"></div>
   <div class="login-card">
-    <div class="login-logo">🦉</div>
-    <div class="login-title">Admin Login</div>
+    <div class="login-logo">
+      <svg viewBox="0 0 100 100" width="56" height="56" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 8 L74 8 Q80 8 80 15 L80 46 Q80 68 50 82 Q20 68 20 46 L20 15 Q20 8 26 8 Z" fill="rgba(201,168,76,.14)" stroke="#e8c76a" stroke-width="2.2"/>
+        <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
+      </svg>
+    </div>
+    <div class="login-title font-display">Admin Login</div>
     <div class="login-sub" id="login-company-name">Brown Owl Security</div>
     <div id="login-err" style="display:none;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
     <div class="form-group">
@@ -929,7 +955,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   <div class="topbar">
     <div class="topbar-brand">
       <img id="admin-logo" class="topbar-logo hidden" src="/logo" alt="" onerror="this.classList.add('hidden')">
-      <span id="admin-logo-emoji" style="font-size:24px">🦉</span>
+      <span id="admin-logo-emoji" style="display:inline-flex">
+        <svg viewBox="0 0 100 100" width="28" height="28" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 8 L74 8 Q80 8 80 15 L80 46 Q80 68 50 82 Q20 68 20 46 L20 15 Q20 8 26 8 Z" fill="rgba(201,168,76,.14)" stroke="#e8c76a" stroke-width="2.2"/>
+          <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
+        </svg>
+      </span>
       <div>
         <div class="brand-name" id="topbar-company">Brown Owl Security</div>
         <div class="brand-sub" id="topbar-user-info">Admin Dashboard</div>
@@ -1513,7 +1544,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   <div class="topbar">
     <div class="topbar-brand">
       <img id="client-logo" class="topbar-logo hidden" src="/logo" alt="" onerror="this.classList.add('hidden')">
-      <span style="font-size:24px">🦉</span>
+      <span id="client-logo-emoji" style="display:inline-flex">
+        <svg viewBox="0 0 100 100" width="28" height="28" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 8 L74 8 Q80 8 80 15 L80 46 Q80 68 50 82 Q20 68 20 46 L20 15 Q20 8 26 8 Z" fill="rgba(201,168,76,.14)" stroke="#e8c76a" stroke-width="2.2"/>
+          <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
+        </svg>
+      </span>
       <div><div class="brand-name" id="client-topbar-company">Brown Owl Security</div><div class="brand-sub">Client Portal</div></div>
     </div>
     <div class="topbar-actions">
@@ -3069,6 +3105,9 @@ async function init(){
   const ai = document.getElementById('admin-logo');
   ai.src = '/logo?' + Date.now();
   ai.onload = ()=>{ ai.classList.remove('hidden'); document.getElementById('admin-logo-emoji').style.display='none'; };
+  const ci = document.getElementById('client-logo');
+  ci.src = '/logo?' + Date.now();
+  ci.onload = ()=>{ ci.classList.remove('hidden'); document.getElementById('client-logo-emoji').style.display='none'; };
   // Auto-login check
   if(authToken){
     try{
@@ -6486,6 +6525,7 @@ async function uploadLogo(input){
       const ts=Date.now();
       document.getElementById('admin-logo').src='/logo?'+ts;
       document.getElementById('guard-logo').src='/logo?'+ts;
+      document.getElementById('client-logo').src='/logo?'+ts;
       toast('Logo updated','success');
     }catch(e){ toast(e.message,'error'); }
   };

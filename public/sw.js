@@ -1,5 +1,5 @@
-const CACHE = 'bos-v44';
-const STATIC = ['/', '/index.html', '/manifest.json', '/icon.svg'];
+const CACHE = 'bos-v45';
+const STATIC = ['/', '/index.html', '/manifest.json', '/icon.svg', '/img/login-hero.jpg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)));
