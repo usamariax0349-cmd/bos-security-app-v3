@@ -2038,6 +2038,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                    (gsx['guard_id'],)).fetchone())
                 db.close(); self.send_json(row or {'status': None}); return
 
+            # Read-only view of the bot knowledge base for the guard-side ticket
+            # wizard's "Quick Info" panel — same table PR #35's admin screen
+            # edits, just flattened to a plain key/value map (the guard side has
+            # no use for the section/label metadata that screen renders with).
+            if path == '/api/guard/bot-kb':
+                db = get_db()
+                rows = {r['key']: r['value'] for r in db.execute('SELECT key,value FROM bot_knowledge_base').fetchall()}
+                db.close(); self.send_json(rows); return
+
             if path == '/api/guard/compliance':
                 db = get_db()
                 rows = RL(db.execute('''
