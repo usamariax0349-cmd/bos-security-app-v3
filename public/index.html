@@ -5115,8 +5115,8 @@ async function loadRatingsTab(){
 
 function ratingCardHtml(r, rankNum){
   if(r.unrated){
-    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;opacity:.7">
-      <div><strong>${escapeHtml(r.name)}</strong><div style="font-size:12px;color:var(--muted)">Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked</div></div>
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer" onclick="openRatingDetail('${r.guard_id}')">
+      <div><strong>${escapeHtml(r.name)}</strong><div style="font-size:12px;color:var(--muted)">Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked · click to log an observation</div></div>
     </div>`;
   }
   const tierStyle = RATING_TIER_STYLE[r.tier] || RATING_TIER_STYLE['Unrated'];
@@ -5198,22 +5198,31 @@ function renderRatingNoteHistory(entries){
 }
 function renderRatingDetail(r, notes){
   const box = document.getElementById('ratings-detail');
-  if(r.unrated){
-    box.innerHTML = `<h3 style="margin:0 0 8px">${escapeHtml(r.name)}</h3>
-      <p style="color:var(--muted);font-size:14px">Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked. Allocate on licence, tickets and availability only until enough shifts have been logged.</p>`;
-    return;
-  }
   const tierStyle = RATING_TIER_STYLE[r.tier] || RATING_TIER_STYLE['Unrated'];
-  const trendText = r.trend==='up' ? `▲ up from ${starGlyphs(r.prev_overall)}` :
-                     (r.trend==='down' ? `▼ down from ${starGlyphs(r.prev_overall)}` : '– flat vs previous window');
-
-  let html = `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
-      <h3 style="margin:0">${escapeHtml(r.name)} — ${r.overall_label} <span style="color:var(--muted);font-weight:400">(${r.overall_decimal})</span></h3>
-      <span style="background:${tierStyle.bg};color:${tierStyle.fg};font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px">${escapeHtml(r.tier)}</span>
-    </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Window: last ${r.window_days} days · ${r.shifts_in_window} shifts · ${trendText}</div>
-  `;
+  let html;
+  if(r.unrated){
+    html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+        <h3 style="margin:0">${escapeHtml(r.name)}</h3>
+        <span style="background:${tierStyle.bg};color:${tierStyle.fg};font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px">Unrated</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
+        ${r.all_time_completed}/${r.min_shifts} shifts worked — allocate on licence, tickets and availability only until
+        enough shifts have been logged. You can still log dated observations below; they'll already be on file once
+        this guard is rated.
+      </div>
+    `;
+  } else {
+    const trendText = r.trend==='up' ? `▲ up from ${starGlyphs(r.prev_overall)}` :
+                       (r.trend==='down' ? `▼ down from ${starGlyphs(r.prev_overall)}` : '– flat vs previous window');
+    html = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+        <h3 style="margin:0">${escapeHtml(r.name)} — ${r.overall_label} <span style="color:var(--muted);font-weight:400">(${r.overall_decimal})</span></h3>
+        <span style="background:${tierStyle.bg};color:${tierStyle.fg};font-size:12px;font-weight:700;padding:5px 10px;border-radius:6px">${escapeHtml(r.tier)}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Window: last ${r.window_days} days · ${r.shifts_in_window} shifts · ${trendText}</div>
+    `;
+  }
 
   html += `<div class="tbl-wrap" style="margin-bottom:16px"><table><tbody>`;
   r.categories.forEach(c=>{
