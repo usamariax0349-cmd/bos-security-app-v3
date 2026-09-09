@@ -511,8 +511,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .gd-list-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background var(--dur-fast) var(--ease-out);border-left:3px solid transparent}
 .gd-list-item:hover{background:var(--bg)}
 .gd-list-item.active{background:#eef2ff;border-left-color:var(--navy)}
-.gd-list-item .gdn{font-size:13px;font-weight:600;color:var(--text)}
+.gd-list-item .gdn{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gd-list-item .gdc{color:var(--green);font-size:14px;flex-shrink:0}
+.gd-avatar{border-radius:50%;object-fit:cover;flex-shrink:0;cursor:pointer;border:1px solid var(--border)}
+.gd-avatar-placeholder{border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--navy);color:#fff;font-weight:700;font-size:12px}
+.gd-stars{color:var(--gold);font-size:11px;white-space:nowrap;flex-shrink:0}
+.gd-stars.unrated{color:var(--muted)}
 .gd-detail-panel{padding:24px;min-height:420px}
 .gd-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
 .gd-header h2{font-size:20px;color:var(--navy);display:flex;align-items:center;gap:10px;margin:0}
@@ -641,6 +645,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <span class="mi">💬</span>
           <span><div class="mt"><span data-i18n="menu_messages_title">Messages</span><span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms" data-i18n="menu_messages_sub">Chat directly with the office</div></span>
         </button>
+        <button class="mode-btn" onclick="startPhotoFlow()">
+          <span class="mi">📷</span>
+          <span><div class="mt" data-i18n="menu_photo_title">My Photo</div><div class="ms" data-i18n="menu_photo_sub">Upload a profile photo for the office</div></span>
+        </button>
       </div>
       <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" data-i18n="push_enable_btn" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
       <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
@@ -678,6 +686,28 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <img id="co-photo-preview" class="photo-preview hidden" src="" alt="">
       <button class="submit-btn" id="co-submit-btn" data-i18n="confirm_clockout_btn" onclick="confirmClockOut()">✓ Confirm Clock Out</button>
       <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:10px" onclick="showGuardCard('step-myshifts')">← Back</button>
+    </div>
+
+    <!-- My Photo -->
+    <div class="guard-card hidden" id="step-photo">
+      <div class="step-title" data-i18n="menu_photo_title">📷 My Photo</div>
+      <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px" data-i18n="photo_sub">
+        This is shown to the office so they can recognize you — it's never shown to other guards.
+      </p>
+      <img id="profile-photo-current" class="photo-preview hidden" src="" alt="" style="border-radius:50%;width:140px;height:140px;object-fit:cover;margin:0 auto 16px;display:block">
+      <div class="photo-btns">
+        <label class="photo-btn" id="pp-cam-btn">
+          <span class="icon">📷</span><span data-i18n="take_photo">Take Photo</span>
+          <input type="file" accept="image/*" capture="user" style="display:none" onchange="handleProfilePhotoSelect(this)">
+        </label>
+        <label class="photo-btn" id="pp-gal-btn">
+          <span class="icon">🖼️</span><span data-i18n="from_gallery">From Gallery</span>
+          <input type="file" accept="image/*" style="display:none" onchange="handleProfilePhotoSelect(this)">
+        </label>
+      </div>
+      <img id="pp-photo-preview" class="photo-preview hidden" src="" alt="">
+      <button class="submit-btn" id="pp-submit-btn" data-i18n="save_photo_btn" onclick="saveProfilePhoto()" disabled>Save Photo</button>
+      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- Success -->
@@ -1955,6 +1985,9 @@ const TRANSLATIONS = {
     menu_incident_title: "Report Incident", menu_incident_sub: "Log an incident with photo & location",
     menu_availability_title: "My Availability", menu_availability_sub: "Let the office know when you're free",
     menu_messages_title: "Messages", menu_messages_sub: "Chat directly with the office",
+    menu_photo_title: "My Photo", menu_photo_sub: "Upload a profile photo for the office",
+    photo_sub: "This is shown to the office so they can recognize you — it's never shown to other guards.",
+    save_photo_btn: "Save Photo", saving_photo_btn: "Saving…", photo_saved_toast: "Photo saved",
     push_enable_btn: "🔔 Enable Notifications", push_enabled_prefix: "🔔 Notifications on —", push_turn_off: "turn off",
     logout_btn: "Logout",
     myshifts_title: "🕐 My Shifts", back_to_menu: "← Back to Menu",
@@ -2064,6 +2097,9 @@ const TRANSLATIONS = {
     menu_incident_title: "घटना दर्ज करें", menu_incident_sub: "फोटो और स्थान के साथ घटना दर्ज करें",
     menu_availability_title: "मेरी उपलब्धता", menu_availability_sub: "कार्यालय को बताएं कि आप कब खाली हैं",
     menu_messages_title: "संदेश", menu_messages_sub: "कार्यालय से सीधे बात करें",
+    menu_photo_title: "मेरी फोटो", menu_photo_sub: "कार्यालय के लिए प्रोफ़ाइल फोटो अपलोड करें",
+    photo_sub: "यह कार्यालय को दिखाई जाती है ताकि वे आपको पहचान सकें — यह अन्य गार्ड को कभी नहीं दिखाई जाती।",
+    save_photo_btn: "फोटो सहेजें", saving_photo_btn: "सहेजा जा रहा है…", photo_saved_toast: "फोटो सहेजी गई",
     push_enable_btn: "🔔 सूचनाएं चालू करें", push_enabled_prefix: "🔔 सूचनाएं चालू हैं —", push_turn_off: "बंद करें",
     logout_btn: "लॉगआउट",
     myshifts_title: "🕐 मेरी शिफ्ट", back_to_menu: "← मेनू पर वापस जाएं",
@@ -2173,6 +2209,9 @@ const TRANSLATIONS = {
     menu_incident_title: "واقعہ رپورٹ کریں", menu_incident_sub: "تصویر اور مقام کے ساتھ واقعہ درج کریں",
     menu_availability_title: "میری دستیابی", menu_availability_sub: "دفتر کو بتائیں کہ آپ کب فارغ ہیں",
     menu_messages_title: "پیغامات", menu_messages_sub: "دفتر سے براہ راست بات کریں",
+    menu_photo_title: "میری تصویر", menu_photo_sub: "دفتر کے لیے پروفائل تصویر اپ لوڈ کریں",
+    photo_sub: "یہ دفتر کو دکھائی جاتی ہے تاکہ وہ آپ کو پہچان سکیں — یہ کبھی دوسرے گارڈز کو نہیں دکھائی جاتی۔",
+    save_photo_btn: "تصویر محفوظ کریں", saving_photo_btn: "محفوظ ہو رہا ہے…", photo_saved_toast: "تصویر محفوظ ہو گئی",
     push_enable_btn: "🔔 اطلاعات فعال کریں", push_enabled_prefix: "🔔 اطلاعات فعال ہیں —", push_turn_off: "بند کریں",
     logout_btn: "لاگ آؤٹ",
     myshifts_title: "🕐 میری شفٹس", back_to_menu: "→ مینو پر واپس جائیں",
@@ -2282,6 +2321,9 @@ const TRANSLATIONS = {
     menu_incident_title: "الإبلاغ عن حادثة", menu_incident_sub: "سجّل حادثة مع صورة والموقع",
     menu_availability_title: "أوقات توفري", menu_availability_sub: "أخبر المكتب متى تكون متاحًا",
     menu_messages_title: "الرسائل", menu_messages_sub: "تحدث مباشرة مع المكتب",
+    menu_photo_title: "صورتي", menu_photo_sub: "قم بتحميل صورة شخصية للمكتب",
+    photo_sub: "تُعرض هذه الصورة على المكتب حتى يتمكنوا من التعرف عليك — لا تُعرض أبدًا على الحراس الآخرين.",
+    save_photo_btn: "حفظ الصورة", saving_photo_btn: "جارٍ الحفظ…", photo_saved_toast: "تم حفظ الصورة",
     push_enable_btn: "🔔 تفعيل الإشعارات", push_enabled_prefix: "🔔 الإشعارات مفعّلة —", push_turn_off: "إيقاف",
     logout_btn: "تسجيل الخروج",
     myshifts_title: "🕐 مناوباتي", back_to_menu: "→ العودة إلى القائمة",
@@ -2935,6 +2977,44 @@ function startPatrolFlow(){ showGuardCard('step-patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
 function startAvailabilityFlow(){ showGuardCard('step-availability'); loadGuardAvailability(); }
 function startMessagesFlow(){ showGuardCard('step-messages'); loadGuardMessagesEntry(); }
+// ── My Photo ─────────────────────────────────────────────────────────────────
+let profilePhotoB64 = null, profilePhotoExt = null;
+async function startPhotoFlow(){
+  showGuardCard('step-photo');
+  document.getElementById('pp-photo-preview').classList.add('hidden');
+  document.getElementById('pp-photo-preview').src = '';
+  profilePhotoB64 = null; profilePhotoExt = null;
+  document.getElementById('pp-submit-btn').disabled = true;
+  const cur = document.getElementById('profile-photo-current');
+  cur.classList.add('hidden'); cur.src = '';
+  try{
+    const me = await guardApiFetch('/api/guard/me');
+    if(me.photo_filename){ cur.src = '/uploads/'+me.photo_filename; cur.classList.remove('hidden'); }
+  }catch(e){}
+}
+function handleProfilePhotoSelect(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    profilePhotoB64 = e.target.result.split(',')[1];
+    profilePhotoExt = file.name.split('.').pop() || 'jpg';
+    document.getElementById('pp-photo-preview').src = e.target.result;
+    document.getElementById('pp-photo-preview').classList.remove('hidden');
+    document.getElementById('pp-submit-btn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+async function saveProfilePhoto(){
+  if(!profilePhotoB64) return;
+  const btn = document.getElementById('pp-submit-btn');
+  btn.disabled = true; const original = btn.textContent; btn.textContent = t('saving_photo_btn');
+  try{
+    await guardApiFetch('/api/guard/photo', {method:'POST', body: JSON.stringify({photo_b64:profilePhotoB64, photo_ext:profilePhotoExt})});
+    toast(t('photo_saved_toast'),'success');
+    showModeMenu();
+  }catch(e){ toast(e.message,'error'); btn.disabled = false; }
+  btn.textContent = original;
+}
 
 // ── Maps (Leaflet, OpenStreetMap tiles, centred on Victoria AU) ─────────────────
 const VIC_CENTER = [-37.4713, 144.7852];
@@ -4556,7 +4636,13 @@ function renderAvailability(){
         </td>`;
       }).join('');
       const fresh = availFreshnessLabel(g);
-      return `<tr><td><strong>${g.name}</strong><div class="avail-freshness ${fresh.cls}" title="Set when the guard themselves last used My Availability in the Guard Portal — admin edits don't count">${fresh.text}</div></td>${cells}</tr>`;
+      return `<tr><td><div style="display:flex;align-items:center;gap:8px">
+          ${avatarHtml(g,26)}
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:6px"><strong>${g.name}</strong>${ratingBadgeHtml(g.id)}</div>
+            <div class="avail-freshness ${fresh.cls}" title="Set when the guard themselves last used My Availability in the Guard Portal — admin edits don't count">${fresh.text}</div>
+          </div>
+        </div></td>${cells}</tr>`;
     }).join('');
 }
 const AVAIL_STALE_DAYS = 14;
@@ -4634,8 +4720,39 @@ async function availRemoveLeave(leaveId, guardName){
   catch(e){ toast(e.message,'error'); }
 }
 
+// ── Avatars + star ratings shared by the Guards list and Availability grid ──
+// Fetched once per tab-visit (not on the Availability tab's 20s poll) — the
+// rating engine recomputes a guard's whole shift history from scratch, so
+// polling it on a timer would put real, unnecessary load on the DB for
+// numbers that don't actually change that often.
+let ratingsLookup = {};
+async function loadRatingsLookup(){
+  try{
+    const rows = await apiFetch('/api/ratings/guards');
+    ratingsLookup = {};
+    rows.forEach(r=>{ ratingsLookup[r.guard_id] = r; });
+  }catch(e){ /* ratings are a nice-to-have here — don't block the list on it */ }
+}
+function avatarHtml(g, size){
+  size = size||28;
+  const initial = (g.name||'?').trim().charAt(0).toUpperCase() || '?';
+  if(g.photo_filename){
+    return `<img src="/uploads/${g.photo_filename}" class="gd-avatar" style="width:${size}px;height:${size}px"
+              onclick="event.stopPropagation();viewPhoto('/uploads/${g.photo_filename}')" title="Click to enlarge">`;
+  }
+  return `<div class="gd-avatar-placeholder" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px">${initial}</div>`;
+}
+function ratingBadgeHtml(guardId){
+  const r = ratingsLookup[guardId];
+  if(!r) return '';
+  if(r.unrated) return `<span class="gd-stars unrated" title="Unrated — ${r.all_time_completed}/${r.min_shifts} shifts worked">—</span>`;
+  return `<span class="gd-stars" title="${escapeHtml(r.tier)} (${r.overall_decimal})">${r.overall_label}</span>`;
+}
 async function loadGuardsAdmin(){
-  try{ guardsFull = await apiFetch('/api/guards/all'); renderGuardsList(); }
+  try{
+    [guardsFull] = await Promise.all([apiFetch('/api/guards/all'), loadRatingsLookup()]);
+    renderGuardsList();
+  }
   catch(e){ toast(e.message,'error'); }
 }
 function setGuardStatusFilter(active){
@@ -4664,7 +4781,9 @@ function renderGuardsList(){
     : d.map(g=>{
         const lf = licenseFlag(g);
         return `<div class="gd-list-item ${g.id===selectedGuardId?'active':''}" onclick="selectGuard('${g.id}')">
+          ${avatarHtml(g,26)}
           <span class="gdn">${g.name}</span>
+          ${ratingBadgeHtml(g.id)}
           <span class="gdc" title="${lf.title}">${lf.icon || (g.license_number?'✓':'')}</span>
         </div>`;
       }).join('');
@@ -4692,8 +4811,19 @@ function renderGuardDetail(){
       : `<span style="color:var(--green)">Guard Portal: active${g.last_login?' · last login '+fmtRelativeDays(g.last_login):''}</span>`;
   document.getElementById('gd-detail-panel').innerHTML = `
     <div class="gd-header">
-      <h2>👮 ${g.name}</h2>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;align-items:center;gap:12px">
+        ${avatarHtml(g,48)}
+        <div>
+          <h2 style="margin:0">${g.name}</h2>
+          ${ratingBadgeHtml(g.id)}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+          📷 ${g.photo_filename?'Change':'Add'} Photo
+          <input type="file" accept="image/*" style="display:none" onchange="uploadGuardPhoto(this,'${g.id}')">
+        </label>
+        ${g.photo_filename?`<button class="btn btn-ghost btn-sm" onclick="removeGuardPhoto('${g.id}')">Remove Photo</button>`:''}
         <button class="btn btn-ghost btn-sm" onclick="resetGuardPassword('${g.id}','${g.name.replace(/'/g,"\\'")}')">🔑 Reset Portal Password</button>
         <button class="btn ${g.active?'btn-ghost':'btn-green'} btn-sm" onclick="toggleGuardActive('${g.id}',${g.active})">${g.active?'Deactivate':'Activate'}</button>
       </div>
@@ -4709,6 +4839,32 @@ function renderGuardDetail(){
     <div id="gd-subtab-body"></div>
   `;
   showGuardSubtab(gdActiveSubtab);
+}
+async function uploadGuardPhoto(input, guardId){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async e=>{
+    const b64 = e.target.result.split(',')[1];
+    const ext = file.name.split('.').pop();
+    try{
+      const g = await apiFetch(`/api/guards/${guardId}`, {method:'PUT', body: JSON.stringify({photo_b64:b64, photo_ext:ext})});
+      const idx = guardsFull.findIndex(x=>x.id===guardId);
+      if(idx>=0) guardsFull[idx] = {...guardsFull[idx], ...g};
+      renderGuardsList(); renderGuardDetail();
+      toast('Photo updated','success');
+    }catch(e2){ toast(e2.message,'error'); }
+  };
+  reader.readAsDataURL(file);
+}
+async function removeGuardPhoto(guardId){
+  if(!confirm('Remove this guard\'s profile photo?')) return;
+  try{
+    const g = await apiFetch(`/api/guards/${guardId}`, {method:'PUT', body: JSON.stringify({remove_photo:true})});
+    const idx = guardsFull.findIndex(x=>x.id===guardId);
+    if(idx>=0) guardsFull[idx] = {...guardsFull[idx], ...g};
+    renderGuardsList(); renderGuardDetail();
+    toast('Photo removed','success');
+  }catch(e){ toast(e.message,'error'); }
 }
 function showGuardSubtab(name){
   gdActiveSubtab = name;

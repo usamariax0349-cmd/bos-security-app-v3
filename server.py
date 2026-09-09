@@ -1143,6 +1143,11 @@ def init_db():
         # still see the full thread (compliance), but the guard's own view
         # only shows messages sent after this cutoff.
         ("guards", "messages_cleared_before", "ALTER TABLE guards ADD COLUMN messages_cleared_before TEXT"),
+        # Profile photo — settable by the guard themselves (Guard Portal) or
+        # by an admin (useful before the guard has portal access at all).
+        # Stored the same way every other upload in this app is: a filename
+        # under UPLOADS_PATH, served back via the existing /uploads/ route.
+        ("guards", "photo_filename", "ALTER TABLE guards ADD COLUMN photo_filename TEXT"),
         # Categorized support tickets — a guard's active query now carries a
         # human-facing reference number and a category picked from a fixed
         # list (see TICKET_CATEGORIES), set once when the ticket is opened.
@@ -2294,8 +2299,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == '/api/guard/me':
             gs0 = self.get_guard_session()
             if not gs0: self.err('Unauthorized', 401); return
+            db = get_db()
+            photo = R(db.execute('SELECT photo_filename FROM guards WHERE id=?', (gs0['guard_id'],)).fetchone())
+            db.close()
             self.send_json({'id':gs0['guard_id'],'name':gs0['name'],'email':gs0['email'],
-                            'must_change_password': gs0.get('must_change_password', False)}); return
+                            'must_change_password': gs0.get('must_change_password', False),
+                            'photo_filename': photo['photo_filename'] if photo else None}); return
 
         # ── Guard-authenticated: every /api/guard/* GET route lives inside this
         # block so a request for anything else (admin routes included) skips
@@ -3217,6 +3226,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        if path == '/api/guard/photo':
+            try:
+                new_photo = save_uploaded_photo(data)
+            except ValueError as e:
+                self.err(str(e)); return
+            if not new_photo:
+                self.err('photo_b64 and photo_ext required'); return
+            db = get_db()
+            old = R(db.execute('SELECT photo_filename FROM guards WHERE id=?', (gsx['guard_id'],)).fetchone())
+            db.execute('UPDATE guards SET photo_filename=? WHERE id=?', (new_photo, gsx['guard_id']))
+            audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'GUARD_PHOTO_SET', gsx['name'])
+            db.commit(); db.close()
+            if old and old['photo_filename']:
+                try: os.remove(os.path.join(UPLOADS_PATH, old['photo_filename']))
+                except OSError: pass
+            self.send_json({'ok':True, 'photo_filename':new_photo}); return
+
         if path == '/api/guard/tickets':
             category = data.get('category')
             body = (data.get('body') or '').strip()
@@ -4015,12 +4041,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for f in ('active','hide_on_schedule','no_license_required',
                       'license_reminder_days','license_critical'):
                 if f in data: updates.append(f'{f}=?'); params.append(int(data[f]))
+            # Admin can set/replace a guard's profile photo directly (handy
+            # before the guard has portal access), or clear it entirely.
+            old_photo = None
+            if data.get('photo_b64') and data.get('photo_ext'):
+                try:
+                    new_photo = save_uploaded_photo(data)
+                except ValueError as e:
+                    db.close(); self.err(str(e)); return
+                old_photo = R(db.execute('SELECT photo_filename FROM guards WHERE id=?', (m.group(1),)).fetchone())
+                old_photo = old_photo['photo_filename'] if old_photo else None
+                updates.append('photo_filename=?'); params.append(new_photo)
+            elif data.get('remove_photo'):
+                old_photo = R(db.execute('SELECT photo_filename FROM guards WHERE id=?', (m.group(1),)).fetchone())
+                old_photo = old_photo['photo_filename'] if old_photo else None
+                updates.append('photo_filename=?'); params.append(None)
             if updates:
                 params.append(m.group(1))
                 try:
                     db.execute(f"UPDATE guards SET {','.join(updates)} WHERE id=?", params)
                 except sqlite3.IntegrityError:
                     db.close(); self.err('Another guard already has that email address', 409); return
+                if old_photo:
+                    try: os.remove(os.path.join(UPLOADS_PATH, old_photo))
+                    except OSError: pass
                 audit(db, s, 'GUARD_UPDATE', m.group(1)); db.commit()
             g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone()))
             db.close(); self.send_json(g); return
