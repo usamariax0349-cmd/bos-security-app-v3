@@ -807,11 +807,43 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <!-- New-query wizard, step 2: describe the issue -->
       <div id="msg-wizard-details" class="hidden">
         <div id="msg-wizard-chosen-category" style="margin-bottom:10px;font-size:14px;font-weight:600;color:var(--gold)"></div>
+        <div id="msg-quick-info" class="hidden" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:6px" data-i18n="quick_info_label">💡 Quick Info</div>
+          <div id="msg-quick-info-body" style="font-size:13px;color:#fff;line-height:1.5"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px" data-i18n="quick_info_hint">Didn't answer your question? Describe it below and we'll get back to you.</div>
+        </div>
+        <button id="pay-discrepancy-btn" class="btn btn-ghost hidden" data-i18n="pay_discrepancy_btn" style="width:100%;margin-bottom:12px;justify-content:center" onclick="openPayCalc()">🧮 Report a pay discrepancy instead</button>
+        <div id="msg-wizard-escalation" class="hidden" style="background:#dc2626;color:#fff;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600" data-i18n="escalation_banner_text"></div>
         <div class="form-group">
-          <textarea id="msg-wizard-textarea" class="form-control" rows="5"></textarea>
+          <textarea id="msg-wizard-textarea" class="form-control" rows="5" oninput="checkEscalation(this.value,'msg-wizard-escalation')"></textarea>
         </div>
         <button class="nav-btn nav-next" data-i18n="submit_ticket_btn" style="width:100%" onclick="submitTicket()">Submit</button>
         <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:10px" onclick="msgWizardBackToCategories()">← Back</button>
+      </div>
+
+      <!-- New-query wizard, pay-discrepancy calculator (branches off step 2 for the 'pay' category) -->
+      <div id="msg-wizard-payflow" class="hidden">
+        <div style="margin-bottom:10px;font-size:14px;font-weight:600;color:var(--gold)" data-i18n="pay_calc_title">Pay Discrepancy Calculator</div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="pay_calc_date">Shift date</label>
+          <input type="date" id="pc-date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="pay_calc_hours">Hours worked</label>
+          <input type="number" id="pc-hours" class="form-control" step="0.25" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="pay_calc_expected_rate">Rate you expected ($/hr)</label>
+          <input type="number" id="pc-rate" class="form-control" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label" data-i18n="pay_calc_received">Amount you actually received ($)</label>
+          <input type="number" id="pc-received" class="form-control" step="0.01" min="0">
+        </div>
+        <button class="nav-btn nav-next" data-i18n="pay_calc_calculate_btn" style="width:100%" onclick="calculatePayDiscrepancy()">Calculate</button>
+        <div id="pc-result" class="hidden" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px;margin-top:12px;font-size:13px;color:#fff;line-height:1.6"></div>
+        <button id="pc-use-btn" class="btn btn-primary hidden" data-i18n="pay_calc_use_btn" style="width:100%;margin-top:12px" onclick="usePayCalcInTicket()">Use this in my ticket</button>
+        <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:10px" onclick="closePayCalc()">← Back</button>
       </div>
 
       <!-- Existing/active ticket thread -->
@@ -826,8 +858,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           </button>
         </div>
         <div id="msg-thread" class="msg-thread"></div>
+        <div id="msg-thread-escalation" class="hidden" style="background:#dc2626;color:#fff;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;font-weight:600" data-i18n="escalation_banner_text"></div>
         <div class="form-group">
-          <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..."></textarea>
+          <textarea id="msg-input" class="form-control" rows="2" data-i18n-placeholder="msg_input_placeholder" placeholder="Type a message to the office..." oninput="checkEscalation(this.value,'msg-thread-escalation')"></textarea>
         </div>
         <button class="nav-btn nav-next" data-i18n="send_btn" style="width:100%" onclick="sendGuardMessage()">Send</button>
       </div>
@@ -1983,6 +2016,14 @@ const TRANSLATIONS = {
     cat_placeholder_other: "Describe your question or issue.",
     submit_ticket_btn: "Submit", please_describe_issue: "Please describe your issue before submitting",
     ticket_submitted_prefix: "Ticket submitted — ", ticket_label_prefix: "Ticket ",
+    quick_info_label: "💡 Quick Info", quick_info_hint: "Didn't answer your question? Describe it below and we'll get back to you.",
+    pay_discrepancy_btn: "🧮 Report a pay discrepancy instead", pay_calc_title: "Pay Discrepancy Calculator",
+    pay_calc_date: "Shift date", pay_calc_hours: "Hours worked", pay_calc_expected_rate: "Rate you expected ($/hr)",
+    pay_calc_received: "Amount you actually received ($)", pay_calc_calculate_btn: "Calculate",
+    pay_calc_use_btn: "Use this in my ticket", pay_calc_fill_all: "Please fill in shift date, hours, and expected rate.",
+    pay_calc_result_expected: "Expected pay: ", pay_calc_result_diff_short: "You appear to be short by ",
+    pay_calc_result_diff_over: "This looks like an overpayment of ", pay_calc_result_match: "This matches — no discrepancy detected.",
+    escalation_banner_text: "This sounds serious. Please tap the 🆘 Emergency button above, or call the office directly, instead of waiting for a reply here.",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -2084,6 +2125,14 @@ const TRANSLATIONS = {
     cat_placeholder_other: "अपना सवाल या समस्या बताएं।",
     submit_ticket_btn: "सबमिट करें", please_describe_issue: "सबमिट करने से पहले कृपया अपनी समस्या बताएं",
     ticket_submitted_prefix: "टिकट सबमिट किया गया — ", ticket_label_prefix: "टिकट ",
+    quick_info_label: "💡 त्वरित जानकारी", quick_info_hint: "क्या इससे आपके सवाल का जवाब नहीं मिला? नीचे बताएं, हम जल्द ही जवाब देंगे।",
+    pay_discrepancy_btn: "🧮 इसके बजाय वेतन विसंगति दर्ज करें", pay_calc_title: "वेतन विसंगति कैलकुलेटर",
+    pay_calc_date: "शिफ्ट की तारीख", pay_calc_hours: "काम किए घंटे", pay_calc_expected_rate: "अपेक्षित दर ($/घंटा)",
+    pay_calc_received: "वास्तव में मिली राशि ($)", pay_calc_calculate_btn: "गणना करें",
+    pay_calc_use_btn: "इसे अपने टिकट में उपयोग करें", pay_calc_fill_all: "कृपया शिफ्ट की तारीख, घंटे और अपेक्षित दर भरें।",
+    pay_calc_result_expected: "अपेक्षित वेतन: ", pay_calc_result_diff_short: "आपको इतनी कम राशि मिली प्रतीत होती है: ",
+    pay_calc_result_diff_over: "यह अधिक भुगतान जैसा लगता है: ", pay_calc_result_match: "यह मेल खाता है — कोई विसंगति नहीं मिली।",
+    escalation_banner_text: "यह गंभीर लगता है। कृपया ऊपर 🆘 आपातकाल बटन दबाएं, या सीधे कार्यालय को कॉल करें, यहां जवाब का इंतजार करने के बजाय।",
   },
   ur: {
     login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
@@ -2185,6 +2234,14 @@ const TRANSLATIONS = {
     cat_placeholder_other: "اپنا سوال یا مسئلہ بیان کریں۔",
     submit_ticket_btn: "جمع کریں", please_describe_issue: "جمع کرنے سے پہلے براہ کرم اپنا مسئلہ بیان کریں",
     ticket_submitted_prefix: "ٹکٹ جمع ہو گیا — ", ticket_label_prefix: "ٹکٹ ",
+    quick_info_label: "💡 فوری معلومات", quick_info_hint: "کیا اس سے آپ کے سوال کا جواب نہیں ملا؟ نیچے بیان کریں، ہم جلد جواب دیں گے۔",
+    pay_discrepancy_btn: "🧮 اس کے بجائے تنخواہ کا فرق رپورٹ کریں", pay_calc_title: "تنخواہ فرق کیلکولیٹر",
+    pay_calc_date: "شفٹ کی تاریخ", pay_calc_hours: "کام کیے گئے گھنٹے", pay_calc_expected_rate: "متوقع ریٹ ($/گھنٹہ)",
+    pay_calc_received: "آپ کو موصول ہونے والی رقم ($)", pay_calc_calculate_btn: "حساب لگائیں",
+    pay_calc_use_btn: "اسے میرے ٹکٹ میں استعمال کریں", pay_calc_fill_all: "براہ کرم شفٹ کی تاریخ، گھنٹے اور متوقع ریٹ درج کریں۔",
+    pay_calc_result_expected: "متوقع تنخواہ: ", pay_calc_result_diff_short: "آپ کو اتنی کم رقم ملی لگتی ہے: ",
+    pay_calc_result_diff_over: "یہ زیادہ ادائیگی لگتی ہے: ", pay_calc_result_match: "یہ میل کھاتا ہے — کوئی فرق نہیں ملا۔",
+    escalation_banner_text: "یہ سنگین لگتا ہے۔ براہ کرم اوپر 🆘 ایمرجنسی بٹن دبائیں، یا براہ راست دفتر کو کال کریں، یہاں جواب کا انتظار کرنے کے بجائے۔",
   },
   ar: {
     login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
@@ -2286,6 +2343,14 @@ const TRANSLATIONS = {
     cat_placeholder_other: "صف سؤالك أو مشكلتك.",
     submit_ticket_btn: "إرسال", please_describe_issue: "يرجى وصف مشكلتك قبل الإرسال",
     ticket_submitted_prefix: "تم إرسال التذكرة — ", ticket_label_prefix: "تذكرة ",
+    quick_info_label: "💡 معلومات سريعة", quick_info_hint: "لم تجد إجابة سؤالك؟ صفه أدناه وسنعاود التواصل معك.",
+    pay_discrepancy_btn: "🧮 الإبلاغ عن خطأ في الراتب بدلاً من ذلك", pay_calc_title: "حاسبة خطأ الراتب",
+    pay_calc_date: "تاريخ المناوبة", pay_calc_hours: "ساعات العمل", pay_calc_expected_rate: "الأجر المتوقع ($/ساعة)",
+    pay_calc_received: "المبلغ الذي استلمته فعليًا ($)", pay_calc_calculate_btn: "احسب",
+    pay_calc_use_btn: "استخدم هذا في تذكرتي", pay_calc_fill_all: "يرجى إدخال تاريخ المناوبة والساعات والأجر المتوقع.",
+    pay_calc_result_expected: "الراتب المتوقع: ", pay_calc_result_diff_short: "يبدو أنك حصلت على مبلغ أقل بـ: ",
+    pay_calc_result_diff_over: "يبدو هذا دفعًا زائدًا بمقدار: ", pay_calc_result_match: "هذا متطابق — لم يتم العثور على أي خطأ.",
+    escalation_banner_text: "يبدو هذا خطيرًا. يرجى الضغط على زر 🆘 الطوارئ أعلاه، أو الاتصال بالمكتب مباشرة، بدلاً من انتظار الرد هنا.",
   },
 };
 const RTL_LANGS = new Set(['ur','ar']);
@@ -3406,6 +3471,7 @@ async function loadGuardMessagesEntry(){
 }
 function showMsgWizardCategories(){
   document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-wizard-payflow').classList.add('hidden');
   document.getElementById('msg-thread-view').classList.add('hidden');
   document.getElementById('msg-wizard-categories').classList.remove('hidden');
   const identity = cachedGuardIdentity();
@@ -3418,15 +3484,66 @@ function showMsgWizardCategories(){
 function showMsgThreadView(){
   document.getElementById('msg-wizard-categories').classList.add('hidden');
   document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-wizard-payflow').classList.add('hidden');
   document.getElementById('msg-thread-view').classList.remove('hidden');
+}
+// Category -> [botKbKey, short English label] pairs shown as the wizard's
+// "Quick Info" box, so a guard picking e.g. "Pay Issue" sees the office's
+// pay-cycle/rate-table answers straight away instead of always waiting on a
+// human reply. Labels stay English (same as the admin-authored KB content
+// itself, which this app makes no attempt to translate) — only the
+// surrounding UI chrome is localized.
+const CATEGORY_KB_KEYS = {
+  pay:         [['pay_cycle_cutoff','Pay cycle'], ['pay_payment_day','Payment day'], ['pay_payslip_access','Payslip access']],
+  roster:      [['roster_system','Roster system'], ['roster_timesheet_approval','Timesheet approval']],
+  timesheet:   [['roster_timesheet_approval','Timesheet approval']],
+  shift_swap:  [['roster_swap_rules','Shift swap rules'], ['offers_cancellation_notice','Cancellation notice']],
+  equipment:   [['compliance_uniform_standard','Uniform standard']],
+  leave:       [['roster_leave_notice','Leave notice period'], ['roster_sick_callin','Sick call-in']],
+};
+// Words that suggest this isn't a routine ticket — a guard describing an
+// injury or threat shouldn't be left waiting on an office reply, so nudge
+// them toward the Emergency button (which already alerts the office
+// immediately with their location) the moment they type one of these.
+const ESCALATION_KEYWORDS = [
+  'injured','injury','hurt','assault','assaulted','attacked','threatened','threat',
+  'harass','harassed','harassment','unsafe','weapon','gun','knife','suicide',
+  'self harm','self-harm','distressed','abuse','abused','bleeding','ambulance',
+];
+function checkEscalation(text, bannerId){
+  const banner = document.getElementById(bannerId);
+  if(!banner) return;
+  const lower = (text||'').toLowerCase();
+  banner.classList.toggle('hidden', !ESCALATION_KEYWORDS.some(k=>lower.includes(k)));
+}
+let _botKbCache = null;
+async function getBotKb(){
+  if(_botKbCache) return _botKbCache;
+  try{ _botKbCache = await guardApiFetch('/api/guard/bot-kb'); }catch(e){ _botKbCache = {}; }
+  return _botKbCache;
+}
+async function renderQuickInfo(key){
+  const box = document.getElementById('msg-quick-info');
+  const fields = CATEGORY_KB_KEYS[key];
+  if(!fields){ box.classList.add('hidden'); return; }
+  const kb = await getBotKb();
+  const lines = fields.map(([k,label])=>({label, value:(kb[k]||'').trim()})).filter(f=>f.value);
+  if(!lines.length){ box.classList.add('hidden'); return; }
+  document.getElementById('msg-quick-info-body').innerHTML =
+    lines.map(f=>`<div style="margin-bottom:4px"><b>${escapeHtml(f.label)}:</b> ${escapeHtml(f.value)}</div>`).join('');
+  box.classList.remove('hidden');
 }
 function selectTicketCategory(key){
   selectedTicketCategory = key;
   document.getElementById('msg-wizard-categories').classList.add('hidden');
+  document.getElementById('msg-wizard-payflow').classList.add('hidden');
   document.getElementById('msg-wizard-details').classList.remove('hidden');
   document.getElementById('msg-wizard-chosen-category').textContent = t('cat_'+key);
+  document.getElementById('msg-wizard-escalation').classList.add('hidden');
+  document.getElementById('pay-discrepancy-btn').classList.toggle('hidden', key!=='pay');
   const ta = document.getElementById('msg-wizard-textarea');
   ta.value = ''; ta.placeholder = t('cat_placeholder_'+key);
+  renderQuickInfo(key);
 }
 function msgWizardBackToCategories(){
   document.getElementById('msg-wizard-details').classList.add('hidden');
@@ -3440,6 +3557,59 @@ async function submitTicket(){
     toast(`${t('ticket_submitted_prefix')}#${res.ticket_number}`,'success');
     loadGuardMessagesEntry();
   }catch(e){ toast(t('could_not_send_message'),'error'); }
+}
+// ── Pay discrepancy calculator (branches off the 'pay' category) ───────────
+let _payCalcSummary = null;
+function openPayCalc(){
+  document.getElementById('msg-wizard-details').classList.add('hidden');
+  document.getElementById('msg-wizard-payflow').classList.remove('hidden');
+  ['pc-date','pc-hours','pc-rate','pc-received'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pc-result').classList.add('hidden');
+  document.getElementById('pc-use-btn').classList.add('hidden');
+  _payCalcSummary = null;
+}
+function closePayCalc(){
+  document.getElementById('msg-wizard-payflow').classList.add('hidden');
+  document.getElementById('msg-wizard-details').classList.remove('hidden');
+}
+function calculatePayDiscrepancy(){
+  const date = document.getElementById('pc-date').value;
+  const hours = parseFloat(document.getElementById('pc-hours').value);
+  const rate = parseFloat(document.getElementById('pc-rate').value);
+  const received = parseFloat(document.getElementById('pc-received').value);
+  if(!date || !isFinite(hours) || hours<=0 || !isFinite(rate) || rate<=0){
+    toast(t('pay_calc_fill_all'),'error'); return;
+  }
+  const expected = hours*rate;
+  const lines = [`${t('pay_calc_result_expected')}$${expected.toFixed(2)} (${hours} hrs × $${rate.toFixed(2)}/hr)`];
+  let diffLine = '';
+  if(isFinite(received) && received>0){
+    const diff = expected - received;
+    if(Math.abs(diff) < 0.01) diffLine = t('pay_calc_result_match');
+    else if(diff > 0) diffLine = `${t('pay_calc_result_diff_short')}$${diff.toFixed(2)}`;
+    else diffLine = `${t('pay_calc_result_diff_over')}$${Math.abs(diff).toFixed(2)}`;
+    lines.push(diffLine);
+  }
+  const resultEl = document.getElementById('pc-result');
+  resultEl.innerHTML = lines.map(l=>`<div>${escapeHtml(l)}</div>`).join('');
+  resultEl.classList.remove('hidden');
+  document.getElementById('pc-use-btn').classList.remove('hidden');
+  _payCalcSummary = {date, hours, rate, received: (isFinite(received) && received>0) ? received : null, expected, diffLine};
+}
+function usePayCalcInTicket(){
+  if(!_payCalcSummary) return;
+  const s = _payCalcSummary;
+  const parts = [
+    `Shift date: ${s.date}`, `Hours worked: ${s.hours}`,
+    `Expected rate: $${s.rate.toFixed(2)}/hr`, `Expected pay: $${s.expected.toFixed(2)}`,
+  ];
+  if(s.received!=null) parts.push(`Amount received: $${s.received.toFixed(2)}`);
+  if(s.diffLine) parts.push(s.diffLine);
+  const ta = document.getElementById('msg-wizard-textarea');
+  ta.value = parts.join('\n') + '\n\n';
+  document.getElementById('msg-wizard-payflow').classList.add('hidden');
+  document.getElementById('msg-wizard-details').classList.remove('hidden');
+  ta.focus();
 }
 function renderGuardQueryStatus(s){
   const banner = document.getElementById('msg-status-banner');
@@ -3488,6 +3658,7 @@ async function sendGuardMessage(){
   try{
     await guardApiFetch('/api/guard/messages', {method:'POST', body: JSON.stringify({body})});
     input.value='';
+    document.getElementById('msg-thread-escalation').classList.add('hidden');
     loadGuardMessages();
   }catch(e){ toast(t('could_not_send_message'),'error'); }
 }
