@@ -2150,13 +2150,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.serve_file(os.path.join(PUBLIC_PATH,'manifest.json'),'application/manifest+json'); return
         if path == '/sw.js':
             self.serve_file(os.path.join(PUBLIC_PATH,'sw.js'),'application/javascript'); return
+        if path == '/img/login-hero.jpg':
+            self.serve_file(os.path.join(PUBLIC_PATH,'img','login-hero.jpg'),'image/jpeg'); return
         if path == '/icon.svg':
             svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-<rect width="512" height="512" rx="100" fill="#1a2744"/>
-<circle cx="256" cy="190" r="110" fill="#c9a84c" opacity="0.15"/>
-<text x="256" y="245" font-family="Arial Black" font-weight="900" font-size="160" fill="#c9a84c" text-anchor="middle">B</text>
-<text x="256" y="345" font-family="Arial" font-weight="700" font-size="60" fill="rgba(255,255,255,0.7)" text-anchor="middle" letter-spacing="8">OWL</text>
-<text x="256" y="405" font-family="Arial" font-size="36" fill="rgba(255,255,255,0.35)" text-anchor="middle" letter-spacing="4">SECURITY</text>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#1e2c4d"/><stop offset="1" stop-color="#0b1220"/>
+</linearGradient>
+<linearGradient id="gold" x1="256" y1="78" x2="256" y2="440" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#e8c76a"/><stop offset="1" stop-color="#a8863a"/>
+</linearGradient>
+</defs>
+<rect width="512" height="512" rx="104" fill="url(#bg)"/>
+<path d="M150 86 L362 86 Q382 86 382 106 L382 250 Q382 366 256 440 Q130 366 130 250 L130 106 Q130 86 150 86 Z"
+      fill="rgba(201,168,76,.08)" stroke="url(#gold)" stroke-width="9"/>
+<text x="256" y="308" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="176" fill="url(#gold)" text-anchor="middle">B</text>
+<text x="256" y="480" font-family="Arial,Helvetica,sans-serif" font-weight="600" font-size="27" letter-spacing="8" fill="rgba(255,255,255,.5)" text-anchor="middle">SECURITY</text>
 </svg>'''
             b = svg.encode()
             self.send_response(200); self.send_header('Content-Type','image/svg+xml')
