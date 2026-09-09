@@ -4218,7 +4218,9 @@ function toggleAvailDay(iso){
   renderAvailability();
 }
 async function loadAvailability(){
-  if(!guardsFull.length){ try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){} }
+  // Always refreshed (not just once) so the "Guard updated Xd ago" freshness
+  // line stays accurate on every poll too, not just the first load.
+  try{ guardsFull = await apiFetch('/api/guards/all'); }catch(e){}
   const days = Array.from({length:7}, (_,i)=> new Date(availWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
   const from = dayISO[0], to = dayISO[6];
@@ -5420,6 +5422,13 @@ function renderActivityMap(){
 }
 let _activityTimer = setInterval(()=>{
   if(document.getElementById('tab-reports')?.classList.contains('active')) loadActivity();
+}, 20000);
+// Same idea for the weekly Availability board (top of the Guards tab): a
+// guard can update their own availability from the Guard Portal at any
+// time, and an admin who already has this tab open had no way to see it
+// short of manually navigating away and back.
+let _availTimer = setInterval(()=>{
+  if(document.getElementById('tab-guards')?.classList.contains('active')) loadAvailability();
 }, 20000);
 
 // ── Incidents ─────────────────────────────────────────────────────────────────
