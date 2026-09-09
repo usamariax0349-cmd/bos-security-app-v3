@@ -2908,7 +2908,7 @@ function loadClientManage(){
 }
 function renderClientSitePicker(){
   document.getElementById('client-manage-site-picker').innerHTML = clientData.sites.map(s=>
-    `<button class="btn ${s.id===clientManageSiteId?'btn-primary':'btn-ghost'} btn-sm" onclick="selectClientManageSite('${s.id}')">${s.name}</button>`
+    `<button class="btn ${s.id===clientManageSiteId?'btn-primary':'btn-ghost'} btn-sm" onclick="selectClientManageSite('${s.id}')">${escapeHtml(s.name)}</button>`
   ).join('');
 }
 function selectClientManageSite(siteId){
@@ -2946,11 +2946,11 @@ async function loadClientManageShifts(){
       : rows.map(r=>{
           const canEdit = !r.clock_in_at;
           return `<tr>
-            <td>${r.shift_date}</td><td>${r.guard_name}</td><td>${r.start_time}</td><td>${r.end_time||'Open-ended'}</td>
-            <td>${r.position||'—'}</td>
+            <td>${r.shift_date}</td><td>${escapeHtml(r.guard_name)}</td><td>${r.start_time}</td><td>${r.end_time||'Open-ended'}</td>
+            <td>${escapeHtml(r.position)||'—'}</td>
             <td><span class="badge badge-${CLIENT_SHIFT_BADGE[r.status]||'pending'}">${r.status.replace('_',' ')}</span>${!r.published?' <span title="Not yet published to the guard" style="font-size:11px;color:var(--muted)">(draft)</span>':''}</td>
             <td>${canEdit ? `
-              <button class="btn btn-ghost btn-sm" onclick='openClientShiftModal(${JSON.stringify(r)})'>Edit</button>
+              <button class="btn btn-ghost btn-sm" onclick='openClientShiftModal(${jsonAttr(r)})'>Edit</button>
               <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="cancelClientShift('${r.id}')">Cancel</button>
             ` : '<span style="color:var(--muted);font-size:12px">—</span>'}</td>
           </tr>`;
@@ -2972,7 +2972,7 @@ async function openClientShiftModal(shift){
   try{
     const guards = await apiFetch(`/api/client/site-guards?site_id=${clientManageSiteId}`);
     guardSel.innerHTML = guards.length
-      ? guards.map(g=>`<option value="${g.id}">${g.name}${g.license_number?' · Lic. '+g.license_number:''}</option>`).join('')
+      ? guards.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}${g.license_number?' · Lic. '+escapeHtml(g.license_number):''}</option>`).join('')
       : `<option value="">No eligible guards — contact the office</option>`;
     if(shift) guardSel.value = shift.guard_id;
   }catch(e){ guardSel.innerHTML = `<option value="">Could not load guards</option>`; }
@@ -3710,6 +3710,21 @@ async function dismissReminder(){
 function escapeHtml(s){
   return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// For embedding a JSON.stringify(obj) blob inside a single-quoted inline
+// HTML attribute, e.g. onclick='editThing(${jsonAttr(x)})'. JSON.stringify
+// escapes " but never ', so any field on the object containing a single
+// quote (site contact name, shift notes, anything free-text an admin OR — as
+// of the client self-service features — a lower-privileged client account
+// can set) terminates the attribute early and lets the rest of the value be
+// parsed as new HTML/JS, e.g. a fresh onmouseover handler. HTML-encoding the
+// whole serialized blob (not the individual fields — that would corrupt the
+// values themselves once JSON-parsed back out) closes that off: the browser
+// decodes the entities while reading the attribute value, before treating it
+// as the handler's JS source, so the object round-trips correctly while the
+// raw '/</>/& characters can never break out of the attribute in between.
+function jsonAttr(obj){
+  return JSON.stringify(obj).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function renderMsgThread(box, rows, viewerRole){
   if(!rows.length){
     box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${viewerRole==='guard'?t('no_messages_yet'):'No messages yet. Say hello 👋'}</p>`;
@@ -4167,9 +4182,9 @@ async function loadLiveOps(){
           ? (sh.clock_in_verified ? '✅ Verified' : '⚠️ Unverified')
           : '—';
         return `<tr>
-          <td>${sh.site_name}</td>
-          <td><strong>${sh.guard_name}</strong></td>
-          <td>${sh.position||'—'}</td>
+          <td>${escapeHtml(sh.site_name)}</td>
+          <td><strong>${escapeHtml(sh.guard_name)}</strong></td>
+          <td>${escapeHtml(sh.position)||'—'}</td>
           <td><span class="badge" style="${st.style}">${st.label}</span></td>
           <td style="font-size:12px">${sh.start_time}${sh.clock_in_at?` <small style="color:var(--muted)">(actual ${sh.clock_in_at.slice(11,16)})</small>`:''}</td>
           <td style="font-size:12px">${sh.end_time||'Required'}${sh.clock_out_at?` <small style="color:var(--muted)">(actual ${sh.clock_out_at.slice(11,16)})</small>`:''}</td>
@@ -4257,7 +4272,7 @@ function renderScheduleGrid(){
           : `Nothing rostered this week${customer?' for this customer':''}`}</div>`;
   }
   rows.forEach(row=>{
-    html += `<div class="sched-row-label">${row.name}</div>`;
+    html += `<div class="sched-row-label">${escapeHtml(row.name)}</div>`;
     dayISO.forEach(dISO=>{
       const shifts = cellShifts(row.id, dISO);
       html += `<div class="sched-cell">
@@ -4265,9 +4280,9 @@ function renderScheduleGrid(){
         ${shifts.map(sh=>{
           const other = schedBy==='sites' ? sh.guard_name : sh.site_name;
           const cls = ['sched-chip', sh.status?`st-${sh.status}`:'', sh.published?'':'unpub'].filter(Boolean).join(' ');
-          return `<button class="${cls}" onclick='editShift(${JSON.stringify(sh)})'>
+          return `<button class="${cls}" onclick='editShift(${jsonAttr(sh)})'>
             <div class="sc-time">${sh.start_time}-${sh.end_time||'Required'}</div>
-            <div class="sc-sub">${other}</div>
+            <div class="sc-sub">${escapeHtml(other)}</div>
           </button>`;
         }).join('')}
       </div>`;
@@ -4509,7 +4524,7 @@ function renderSubsTable(){
       <td style="white-space:nowrap">
         <button class="btn btn-xs btn-primary" onclick="openReview('${r.id}')">${currentRole==='viewer'?'View':'Review'}</button>
         ${(currentRole!=='viewer'&&r.status==='pending')?`<button class="btn btn-xs btn-green" onclick="quickAction('${r.id}','approved')">✓</button><button class="btn btn-xs btn-red" onclick="quickAction('${r.id}','rejected')">✗</button>`:''}
-        ${canDeleteSubmissions()?`<button class="btn btn-xs btn-red" title="Delete this submission permanently" onclick='deleteSubmission(${JSON.stringify(r)})'>🗑</button>`:''}
+        ${canDeleteSubmissions()?`<button class="btn btn-xs btn-red" title="Delete this submission permanently" onclick='deleteSubmission(${jsonAttr(r)})'>🗑</button>`:''}
       </td>
     </tr>`).join('');
 }
@@ -4784,9 +4799,9 @@ function renderAvailability(){
         // "Free from 18:00" instead of the actual shift would hide real work
         // and, worse, leave no way to add the shift in the first place.
         if(dayShifts.length) return `<td class="avail-cell">
-          ${dayShifts.map(sh=>`<button class="sched-chip" onclick='availEditShift(${JSON.stringify(sh)})' title="Click to edit this shift — site, times, or delete it">
+          ${dayShifts.map(sh=>`<button class="sched-chip" onclick='availEditShift(${jsonAttr(sh)})' title="Click to edit this shift — site, times, or delete it">
               <div class="sc-time">${sh.start_time}-${sh.end_time||'Required'} <span class="sc-edit">✎</span></div>
-              <div class="sc-sub">${sh.site_name}</div>
+              <div class="sc-sub">${escapeHtml(sh.site_name)}</div>
             </button>`).join('')}
           <button class="avail-mini" onclick="availAddShift('${g.id}','${iso}')" title="Add another shift this day">+</button>
         </td>`;
@@ -5639,14 +5654,14 @@ function renderSitesTable(){
   document.getElementById('sites-tbody').innerHTML = d.length===0
     ? `<tr><td colspan="7" class="empty-state"><div class="ei">📍</div><p>No sites found</p></td></tr>`
     : d.map(s=>`<tr>
-      <td><strong>${s.name}</strong></td>
-      <td>${s.client_name}</td>
-      <td style="font-size:12px;color:var(--muted)">${s.address||'—'}</td>
+      <td><strong>${escapeHtml(s.name)}</strong></td>
+      <td>${escapeHtml(s.client_name)}</td>
+      <td style="font-size:12px;color:var(--muted)">${escapeHtml(s.address)||'—'}</td>
       <td>${fmtMoney(s.default_rate)}/hr</td>
-      <td style="font-size:12px">${s.contact_name||'—'}${s.contact_phone?' · '+s.contact_phone:''}</td>
+      <td style="font-size:12px">${escapeHtml(s.contact_name)||'—'}${s.contact_phone?' · '+escapeHtml(s.contact_phone):''}</td>
       <td><span class="badge ${s.active?'badge-approved':'badge-rejected'}">${s.active?'Active':'Inactive'}</span></td>
       <td style="white-space:nowrap">
-        <button class="btn btn-xs btn-primary" onclick='editSite(${JSON.stringify(s)})'>Edit</button>
+        <button class="btn btn-xs btn-primary" onclick='editSite(${jsonAttr(s)})'>Edit</button>
         <button class="btn btn-xs btn-ghost" onclick="openCheckpointsModal('${s.id}','${s.name.replace(/'/g,"\\'")}')">📍 Checkpoints</button>
         <button class="btn btn-xs btn-ghost" onclick="toggleSiteActive('${s.id}',${s.active})">${s.active?'Deactivate':'Activate'}</button>
       </td>
@@ -6160,7 +6175,7 @@ function renderFaqList(){
             <div class="faq-a">${escapeHtml(f.answer)}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-            <button class="btn btn-xs btn-ghost" onclick='editFaq(${JSON.stringify(f)})'>Edit</button>
+            <button class="btn btn-xs btn-ghost" onclick='editFaq(${jsonAttr(f)})'>Edit</button>
             <button class="btn btn-xs btn-ghost" onclick="toggleFaqActive('${f.id}',${f.active})">${f.active?'Deactivate':'Activate'}</button>
             <button class="btn btn-xs btn-red" onclick="deleteFaq('${f.id}')">Delete</button>
           </div>
@@ -6372,7 +6387,7 @@ function renderAdminsTable(){
       <td style="font-size:12px;color:var(--muted)">${a.last_login?fmtDateTime(a.last_login):'Never'}</td>
       <td><span class="badge ${a.active?'badge-approved':'badge-rejected'}">${a.active?'Active':'Inactive'}</span></td>
       <td style="white-space:nowrap">
-        ${canModify?`<button class="btn btn-xs btn-primary" onclick='editAdmin(${JSON.stringify(a)})'>Edit</button>
+        ${canModify?`<button class="btn btn-xs btn-primary" onclick='editAdmin(${jsonAttr(a)})'>Edit</button>
         <button class="btn btn-xs btn-ghost" onclick="toggleAdminActive('${a.id}',${a.active})">${a.active?'Deactivate':'Activate'}</button>`:'<span style="font-size:12px;color:var(--muted)">Protected</span>'}
         ${canDelete?`<button class="btn btn-xs btn-red" onclick="deleteAdmin('${a.id}','${a.name.replace(/'/g,"\\'")}')">Delete</button>`:''}
       </td>
