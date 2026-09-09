@@ -560,14 +560,28 @@ def compute_guard_rating(db, guard_id, as_of=None):
                 'stars': stars, 'detail': f'Availability last confirmed {days_stale}d ago', 'confidence': 'low',
                 'flag': 'Shift-offer response time isn’t tracked by this system — rated on availability-calendar freshness only.'}
 
-        # Manual categories — most recent dated/sourced entry inside this window.
-        for key in RATING_MANUAL_CATEGORIES:
+        # Manual categories have no auto value at all — the most recent
+        # dated/sourced entry inside the window IS the score. Auto categories
+        # can also be overridden the same way: an admin's note takes
+        # precedence over the computed value when one exists in-window, but
+        # the system's own computed detail is kept alongside it (system_*)
+        # so the override never hides what the raw data actually showed.
+        # Like everything else here, an override ages out after the window
+        # passes rather than sticking around forever unreviewed.
+        for key, label, weight, kind in RATING_CATEGORIES:
             row = R(db.execute('''
                 SELECT * FROM guard_rating_notes WHERE guard_id=? AND category=?
                   AND entry_date>=? AND entry_date<=? ORDER BY entry_date DESC, created_at DESC LIMIT 1
             ''', (guard_id, key, window_start.strftime('%Y-%m-%d'), window_end.strftime('%Y-%m-%d'))).fetchone())
-            cats[key] = {'stars': row['stars'], 'detail': row['note'], 'source': row.get('source') or '',
-                         'entry_date': row['entry_date'], 'confidence': 'documented', 'flag': None} if row else None
+            if row:
+                auto_cat = cats.get(key)
+                cats[key] = {'stars': row['stars'], 'detail': row['note'], 'source': row.get('source') or '',
+                             'entry_date': row['entry_date'], 'confidence': 'override' if auto_cat else 'documented',
+                             'flag': None, 'overridden': bool(auto_cat),
+                             'system_stars': auto_cat['stars'] if auto_cat else None,
+                             'system_detail': auto_cat['detail'] if auto_cat else None}
+            elif kind == 'manual':
+                cats[key] = None
 
         total_weight = 0.0; weighted_sum = 0.0; thin = []
         for key, label, weight, kind in RATING_CATEGORIES:
@@ -634,6 +648,11 @@ def compute_guard_rating(db, guard_id, as_of=None):
              'flag': (categories.get(k) or {}).get('flag'),
              'source': (categories.get(k) or {}).get('source'),
              'entry_date': (categories.get(k) or {}).get('entry_date'),
+             'overridden': bool((categories.get(k) or {}).get('overridden')),
+             'system_stars': (categories.get(k) or {}).get('system_stars'),
+             'system_stars_label': stars_label((categories.get(k) or {}).get('system_stars')),
+             'system_detail': (categories.get(k) or {}).get('system_detail'),
+             'kind': kind,
              'assessable': categories.get(k) is not None}
             for k, lbl, weight, kind in RATING_CATEGORIES
         ],
@@ -3792,8 +3811,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             category = data.get('category')
             note = (data.get('note') or '').strip()
             stars = data.get('stars')
-            if category not in RATING_MANUAL_CATEGORIES:
-                self.err(f"category must be one of: {', '.join(RATING_MANUAL_CATEGORIES)}"); return
+            if category not in RATING_CATEGORY_LABELS:
+                self.err(f"category must be one of: {', '.join(RATING_CATEGORY_LABELS)}"); return
             if not note:
                 self.err('note required — the rating system never scores anything without a documented reason'); return
             if not isinstance(stars, int) or stars < 0 or stars > 10:

@@ -1165,7 +1165,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           Admin-only — guards never see their rating or tier. Punctuality, attendance, availability and compliance
           are computed live from real shift and licence data over the last 90 days. Uniform, service, paperwork,
           conduct and versatility have no data source in this app — open a guard's card and log a dated, sourced
-          observation; it becomes that category's score until it ages out of the window. This is an input to a
+          observation; it becomes that category's score until it ages out of the window. Any category — including
+          the computed ones — can also be manually edited from a guard's card when there's a documented reason to
+          override it; the system's own computed value stays visible alongside the override. This is an input to a
           human decision, never the decision itself — nothing here changes a guard's hours or roster on its own.
         </p>
         <div id="ratings-list" style="padding:0 20px 20px"></div>
@@ -5079,7 +5081,6 @@ async function saveBotKb(){
 }
 
 // ── Guard Star Ratings (admin-only) ─────────────────────────────────────────
-const RATING_MANUAL_KEYS = ['uniform','service','paperwork','conduct','versatility'];
 const RATING_TIER_STYLE = {
   'Tier 1 — Lead':        {bg:'#065f46', fg:'#fff'},
   'Tier 2 — Established': {bg:'#1e40af', fg:'#fff'},
@@ -5216,7 +5217,8 @@ function renderRatingDetail(r, notes){
 
   html += `<div class="tbl-wrap" style="margin-bottom:16px"><table><tbody>`;
   r.categories.forEach(c=>{
-    const isManual = RATING_MANUAL_KEYS.includes(c.key);
+    const editLabel = c.kind === 'manual' ? '+ Add observation' : '✎ Edit stars';
+    const currentStars = c.stars != null ? c.stars : 6;
     html += `<tr>
       <td style="width:200px;vertical-align:top"><strong>${escapeHtml(c.label)}</strong><div style="font-size:11px;color:var(--muted)">${Math.round(c.weight*100)}%</div></td>
       <td style="width:100px;color:var(--gold);font-size:15px;vertical-align:top">${c.assessable?c.stars_label:'—'}</td>
@@ -5224,11 +5226,15 @@ function renderRatingDetail(r, notes){
         <div style="font-size:13px">${c.assessable?escapeHtml(c.detail):'<span style="color:var(--muted)">No documented observation in this window</span>'}</div>
         ${c.flag?`<div style="font-size:12px;color:#b45309;margin-top:2px">⚠ ${escapeHtml(c.flag)}</div>`:''}
         ${c.assessable && c.source ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">Source: ${escapeHtml(c.source)} · ${escapeHtml(c.entry_date||'')}</div>`:''}
-        ${isManual?`<button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:11px" onclick="toggleRatingNoteForm('${c.key}')">+ Add observation</button>
+        ${c.overridden?`<div style="font-size:11px;color:var(--muted);margin-top:4px;padding:6px 8px;background:rgba(0,0,0,.03);border-radius:6px">
+          ⚙ Manually overridden — system computed ${c.system_stars_label} (${(c.system_stars/2).toFixed(1)}): ${escapeHtml(c.system_detail||'')}
+        </div>`:''}
+        <button class="btn btn-ghost btn-sm" style="margin-top:6px;font-size:11px" onclick="toggleRatingNoteForm('${c.key}')">${editLabel}</button>
         <div id="rn-form-${c.key}" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:8px;max-width:340px">
+          ${c.kind!=='manual'?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px">This category is normally computed automatically. Only override it when there's a documented reason the computed value is wrong — the override ages out after ${r.window_days} days like any other entry.</div>`:''}
           <div class="form-group" style="margin-bottom:8px">
             <label class="form-label" style="font-size:11px">Rating</label>
-            <select id="rn-stars-${c.key}" class="form-control">${starSelectOptions(6)}</select>
+            <select id="rn-stars-${c.key}" class="form-control">${starSelectOptions(currentStars)}</select>
           </div>
           <div class="form-group" style="margin-bottom:8px">
             <label class="form-label" style="font-size:11px">Date</label>
@@ -5242,9 +5248,9 @@ function renderRatingDetail(r, notes){
             <label class="form-label" style="font-size:11px">Note (required)</label>
             <textarea id="rn-note-${c.key}" class="form-control" rows="2" placeholder="What happened — dated and sourced"></textarea>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="submitRatingNote('${c.key}')">Save observation</button>
+          <button class="btn btn-primary btn-sm" onclick="submitRatingNote('${c.key}')">Save</button>
         </div>
-        ${renderRatingNoteHistory(notes.filter(n=>n.category===c.key))}`:''}
+        ${renderRatingNoteHistory(notes.filter(n=>n.category===c.key))}
       </td>
     </tr>`;
   });
