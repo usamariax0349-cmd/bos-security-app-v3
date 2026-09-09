@@ -430,9 +430,14 @@ def compute_guard_rating(db, guard_id, as_of=None):
     all_time_completed = db.execute(
         'SELECT COUNT(*) FROM shifts WHERE guard_id=? AND cancelled=0 AND clock_out_at IS NOT NULL',
         (guard_id,)).fetchone()[0]
-    if all_time_completed < RATING_MIN_SHIFTS:
-        return {'guard_id': guard_id, 'name': guard['name'], 'unrated': True,
-                'all_time_completed': all_time_completed, 'min_shifts': RATING_MIN_SHIFTS}
+    # Below the shift threshold the OVERALL rating/tier is suppressed further
+    # down (too small a sample to mean anything) — but categories are still
+    # computed and returned, because the manual categories (uniform, service,
+    # paperwork, conduct, versatility) have nothing to do with shift count at
+    # all. An admin needs to be able to log a dated observation about a
+    # brand-new guard from day one; that history is then already in place by
+    # the time the guard clears the threshold and gets a real overall rating.
+    below_min_shifts = all_time_completed < RATING_MIN_SHIFTS
 
     leave_rows = RL(db.execute(
         'SELECT start_date,end_date FROM guard_leave WHERE guard_id=?', (guard_id,)).fetchall())
@@ -630,11 +635,18 @@ def compute_guard_rating(db, guard_id, as_of=None):
                                            ', '.join(RATING_CATEGORY_LABELS[k] for k in critical))
     if not suggested_actions: suggested_actions.append('No action needed — keep at current allocation level.')
 
-    tier = rating_tier(overall)
+    # Below RATING_MIN_SHIFTS, suppress the overall number/tier/trend
+    # entirely regardless of what individual categories computed — a single
+    # manual observation on a guard with zero shifts must never produce a
+    # misleading "5.0 stars, Tier 1" from a sample of one.
+    if below_min_shifts:
+        overall = None; prev_overall = None; trend = 'flat'; trend_delta = 0
+    tier = 'Unrated' if below_min_shifts else rating_tier(overall)
     tier5_plan = RATING_TIER5_QUESTIONS if tier == 'Tier 5 — Review' else None
 
     return {
-        'guard_id': guard_id, 'name': guard['name'], 'unrated': False,
+        'guard_id': guard_id, 'name': guard['name'], 'unrated': below_min_shifts,
+        'all_time_completed': all_time_completed, 'min_shifts': RATING_MIN_SHIFTS,
         'overall': overall, 'overall_label': stars_label(overall), 'overall_decimal': round(overall/2, 1) if overall is not None else None,
         'tier': tier, 'trend': trend, 'trend_delta': trend_delta, 'prev_overall': prev_overall,
         'window_days': RATING_WINDOW_DAYS,
@@ -662,7 +674,6 @@ def compute_guard_rating(db, guard_id, as_of=None):
         'suggested_actions': suggested_actions,
         'thin_data': thin,
         'tier5_plan': tier5_plan,
-        'all_time_completed': all_time_completed,
     }
 
 # ─── Database ─────────────────────────────────────────────────────────────────
