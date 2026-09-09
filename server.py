@@ -1605,6 +1605,25 @@ def availability_conflict(conn, guard_id, date, start_time):
         return f"guard said Free from {a['available_from']}, shift starts {start_time}"
     return None
 
+def client_eligible_guards(conn, site_id):
+    """Guards a CLIENT (not admin) may assign to their own site: anyone
+    who's actually worked there in the last 90 days, or whom an admin has
+    explicitly marked 'preferred' for it — minus anyone admin has
+    blacklisted from it. Never the full company roster; mirrors the exact
+    scoping /api/client/guards already uses for read access, so a client
+    can't see or pick guards who have nothing to do with their site."""
+    return RL(conn.execute('''
+        SELECT DISTINCT g.id, g.name, g.license_number
+        FROM guards g
+        WHERE g.active=1 AND (
+            g.id IN (SELECT guard_id FROM shifts
+                     WHERE site_id=? AND cancelled=0 AND shift_date >= date('now','-90 days'))
+            OR g.id IN (SELECT guard_id FROM guard_site_prefs WHERE site_id=? AND pref='preferred')
+        )
+        AND g.id NOT IN (SELECT guard_id FROM guard_site_prefs WHERE site_id=? AND pref='blacklist')
+        ORDER BY g.name
+    ''', (site_id, site_id, site_id)).fetchall())
+
 def match_faq(conn, body):
     """First active FAQ (by sort_order) whose keyword list has a hit in body,
     matched case-insensitively as a plain substring. None if nothing matches."""
@@ -2272,6 +2291,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 FROM incidents i JOIN guards g ON g.id=i.guard_id JOIN sites s ON s.id=i.site_id
                 WHERE i.site_id IN ({ph}) ORDER BY i.occurred_at DESC''', site_ids).fetchall())
             db.close(); self.send_json(rows); return
+
+        # ── Client portal: self-service site & shift management ──────────────
+        if path == '/api/client/site-guards':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_id = qs.get('site_id',[None])[0]
+            if not site_id or site_id not in self.client_site_ids(s3['admin_id']):
+                self.err('Not your site', 403); return
+            db = get_db()
+            rows = client_eligible_guards(db, site_id)
+            db.close(); self.send_json(rows); return
+
+        if path == '/api/client/site-shifts':
+            s3 = self.require_client()
+            if s3 is None: return
+            site_id = qs.get('site_id',[None])[0]
+            if not site_id or site_id not in self.client_site_ids(s3['admin_id']):
+                self.err('Not your site', 403); return
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT sh.*, g.name as guard_name FROM shifts sh JOIN guards g ON g.id=sh.guard_id
+                WHERE sh.site_id=? AND sh.cancelled=0 AND sh.shift_date >= date('now','-7 days')
+                ORDER BY sh.shift_date, sh.start_time''', (site_id,)).fetchall())
+            db.close()
+            self.send_json(with_shift_status(rows)); return
 
         if path == '/api/client/submissions':
             s3 = self.require_client()
@@ -3037,6 +3081,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        f"{gs0['name']} has triggered an emergency alert in the Guard Portal.\n\n"
                        f"Location: {maps_link}\n\nPlease respond immediately.")
             self.send_json({'ok':True, 'id':aid}, 201); return
+
+        # ── Client portal: self-service shift creation ────────────────────────
+        # New shifts a client books land un-published, exactly like a shift an
+        # admin creates by hand — nothing reaches the guard (no email/push)
+        # until someone on staff runs the existing Publish step. That keeps a
+        # real human in the loop before a guard is ever notified, without
+        # requiring a second, parallel approval system: it's the same queue
+        # admin already reviews every time they build a roster.
+        if path == '/api/client/shifts':
+            s3 = self.require_client()
+            if s3 is None: return
+            for f in ['site_id','guard_id','shift_date','start_time']:
+                if not data.get(f): self.err(f'{f} required'); return
+            if data['site_id'] not in self.client_site_ids(s3['admin_id']):
+                self.err('Not your site', 403); return
+            if data['shift_date'] < datetime.now().strftime('%Y-%m-%d'):
+                self.err('Cannot schedule a shift in the past'); return
+            db = get_db()
+            eligible = {g['id'] for g in client_eligible_guards(db, data['site_id'])}
+            if data['guard_id'] not in eligible:
+                db.close(); self.err('That guard is not available to be booked at this site'); return
+            conflict = availability_conflict(db, data['guard_id'], data['shift_date'], data['start_time'])
+            if conflict:
+                db.close(); self.err(f'Cannot book this guard: {conflict}'); return
+            shid = str(uuid.uuid4())
+            db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
+                          position,notes,created_by,published) VALUES (?,?,?,?,?,?,?,?,?,0)''',
+                       (shid, data['guard_id'], data['site_id'], data['shift_date'], data['start_time'],
+                        data.get('end_time',''), data.get('position',''), data.get('notes',''),
+                        f"client:{s3['name']}"))
+            audit(db, {'admin_id':s3['admin_id'],'name':s3['name']}, 'CLIENT_SHIFT_CREATE',
+                  f"{data['shift_date']} {data['start_time']}-{data.get('end_time') or 'Required'} site={data['site_id']}")
+            db.commit()
+            row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id WHERE sh.id=?''', (shid,)).fetchone())])[0]
+            db.close(); self.send_json(row, 201); return
 
         # ── Guard-authenticated below — but only for /api/guard/* paths, so a
         # request for anything else (admin routes included) is left alone to
@@ -3969,6 +4049,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         data = self.read_json()
 
+        # ── Client portal: self-service site & shift editing — handled before
+        # the blanket require_admin() below, which would otherwise reject a
+        # client session outright (role=='client' is explicitly excluded from
+        # admin routes) ──
+        m = re.match(r'^/api/client/sites/([^/]+)$', path)
+        if m:
+            s3 = self.require_client()
+            if s3 is None: return
+            if m.group(1) not in self.client_site_ids(s3['admin_id']):
+                self.err('Not your site', 403); return
+            updates=[]; params=[]
+            # Deliberately narrow: contact/location details only. Not the site
+            # name (matching/reporting elsewhere key off it), not the billing
+            # rate, not active/deactivate — those stay decisions for the
+            # security company, not something a client toggles unilaterally.
+            for f in ('address','contact_name','contact_phone'):
+                if f in data: updates.append(f'{f}=?'); params.append(data[f])
+            if updates:
+                params.append(m.group(1))
+                db = get_db()
+                db.execute(f"UPDATE sites SET {','.join(updates)} WHERE id=?", params)
+                audit(db, {'admin_id':s3['admin_id'],'name':s3['name']}, 'CLIENT_SITE_UPDATE', m.group(1))
+                db.commit()
+                row = R(db.execute('SELECT * FROM sites WHERE id=?', (m.group(1),)).fetchone())
+                db.close(); self.send_json(row); return
+            self.err('Nothing to update'); return
+
+        m = re.match(r'^/api/client/shifts/([^/]+)$', path)
+        if m:
+            s3 = self.require_client()
+            if s3 is None: return
+            db = get_db()
+            sh = R(db.execute('SELECT * FROM shifts WHERE id=?', (m.group(1),)).fetchone())
+            if not sh or sh['site_id'] not in self.client_site_ids(s3['admin_id']):
+                db.close(); self.err('Shift not found', 404); return
+            if sh['cancelled']:
+                db.close(); self.err('This shift has been cancelled', 400); return
+            if sh.get('clock_in_at'):
+                db.close(); self.err('This shift is already underway or completed — contact the office to change it', 400); return
+            new_guard = data.get('guard_id', sh['guard_id'])
+            new_date  = data.get('shift_date', sh['shift_date'])
+            new_start = data.get('start_time', sh['start_time'])
+            reassigned = (new_guard != sh['guard_id']) or (new_date != sh['shift_date']) or (new_start != sh['start_time'])
+            if reassigned:
+                if new_date < datetime.now().strftime('%Y-%m-%d'):
+                    db.close(); self.err('Cannot move a shift into the past'); return
+                eligible = {g['id'] for g in client_eligible_guards(db, sh['site_id'])}
+                if new_guard not in eligible:
+                    db.close(); self.err('That guard is not available to be booked at this site'); return
+                conflict = availability_conflict(db, new_guard, new_date, new_start)
+                if conflict:
+                    db.close(); self.err(f'Cannot book this guard: {conflict}'); return
+            updates = ['guard_id=?','shift_date=?','start_time=?']
+            params = [new_guard, new_date, new_start]
+            if 'end_time' in data: updates.append('end_time=?'); params.append(data['end_time'])
+            if 'position' in data: updates.append('position=?'); params.append(data['position'])
+            if 'notes' in data: updates.append('notes=?'); params.append(data['notes'])
+            # A change that affects who/when needs the guard notified again —
+            # same re-publish step a same-guard admin edit would trigger, so
+            # this doesn't invent a second notification path.
+            if reassigned: updates.append('published=0')
+            params.append(m.group(1))
+            db.execute(f"UPDATE shifts SET {','.join(updates)} WHERE id=?", params)
+            audit(db, {'admin_id':s3['admin_id'],'name':s3['name']}, 'CLIENT_SHIFT_EDIT',
+                  f"{m.group(1)}: guard {sh['guard_id']}→{new_guard}" if reassigned else m.group(1))
+            db.commit()
+            row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name FROM shifts sh
+                JOIN guards g ON g.id=sh.guard_id WHERE sh.id=?''', (m.group(1),)).fetchone())])[0]
+            db.close(); self.send_json(row); return
+
         s = self.require_admin()
         if s is None: return
         if s.get('must_change_password'):
@@ -4216,6 +4366,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # ── DELETE ─────────────────────────────────────────────────────────────────
     def do_DELETE(self):
         path = urlparse(self.path).path
+
+        # Client portal: cancel a shift at their own site. A soft cancel
+        # (cancelled=1), same as the admin path — never a hard delete, so the
+        # record stays for audit/reporting. No separate notification here
+        # either, matching the admin cancel flow exactly: this app doesn't
+        # push/email a guard on cancellation today, staff or client-driven.
+        m = re.match(r'^/api/client/shifts/([^/]+)$', path)
+        if m:
+            s3 = self.require_client()
+            if s3 is None: return
+            db = get_db()
+            sh = R(db.execute('SELECT * FROM shifts WHERE id=?', (m.group(1),)).fetchone())
+            if not sh or sh['site_id'] not in self.client_site_ids(s3['admin_id']):
+                db.close(); self.err('Shift not found', 404); return
+            if sh.get('clock_in_at'):
+                db.close(); self.err('This shift is already underway or completed — contact the office to cancel it', 400); return
+            db.execute('UPDATE shifts SET cancelled=1 WHERE id=?', (m.group(1),))
+            audit(db, {'admin_id':s3['admin_id'],'name':s3['name']}, 'CLIENT_SHIFT_CANCEL', m.group(1))
+            db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         # Admin delete — superadmin only, cannot delete self
         m = re.match(r'^/api/admins/([^/]+)$', path)
