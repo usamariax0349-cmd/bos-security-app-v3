@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <title>Brown Owl Security</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1a2744">
@@ -40,6 +40,7 @@
   --dur-fast:.15s;--dur-base:.22s;--dur-slow:.36s
 }
 html,body{height:100%;font-family:var(--font-body);background:var(--bg);color:var(--text);font-size:15px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{padding-bottom:env(safe-area-inset-bottom)}
 h1,h2,h3,.font-display{font-family:var(--font-display)}
 button{cursor:pointer;border:none;font-family:inherit;font-size:14px;font-weight:600}
 input,select,textarea{font-family:inherit;font-size:14px;width:100%}
@@ -60,6 +61,7 @@ a{color:var(--navy);text-decoration:none}
 @keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes popIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(16px) scale(.96)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes toastInMobile{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 
 #guard-page:not(.hidden),#login-page:not(.hidden),#admin-page:not(.hidden),#client-page:not(.hidden){animation:fadeIn var(--dur-slow) var(--ease-out)}
 .modal-overlay:not(.hidden){animation:overlayIn var(--dur-base) var(--ease-out)}
@@ -155,7 +157,9 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 #lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:24px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
 /* Table */
-.tbl-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh);-webkit-overflow-scrolling:touch;
+  background-image:linear-gradient(to right,#fff 30%,rgba(255,255,255,0)),linear-gradient(to right,rgba(255,255,255,0),#fff 70%) 100% 0,radial-gradient(farthest-side at 0 50%,rgba(15,23,42,.16),rgba(15,23,42,0)),radial-gradient(farthest-side at 100% 50%,rgba(15,23,42,.16),rgba(15,23,42,0)) 100% 0;
+  background-repeat:no-repeat;background-color:#fff;background-size:24px 100%,24px 100%,10px 100%,10px 100%;background-attachment:local,local,scroll,scroll}
 table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
 th{background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -202,16 +206,20 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .filter-bar select,.filter-bar input{background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:auto;min-width:120px}
 
 /* Topbar */
-.topbar{background:linear-gradient(180deg,var(--navy-l),var(--navy));padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:62px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.28);border-bottom:1px solid rgba(232,199,106,.22)}
-.topbar-brand{display:flex;align-items:center;gap:12px;color:#fff}
-.topbar-logo{width:36px;height:36px;border-radius:8px;object-fit:cover;box-shadow:0 0 0 1px rgba(232,199,106,.3)}
-.brand-name{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.15px}
-.brand-sub{font-size:10.5px;color:var(--gold-l);font-weight:600;text-transform:uppercase;letter-spacing:.09em}
-.topbar-actions{display:flex;align-items:center;gap:8px}
-.topbar-user{color:rgba(255,255,255,.8);font-size:13px}
+.topbar{background:linear-gradient(180deg,var(--navy-l),var(--navy));padding:0 20px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px;height:62px;flex-wrap:nowrap;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.28);border-bottom:1px solid rgba(232,199,106,.22)}
+.topbar-brand{display:flex;align-items:center;gap:12px;color:#fff;min-width:0;flex:1 1 auto}
+.topbar-brand-text{min-width:0;overflow:hidden}
+.topbar-logo{width:36px;height:36px;border-radius:8px;object-fit:cover;box-shadow:0 0 0 1px rgba(232,199,106,.3);flex-shrink:0}
+.brand-name{font-family:var(--font-display);font-weight:600;font-size:16px;letter-spacing:.15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-sub{font-size:10.5px;color:var(--gold-l);font-weight:600;text-transform:uppercase;letter-spacing:.09em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.topbar-user{color:rgba(255,255,255,.8);font-size:13px;white-space:nowrap;max-width:30vw;overflow:hidden;text-overflow:ellipsis}
+.topbar-icon-btn{display:inline-flex;align-items:center;gap:6px}
 
 /* Tabs */
-.tabs{display:flex;gap:2px;padding:0 20px;background:var(--navy-d);overflow-x:auto;scrollbar-width:none}
+.tabs{display:flex;gap:2px;padding:0 20px;background:var(--navy-d);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  background-image:linear-gradient(to right,var(--navy-d) 30%,rgba(15,23,42,0)),linear-gradient(to right,rgba(15,23,42,0),var(--navy-d) 70%) 100% 0,radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.35),rgba(0,0,0,0)),radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.35),rgba(0,0,0,0)) 100% 0;
+  background-repeat:no-repeat;background-color:var(--navy-d);background-size:24px 100%,24px 100%,10px 100%,10px 100%;background-attachment:local,local,scroll,scroll}
 .tabs::-webkit-scrollbar{display:none}
 .tab-btn{padding:12px 16px;background:none;border:none;color:rgba(255,255,255,.5);font-size:13px;font-weight:600;white-space:nowrap;border-bottom:3px solid transparent;transition:all .2s;cursor:pointer}
 .tab-btn:hover{color:rgba(255,255,255,.8)}
@@ -443,7 +451,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 #avail-table.avail-few th:first-child,#avail-table.avail-few td:first-child{width:100%}
 #avail-table.avail-few th:not(:first-child),#avail-table.avail-few td:not(:first-child){width:190px}
 .sched-range-label{font-weight:700;color:var(--navy);font-size:14px;padding:0 6px}
-.sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh)}
+.sched-grid-wrap{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh);-webkit-overflow-scrolling:touch;
+  background-image:linear-gradient(to right,#fff 30%,rgba(255,255,255,0)),linear-gradient(to right,rgba(255,255,255,0),#fff 70%) 100% 0,radial-gradient(farthest-side at 0 50%,rgba(15,23,42,.16),rgba(15,23,42,0)),radial-gradient(farthest-side at 100% 50%,rgba(15,23,42,.16),rgba(15,23,42,0)) 100% 0;
+  background-repeat:no-repeat;background-color:#fff;background-size:24px 100%,24px 100%,10px 100%,10px 100%;background-attachment:local,local,scroll,scroll}
 .sched-grid{display:grid;grid-template-columns:170px repeat(7,minmax(130px,1fr));background:#fff;min-width:900px}
 .sched-head-cell{background:var(--navy);color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:10px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.12)}
 .sched-head-cell .shd{font-size:10px;font-weight:600;opacity:.6;margin-top:1px}
@@ -569,6 +579,13 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 ════════════════════════════════════════ */
 #client-page{min-height:100vh;background:var(--bg)}
 
+/* ════════════════════════════════════════
+   MOBILE STABILITY
+   iOS Safari auto-zooms on focusing any input under 16px, and a stray
+   horizontal scrollbar or a topbar that wraps to 3 lines reads as "broken"
+   rather than just "cramped" — these rules target exactly those failure
+   modes rather than a general narrow-viewport reflow (handled above).
+════════════════════════════════════════ */
 @media(max-width:640px){
   .form-row,.form-row-3{grid-template-columns:1fr}
   .stats-grid{grid-template-columns:1fr 1fr}
@@ -576,6 +593,36 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   .tab-content{padding:16px}
   .section-body{padding:14px}
   th,td{padding:8px 10px}
+
+  /* 16px minimum stops iOS Safari's focus-zoom, which otherwise yanks the
+     whole viewport in and out on every field tap. */
+  input,select,textarea,.form-control{font-size:16px}
+
+  /* Comfortable tap targets (Apple HIG / Material both call for ~44px). */
+  .btn{min-height:42px}
+  .btn-sm{min-height:36px;padding:7px 14px}
+  .tab-btn{padding:13px 15px;font-size:12.5px}
+  .avail-mini{opacity:1;width:22px;height:22px}
+
+  .topbar{height:auto;min-height:58px;padding-top:8px;padding-bottom:8px}
+  .topbar-brand{gap:9px}
+  .topbar-logo,#admin-logo-emoji svg,#client-logo-emoji svg{width:30px;height:30px}
+  .brand-name{font-size:14px;max-width:46vw}
+  .brand-sub{font-size:9.5px}
+  .topbar-actions{gap:4px}
+  .topbar-icon-btn{padding:8px 10px}
+  .topbar-icon-btn .tb-label{display:none}
+  .topbar-user{display:none}
+
+  .modal-overlay{padding:12px;padding-bottom:max(12px,env(safe-area-inset-bottom))}
+
+  #toast{left:12px;right:12px;width:auto;max-width:none;transform:translateY(16px) scale(.96);white-space:normal;text-align:center;bottom:max(16px,env(safe-area-inset-bottom))}
+  #toast.show{animation:toastInMobile var(--dur-base) var(--ease-spring) forwards}
+}
+
+@media(max-width:400px){
+  .stats-grid{grid-template-columns:1fr}
+  .stat-icon{width:40px;height:40px;font-size:19px}
 }
 </style>
 </head>
@@ -961,17 +1008,17 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
         </svg>
       </span>
-      <div>
+      <div class="topbar-brand-text">
         <div class="brand-name" id="topbar-company">Brown Owl Security</div>
         <div class="brand-sub" id="topbar-user-info">Admin Dashboard</div>
       </div>
     </div>
     <div class="topbar-actions">
-      <label class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);cursor:pointer" title="Upload logo">
-        🖼 Logo<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this)">
+      <label class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);cursor:pointer" title="Upload logo">
+        <span class="tb-icon">🖼</span><span class="tb-label">Logo</span><input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this)">
       </label>
-      <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="showChangePw()">🔑</button>
-      <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()">Logout</button>
+      <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="showChangePw()" title="Change password"><span class="tb-icon">🔑</span></button>
+      <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()" title="Logout"><span class="tb-icon">⎋</span><span class="tb-label">Logout</span></button>
     </div>
   </div>
 
@@ -1550,11 +1597,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <text x="50" y="58" font-family="Georgia,'Times New Roman',serif" font-weight="700" font-size="34" fill="#e8c76a" text-anchor="middle">B</text>
         </svg>
       </span>
-      <div><div class="brand-name" id="client-topbar-company">Brown Owl Security</div><div class="brand-sub">Client Portal</div></div>
+      <div class="topbar-brand-text"><div class="brand-name" id="client-topbar-company">Brown Owl Security</div><div class="brand-sub">Client Portal</div></div>
     </div>
     <div class="topbar-actions">
       <span class="topbar-user" id="client-topbar-user"></span>
-      <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()">Logout</button>
+      <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()" title="Logout"><span class="tb-icon">⎋</span><span class="tb-label">Logout</span></button>
     </div>
   </div>
   <div class="tabs" id="client-tabs">
