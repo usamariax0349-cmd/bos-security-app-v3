@@ -309,6 +309,37 @@ TICKET_CATEGORIES = {
     'equipment': 'Uniform / Equipment', 'leave': 'Leave / Availability', 'other': 'Something Else',
 }
 
+# The guard support bot's knowledge base — one flat list of (section, key,
+# label) so the admin screen can render grouped fields without a fixed
+# schema per field. Every key here gets seeded with an empty value on first
+# run, so GET /api/bot/knowledge-base always returns the full field list
+# (populated or not) rather than only whatever's been filled in.
+BOT_KB_FIELDS = [
+    ('Contacts', 'contact_office_phone', 'Office phone / hours'),
+    ('Contacts', 'contact_payroll_email', 'Payroll email'),
+    ('Contacts', 'contact_roster_email', 'Roster / allocations contact'),
+    ('Contacts', 'contact_afterhours_phone', 'After-hours / urgent number'),
+    ('Contacts', 'contact_incident_email', 'Incident reporting email or form'),
+    ('Pay', 'pay_cycle_cutoff', 'Pay cycle and cut-off'),
+    ('Pay', 'pay_payment_day', 'Payment day'),
+    ('Pay', 'pay_payslip_access', 'Payslip access'),
+    ('Pay', 'pay_rate_table', 'Rate table by classification and day type'),
+    ('Pay', 'pay_allowances', 'Allowance list and amounts'),
+    ('Pay', 'pay_super_fund', 'Super fund default and contribution rate'),
+    ('Roster', 'roster_system', 'Roster system / app and how guards log in'),
+    ('Roster', 'roster_timesheet_approval', 'Timesheet approval process'),
+    ('Roster', 'roster_leave_notice', 'Leave request notice period'),
+    ('Roster', 'roster_sick_callin', 'Sick call-in procedure and minimum notice'),
+    ('Roster', 'roster_swap_rules', 'Shift swap rules'),
+    ('Shift offers', 'offers_channel', 'How offers are sent (SMS / app / portal)'),
+    ('Shift offers', 'offers_expiry', 'How long an offer stays open'),
+    ('Shift offers', 'offers_cancellation_notice', 'Cancellation notice expected from guards'),
+    ('Compliance', 'compliance_licence_classes', 'Licence classes Brown Owl engages'),
+    ('Compliance', 'compliance_tickets_required', 'Tickets required per work type'),
+    ('Compliance', 'compliance_uniform_standard', 'Uniform standard per site type'),
+    ('Compliance', 'compliance_incident_procedure', 'Incident reporting procedure and timeframe'),
+]
+
 def notify_guard_status_change(guard, new_status):
     """Email the guard when an ADMIN action changes their query status.
     Deliberately never called from the guard's own message-send path —
@@ -608,6 +639,18 @@ def init_db():
             sort_order INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- Flat key/value store for the guard support bot's knowledge base
+        -- (contacts, pay-cycle info, rate table, roster rules, etc. — the
+        -- fields the bot's system prompt references but can't know on its
+        -- own). Deliberately not a rigid schema: these are one-off admin-
+        -- filled facts, not records with their own lifecycle.
+        CREATE TABLE IF NOT EXISTS bot_knowledge_base (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL DEFAULT '',
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_by TEXT
+        );
     ''')
     conn.commit()
 
@@ -763,6 +806,15 @@ def init_db():
         # list (see TICKET_CATEGORIES), set once when the ticket is opened.
         ("guard_query_status", "ticket_number", "ALTER TABLE guard_query_status ADD COLUMN ticket_number INTEGER"),
         ("guard_query_status", "category",      "ALTER TABLE guard_query_status ADD COLUMN category TEXT"),
+        # Per-venue facts the guard support bot needs on hand (entry point,
+        # parking, uniform, sign-in method) — kept on the site record itself
+        # rather than a separate directory, so there's one place admins keep
+        # site info current instead of two that can drift apart.
+        ("sites", "entry_point",    "ALTER TABLE sites ADD COLUMN entry_point TEXT DEFAULT ''"),
+        ("sites", "parking_note",   "ALTER TABLE sites ADD COLUMN parking_note TEXT DEFAULT ''"),
+        ("sites", "uniform_note",   "ALTER TABLE sites ADD COLUMN uniform_note TEXT DEFAULT ''"),
+        ("sites", "sign_in_method", "ALTER TABLE sites ADD COLUMN sign_in_method TEXT DEFAULT ''"),
+        ("sites", "bot_notes",      "ALTER TABLE sites ADD COLUMN bot_notes TEXT DEFAULT ''"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -939,6 +991,8 @@ def init_db():
     conn.commit()
 
     conn.execute('INSERT OR IGNORE INTO ticket_counter (id, next_number) VALUES (1, 1001)')
+    for _, key, _ in BOT_KB_FIELDS:
+        conn.execute('INSERT OR IGNORE INTO bot_knowledge_base (key, value) VALUES (?, ?)', (key, ''))
     conn.commit()
 
     # One-time VAPID keypair generation for Web Push — see push_config above.
@@ -2325,6 +2379,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             rows = RL(db.execute('SELECT * FROM faqs ORDER BY sort_order').fetchall())
             db.close(); self.send_json(rows); return
 
+        if path == '/api/bot/knowledge-base':
+            db = get_db()
+            rows = {r['key']: r['value'] for r in db.execute('SELECT key,value FROM bot_knowledge_base').fetchall()}
+            db.close()
+            self.send_json({'fields': [{'section':sec,'key':k,'label':lbl,'value':rows.get(k,'')}
+                                        for sec,k,lbl in BOT_KB_FIELDS]}); return
+
         if path == '/api/admins':
             s2 = self.require_admin('administrator')
             if not s2: return
@@ -3167,12 +3228,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.err('name and client_name required'); return
             sid = str(uuid.uuid4()); db = get_db()
             db.execute('''INSERT INTO sites
-                (id,name,client_name,address,default_rate,contact_name,contact_phone,lat,lng,geofence_radius)
-                VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (id,name,client_name,address,default_rate,contact_name,contact_phone,lat,lng,geofence_radius,
+                 entry_point,parking_note,uniform_note,sign_in_method,bot_notes)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                        (sid,data['name'],data['client_name'],data.get('address',''),
                         float(data.get('default_rate',0)),
                         data.get('contact_name',''),data.get('contact_phone',''),
-                        data.get('lat'), data.get('lng'), int(data.get('geofence_radius') or 200)))
+                        data.get('lat'), data.get('lng'), int(data.get('geofence_radius') or 200),
+                        data.get('entry_point',''), data.get('parking_note',''),
+                        data.get('uniform_note',''), data.get('sign_in_method',''), data.get('bot_notes','')))
             db.commit()
             audit(db, s, 'SITE_CREATE', data['name']); db.commit()
             site = R(db.execute('SELECT * FROM sites WHERE id=?',(sid,)).fetchone()); db.close()
@@ -3350,6 +3414,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                        (fid, data['question'].strip(), data['keywords'].strip(), data['answer'].strip(), n))
             audit(db, s2, 'FAQ_CREATE', data['question'].strip()); db.commit(); db.close()
             self.send_json({'id':fid,'ok':True}, 201); return
+
+        if path == '/api/bot/knowledge-base':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            fields = data.get('fields')
+            if not isinstance(fields, dict):
+                self.err('fields (object of key->value) required'); return
+            valid_keys = {k for _,k,_ in BOT_KB_FIELDS}
+            db = get_db()
+            now = datetime.now().isoformat()
+            for key, value in fields.items():
+                if key not in valid_keys: continue
+                db.execute('''INSERT INTO bot_knowledge_base (key,value,updated_at,updated_by) VALUES (?,?,?,?)
+                              ON CONFLICT(key) DO UPDATE SET value=excluded.value,
+                                  updated_at=excluded.updated_at, updated_by=excluded.updated_by''',
+                           (key, (value or '').strip(), now, s2['name']))
+            audit(db, s2, 'BOT_KB_UPDATE', f"{len(fields)} field(s)"); db.commit(); db.close()
+            self.send_json({'ok':True}); return
 
         if path == '/api/submissions/bulk':
             s2 = self.require_admin('manager')
@@ -3565,11 +3647,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not s2: return
             db = get_db()
             db.execute('''UPDATE sites SET name=?,client_name=?,address=?,default_rate=?,
-                          contact_name=?,contact_phone=?,active=?,lat=?,lng=?,geofence_radius=? WHERE id=?''',
+                          contact_name=?,contact_phone=?,active=?,lat=?,lng=?,geofence_radius=?,
+                          entry_point=?,parking_note=?,uniform_note=?,sign_in_method=?,bot_notes=? WHERE id=?''',
                        (data.get('name'),data.get('client_name'),data.get('address'),
                         float(data.get('default_rate',0)),data.get('contact_name'),
                         data.get('contact_phone'),int(data.get('active',1)),
                         data.get('lat'), data.get('lng'), int(data.get('geofence_radius') or 200),
+                        data.get('entry_point',''), data.get('parking_note',''),
+                        data.get('uniform_note',''), data.get('sign_in_method',''), data.get('bot_notes',''),
                         m.group(1)))
             db.commit()
             audit(db, s, 'SITE_UPDATE', data.get('name','')); db.commit()

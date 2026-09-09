@@ -899,6 +899,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div class="tab-dropdown-menu hidden" id="org-menu">
         <button class="tab-dropdown-item" data-tab="guards" onclick="selectOrgTab('guards')">👮 Guards</button>
         <button class="tab-dropdown-item" data-tab="sites" onclick="selectOrgTab('sites')">📍 Sites</button>
+        <button class="tab-dropdown-item" data-tab="botkb" onclick="selectOrgTab('botkb')">🤖 Bot Knowledge Base</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1096,6 +1097,24 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <tbody id="sites-tbody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- BOT KNOWLEDGE BASE -->
+    <div id="tab-botkb" class="tab-content">
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">🤖 Guard Support Bot — Knowledge Base</span>
+          <button class="btn btn-primary btn-sm" onclick="saveBotKb()">Save Changes</button>
+        </div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          These are the facts the guard support bot needs but can't know on its own — office contacts, pay-cycle
+          details, roster rules, and compliance info. Anything left blank here, the bot will flag to the guard as
+          "not certain of the company-specific version" rather than guessing. Per-venue details (entry point,
+          parking, uniform, sign-in) are set on each site individually under
+          <a href="#" onclick="selectOrgTab('sites');return false">Sites</a>.
+        </p>
+        <div id="botkb-form" style="padding:0 20px 20px"></div>
       </div>
     </div>
 
@@ -1596,6 +1615,18 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <div class="form-group"><label class="form-label">Contact Name</label><input id="sm-cname" class="form-control" placeholder="Site contact"></div>
       </div>
       <div class="form-group"><label class="form-label">Contact Phone</label><input id="sm-cphone" class="form-control" placeholder="Contact number"></div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <div class="form-label" style="margin-bottom:8px">🤖 Details for the Guard Support Bot</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Shown to guards when they ask "where do I report?" for this site — keep it current.</p>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Entry Point</label><input id="sm-entry" class="form-control" placeholder="e.g. Staff entrance, Level 1"></div>
+        <div class="form-group"><label class="form-label">Parking / Public Transport</label><input id="sm-parking" class="form-control" placeholder="e.g. Street parking on Smith St"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Uniform</label><input id="sm-uniform" class="form-control" placeholder="e.g. Full black, high-vis vest"></div>
+        <div class="form-group"><label class="form-label">Sign-In Method</label><input id="sm-signin" class="form-control" placeholder="e.g. App sign-in, site register"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Other Notes</label><textarea id="sm-botnotes" class="form-control" rows="2" placeholder="Anything else a guard should know before their first shift here"></textarea></div>
       <div class="form-group" id="sm-active-wrap" style="display:none">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="sm-active"><span class="form-label" style="margin:0">Active</span>
@@ -2695,9 +2726,10 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
+  else if(name==='botkb')  loadBotKb();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -4811,6 +4843,40 @@ async function loadSitesAdmin(){
   try{ allSitesAdmin = await apiFetch('/api/sites'); renderSitesTable(); }
   catch(e){ toast(e.message,'error'); }
 }
+// ── Bot Knowledge Base ───────────────────────────────────────────────────────
+async function loadBotKb(){
+  const box = document.getElementById('botkb-form');
+  box.innerHTML = `<p style="color:var(--muted);font-size:13px">Loading…</p>`;
+  try{
+    const {fields} = await apiFetch('/api/bot/knowledge-base');
+    const sections = [];
+    fields.forEach(f=>{
+      let sec = sections.find(s=>s.name===f.section);
+      if(!sec){ sec = {name:f.section, fields:[]}; sections.push(sec); }
+      sec.fields.push(f);
+    });
+    box.innerHTML = sections.map(sec => `
+      <div class="section" style="margin-bottom:16px;box-shadow:none;border:1px solid var(--border)">
+        <div class="section-head"><span class="section-title" style="font-size:14px">${sec.name}</span></div>
+        <div style="padding:0 20px 16px;display:flex;flex-direction:column;gap:12px">
+          ${sec.fields.map(f=>`
+            <div class="form-group" style="margin:0">
+              <label class="form-label">${f.label}</label>
+              <textarea class="form-control botkb-input" data-key="${f.key}" rows="2">${escapeHtml(f.value||'')}</textarea>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+  }catch(e){ box.innerHTML = `<p style="color:var(--muted);font-size:13px">Could not load the knowledge base.</p>`; toast(e.message,'error'); }
+}
+async function saveBotKb(){
+  const inputs = document.querySelectorAll('.botkb-input');
+  const values = {};
+  inputs.forEach(el => values[el.dataset.key] = el.value);
+  try{
+    await apiFetch('/api/bot/knowledge-base', {method:'POST', body: JSON.stringify({fields: values})});
+    toast('Knowledge base saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
 function renderSitesTable(){
   const q=(document.getElementById('si-search').value||'').toLowerCase();
   const af=document.getElementById('si-active').value;
@@ -4835,7 +4901,8 @@ function renderSitesTable(){
 }
 function openSiteModal(){
   document.getElementById('site-modal-title').textContent='Add Site';
-  ['sm-id','sm-name','sm-client','sm-addr','sm-cname','sm-cphone','sm-lat','sm-lng'].forEach(id=>document.getElementById(id).value='');
+  ['sm-id','sm-name','sm-client','sm-addr','sm-cname','sm-cphone','sm-lat','sm-lng',
+   'sm-entry','sm-parking','sm-uniform','sm-signin','sm-botnotes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('sm-rate').value='0';
   document.getElementById('sm-radius').value='200';
   document.getElementById('sm-active-wrap').style.display='none';
@@ -4851,6 +4918,11 @@ function editSite(s){
   document.getElementById('sm-rate').value=s.default_rate||0;
   document.getElementById('sm-cname').value=s.contact_name||'';
   document.getElementById('sm-cphone').value=s.contact_phone||'';
+  document.getElementById('sm-entry').value=s.entry_point||'';
+  document.getElementById('sm-parking').value=s.parking_note||'';
+  document.getElementById('sm-uniform').value=s.uniform_note||'';
+  document.getElementById('sm-signin').value=s.sign_in_method||'';
+  document.getElementById('sm-botnotes').value=s.bot_notes||'';
   document.getElementById('sm-lat').value=s.lat??'';
   document.getElementById('sm-lng').value=s.lng??'';
   document.getElementById('sm-radius').value=s.geofence_radius||200;
@@ -4868,6 +4940,11 @@ async function saveSite(){
     default_rate:parseFloat(document.getElementById('sm-rate').value)||0,
     contact_name:document.getElementById('sm-cname').value,
     contact_phone:document.getElementById('sm-cphone').value,
+    entry_point:document.getElementById('sm-entry').value,
+    parking_note:document.getElementById('sm-parking').value,
+    uniform_note:document.getElementById('sm-uniform').value,
+    sign_in_method:document.getElementById('sm-signin').value,
+    bot_notes:document.getElementById('sm-botnotes').value,
     active:document.getElementById('sm-active').checked?1:0,
     lat: latV!==''?parseFloat(latV):null,
     lng: lngV!==''?parseFloat(lngV):null,
