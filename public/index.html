@@ -248,6 +248,36 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .tab-dropdown-item:hover{background:var(--bg)}
 .tab-dropdown-item.active{background:#eef2ff;color:var(--navy)}
 
+/* ════════════════════════════════════════
+   ADMIN MOBILE BOTTOM NAV
+   Desktop keeps the existing top .tabs bar and showTab() wiring untouched;
+   under the mobile breakpoint this replaces it with a 5-tab bottom bar,
+   with everything besides Home/Roster/Alerts/Inbox reached via "More".
+════════════════════════════════════════ */
+.admin-bottom-nav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:150;justify-content:space-around;
+  background:linear-gradient(180deg,var(--navy-l),var(--navy));border-top:1px solid rgba(232,199,106,.22);
+  padding:8px 6px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -2px 12px rgba(0,0,0,.2)}
+.abn-tab{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+  color:rgba(255,255,255,.5);padding:4px 6px;min-width:52px;font-weight:600;cursor:pointer;position:relative;transition:color .2s}
+.abn-icon{font-size:18px;display:inline-block;position:relative;transition:transform .2s var(--ease-spring),filter .2s}
+.abn-label{font-size:9.5px;letter-spacing:.02em}
+.abn-tab.active{color:var(--gold-l)}
+.abn-tab.active .abn-icon{transform:translateY(-1px) scale(1.14);filter:drop-shadow(0 0 8px rgba(240,217,155,.7))}
+.abn-dot{position:absolute;top:-2px;right:-7px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.abn-profile-avatar{width:44px;height:44px;border-radius:50%;background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.abn-more-row{width:100%;display:flex;align-items:center;gap:12px;padding:14px 20px;background:#fff;border:none;
+  border-bottom:1px solid var(--border);text-align:left;cursor:pointer;font-size:14px;font-weight:600;color:var(--text)}
+.abn-more-row:last-child{border-bottom:none}
+.amr-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+.amr-label{flex:1;min-width:0}
+.amr-chev{color:var(--muted);font-size:18px}
+@media(max-width:640px){
+  #admin-tabs{display:none}
+  .admin-bottom-nav{display:flex}
+  .admin-content{padding-bottom:90px}
+}
+
 /* Bulk bar */
 .bulk-bar{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .bulk-count{font-weight:700;color:var(--blue);font-size:13px}
@@ -1179,6 +1209,14 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <button class="tab-btn" onclick="showTab('audit')" data-tab="audit">📜 Audit Log</button>
   </div>
 
+  <nav id="admin-bottom-nav" class="admin-bottom-nav">
+    <button class="abn-tab active" data-abn="home" onclick="showTab('dashboard')"><span class="abn-icon">◆</span><span class="abn-label">Home</span></button>
+    <button class="abn-tab" data-abn="roster" onclick="showTab('schedule')"><span class="abn-icon">🗓</span><span class="abn-label">Roster</span></button>
+    <button class="abn-tab" data-abn="alerts" onclick="showTab('incidents')"><span class="abn-icon">🚨</span><span class="abn-label">Alerts</span></button>
+    <button class="abn-tab" data-abn="inbox" onclick="showTab('messages')"><span class="abn-icon">✉<span id="abn-inbox-dot" class="abn-dot hidden"></span></span><span class="abn-label">Inbox</span></button>
+    <button class="abn-tab" data-abn="more" onclick="showTab('more')"><span class="abn-icon">⋯</span><span class="abn-label">More</span></button>
+  </nav>
+
   <div class="admin-content" style="padding:0 20px">
 
     <!-- DASHBOARD -->
@@ -1222,7 +1260,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Hours</th><th>Status</th><th>Submitted</th></tr></thead>
+            <thead><tr><th>Date</th><th>Guard</th><th>Site</th><th>Hours</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
             <tbody id="dash-tbody"></tbody>
           </table>
         </div>
@@ -1712,6 +1750,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- MORE (mobile-only nav hub — desktop reaches these via the top tabs / Organization dropdown) -->
+    <div id="tab-more" class="tab-content">
+      <div class="section" style="margin-bottom:16px">
+        <div style="padding:18px 20px;display:flex;align-items:center;gap:12px">
+          <div class="abn-profile-avatar">👤</div>
+          <div style="min-width:0">
+            <div id="abn-profile-name" style="font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+            <div style="font-size:12px;color:var(--muted)">Brown Owl Security</div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <button class="abn-more-row" data-tab="guards" onclick="showTab('guards')"><span class="amr-icon">👮</span><span class="amr-label">Guards</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="sites" onclick="showTab('sites')"><span class="amr-icon">📍</span><span class="amr-label">Sites</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="invoices" onclick="showTab('invoices')"><span class="amr-icon">🧾</span><span class="amr-label">Invoices</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="reports" onclick="showTab('reports')"><span class="amr-icon">📈</span><span class="amr-label">Reports</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="reminders" onclick="showTab('reminders')"><span class="amr-icon">🔔</span><span class="amr-label">Reminders</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="botkb" onclick="showTab('botkb')"><span class="amr-icon">🤖</span><span class="amr-label">Bot Knowledge Base</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="ratings" onclick="showTab('ratings')"><span class="amr-icon">⭐</span><span class="amr-label">Guard Star Ratings</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="admins" onclick="showTab('admins')"><span class="amr-icon">👥</span><span class="amr-label">Admins</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="audit" onclick="showTab('audit')"><span class="amr-icon">📜</span><span class="amr-label">Audit Log</span><span class="amr-chev">›</span></button>
+      </div>
+      <button class="btn btn-ghost btn-block" style="margin-top:16px" onclick="doLogout()">Logout</button>
     </div>
 
   </div><!-- /admin-content -->
@@ -3278,6 +3341,15 @@ function showTab(name){
   else if(name==='incidents') loadIncidents();
   else if(name==='admins')  loadAdmins();
   else if(name==='audit')   loadAudit();
+  else if(name==='more'){
+    const nameEl = document.getElementById('abn-profile-name');
+    if(nameEl) nameEl.textContent = document.getElementById('topbar-user-info')?.textContent || '';
+  }
+  // Mobile bottom nav: several desktop tabs (invoices, reports, guards, etc.)
+  // are only reachable through the "More" hub on mobile, so anything that
+  // isn't one of the primary four just lights up "More" instead of going dark.
+  const ABN_PRIMARY = {dashboard:'home', schedule:'roster', incidents:'alerts', messages:'inbox'};
+  document.querySelectorAll('.abn-tab').forEach(b=>b.classList.toggle('active', b.dataset.abn===(ABN_PRIMARY[name]||'more')));
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
@@ -4434,16 +4506,20 @@ async function submitFirstPassword(){
   }
 }
 function applyRoleRestrictions(role){
-  const tab = name => document.querySelector(`.tab-btn[data-tab="${name}"], .tab-dropdown-item[data-tab="${name}"]`);
-  const show = name => { const el=tab(name); if(el) el.style.display=''; };
-  const hide = name => { const el=tab(name); if(el) el.style.display='none'; };
+  // querySelectorAll, not querySelector: the same tab name now has up to three
+  // on-screen entry points (top tab-btn, Organization dropdown item, and the
+  // mobile More-menu row) and all of them need to move together, or a role
+  // restriction hidden from one surface would just stay reachable from another.
+  const tabEls = name => document.querySelectorAll(`.tab-btn[data-tab="${name}"], .tab-dropdown-item[data-tab="${name}"], .abn-more-row[data-tab="${name}"]`);
+  const show = name => tabEls(name).forEach(el=>el.style.display='');
+  const hide = name => tabEls(name).forEach(el=>el.style.display='none');
   const orgDropdown = document.getElementById('org-dropdown');
   const billRatesBtn    = document.querySelector('#billing-subtabs [data-billtab="rates"]');
   const billInvoicesBtn = document.querySelector('#billing-subtabs [data-billtab="invoices"]');
   const showBillTabs = ()=>{ billRatesBtn?.classList.remove('hidden'); billInvoicesBtn?.classList.remove('hidden'); };
   const hideBillTabs = ()=>{ billRatesBtn?.classList.add('hidden'); billInvoicesBtn?.classList.add('hidden'); billingSubtab='submissions'; };
   // Reset all tabs (and the Organization dropdown / billing sub-tabs) to visible first
-  ['dashboard','schedule','guards','sites','invoices','reminders','messages','incidents','admins','audit']
+  ['dashboard','schedule','guards','sites','botkb','ratings','invoices','reminders','messages','incidents','admins','audit']
     .forEach(show);
   if(orgDropdown) orgDropdown.style.display = '';
   showBillTabs();
@@ -4451,14 +4527,14 @@ function applyRoleRestrictions(role){
   if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
   if(role==='manager'){
     // Manager: dashboard + submissions only (Rates/Invoices sub-tabs hidden within Invoices)
-    hide('guards'); hide('sites');
+    hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
     hide('reminders'); hide('messages'); hide('admins'); hide('audit');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only, Rates/Invoices sub-tabs hidden within Invoices)
-    hide('dashboard'); hide('schedule'); hide('guards'); hide('sites');
+    hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
     hide('reminders'); hide('messages'); hide('admins'); hide('audit');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
@@ -4538,15 +4614,20 @@ async function loadDashboard(){
     document.getElementById('s-guards').textContent  = d.total_guards;
     document.getElementById('s-sites').textContent   = d.total_sites;
     document.getElementById('s-rev').textContent     = fmtMoney(d.revenue_month);
+    const canApproveFromDash = ['superadmin','administrator','manager'].includes(currentRole);
     document.getElementById('dash-tbody').innerHTML = d.recent.length===0
-      ? `<tr><td colspan="6" class="empty-state"><div class="ei">📋</div><p>No submissions yet — they appear here once guards clock out</p></td></tr>`
-      : d.recent.map(r=>`<tr>
+      ? `<tr><td colspan="7" class="empty-state"><div class="ei">📋</div><p>No submissions yet — they appear here once guards clock out</p></td></tr>`
+      : d.recent.map(r=>`<tr id="dash-sub-row-${r.id}">
       <td>${r.shift_date}</td>
-      <td><strong>${r.guard_name}</strong></td>
-      <td>${r.site_name}<br><small style="color:var(--muted)">${r.client_name}</small></td>
+      <td><strong>${escapeHtml(r.guard_name)}</strong></td>
+      <td>${escapeHtml(r.site_name)}<br><small style="color:var(--muted)">${escapeHtml(r.client_name)}</small></td>
       <td>${r.total_hours}h</td>
       <td><span class="badge badge-${r.status}">${r.status}</span></td>
       <td style="font-size:12px;color:var(--muted)">${fmtDateTime(r.submitted_at)}</td>
+      <td style="white-space:nowrap">${r.status==='pending' && canApproveFromDash ? `
+        <button class="btn btn-xs btn-green" title="Approve" onclick="dashQuickApprove('${r.id}','approved')">✓</button>
+        <button class="btn btn-xs btn-red" title="Reject" onclick="dashQuickApprove('${r.id}','rejected')">✗</button>
+      ` : ''}</td>
     </tr>`).join('');
     const exp = d.expiring_licenses || [];
     document.getElementById('dash-expiring-section').classList.toggle('hidden', exp.length===0);
@@ -5014,6 +5095,24 @@ async function quickAction(id, status){
     await apiFetch(`/api/submissions/${id}`,{method:'PUT',body:JSON.stringify({status,admin_note:''})});
     toast(`Submission ${status}`,'success');
     loadSubmissions(); loadDashboard();
+  }catch(e){ toast(e.message,'error'); }
+}
+// Same PUT as quickAction, but for the dashboard's Recent Submissions row —
+// gets a brief fade + "Approved" swap in place before the next full reload
+// replaces the row anyway, since a bare re-render alone reads as instant/flat.
+async function dashQuickApprove(id, status){
+  const row = document.getElementById(`dash-sub-row-${id}`);
+  try{
+    await apiFetch(`/api/submissions/${id}`,{method:'PUT',body:JSON.stringify({status,admin_note:''})});
+    toast(`Submission ${status}`,'success');
+    if(row && status==='approved'){
+      row.style.transition='background .45s';
+      row.style.background='rgba(18,168,112,.09)';
+      const cell = row.lastElementChild;
+      if(cell) cell.innerHTML = `<span style="color:var(--green);font-weight:700;animation:popIn .3s var(--ease-spring)">Approved ✓</span>`;
+    }
+    loadSubmissions();
+    setTimeout(loadDashboard, row && status==='approved' ? 900 : 0);
   }catch(e){ toast(e.message,'error'); }
 }
 function openReview(id){
@@ -6560,11 +6659,10 @@ async function setMessageStatus(){
   }catch(e){ toast(e.message,'error'); }
 }
 function updateMsgTabBadge(){
-  const badge = document.getElementById('msg-tab-badge');
-  if(!badge) return;
   const total = msgThreads.reduce((sum,t)=>sum+t.unread,0);
-  badge.textContent = total;
-  badge.classList.toggle('hidden', total===0);
+  const badge = document.getElementById('msg-tab-badge');
+  if(badge){ badge.textContent = total; badge.classList.toggle('hidden', total===0); }
+  document.getElementById('abn-inbox-dot')?.classList.toggle('hidden', total===0);
 }
 
 // ── FAQ auto-replies (admin) ──────────────────────────────────────────────────
