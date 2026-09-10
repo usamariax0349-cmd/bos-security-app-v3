@@ -19,20 +19,27 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --navy:#1a2744;--navy-l:#243459;--navy-d:#0f172a;
-  --gold:#c9a84c;--gold-l:#e8c76a;--gold-d:#a8863a;
-  --green:#22c55e;--green-bg:#dcfce7;
-  --red:#ef4444;--red-bg:#fee2e2;
-  --amber:#f59e0b;--amber-bg:#fef3c7;
-  --blue:#3b82f6;--blue-bg:#dbeafe;
-  --bg:#f4f6fa;--card:#fff;--border:#e3e8ef;
-  --text:#1c2333;--muted:#66708a;
+  /* Ink ground — deeper and cooler than the original navy */
+  --navy:#101a2e;--navy-l:#1c2b4d;--navy-d:#070b14;
+  --ink-0:#05080f;--ink-1:#070b14;--ink-2:#101a2e;--ink-3:#16294a;
+  /* Brass — a metal, not a flat gold fill */
+  --gold:#c69a3f;--gold-l:#f0d99b;--gold-d:#8f7228;
+  --brass:linear-gradient(135deg,#fbeeca 0%,#f0d99b 24%,#c69a3f 60%,#a17c25 100%);
+  /* Jewel-toned semantics */
+  --green:#12a870;--green-bg:#d6f5e6;
+  --red:#e5484d;--red-bg:#fde8e9;
+  --amber:#f0b429;--amber-bg:#fdf1d6;
+  --blue:#3d7fd6;--blue-bg:#dce9f8;
+  --bg:#f2f5fa;--card:#fff;--border:#e0e5ee;
+  --text:#141b2b;--muted:#5f6a85;
   --font-display:'Fraunces','Iowan Old Style',Georgia,serif;
   --font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --sh:0 1px 2px rgba(15,23,42,.06),0 1px 1px rgba(15,23,42,.04);
   --sh-md:0 6px 16px -4px rgba(15,23,42,.1),0 2px 6px -2px rgba(15,23,42,.06);
-  --sh-lg:0 24px 60px -12px rgba(10,15,30,.35),0 8px 24px -8px rgba(10,15,30,.18);
-  --sh-gold:0 8px 20px -6px rgba(201,168,76,.45);
+  --sh-lg:0 28px 70px -18px rgba(6,10,20,.5),0 10px 28px -10px rgba(6,10,20,.24);
+  --sh-gold:0 12px 28px -10px rgba(198,154,63,.6);
+  --glass:linear-gradient(168deg,rgba(255,255,255,.085),rgba(255,255,255,.032) 46%,rgba(255,255,255,.05));
+  --glass-edge:inset 0 1px 0 rgba(255,255,255,.13);
   --r:12px;
   --ease-spring:cubic-bezier(.34,1.56,.64,1);
   --ease-out:cubic-bezier(.16,1,.3,1);
@@ -102,7 +109,8 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-spring),box-shadow var(--dur-fast) var(--ease-out),opacity var(--dur-fast);white-space:nowrap;font-weight:600}
 .btn-primary{background:linear-gradient(135deg,var(--navy-l),var(--navy));color:#fff;box-shadow:0 2px 6px rgba(26,39,68,.25)}.btn-primary:hover{background:linear-gradient(135deg,#2d4266,var(--navy-l));transform:translateY(-1px);box-shadow:0 6px 16px rgba(26,39,68,.3)}
-.btn-gold{background:linear-gradient(135deg,var(--gold-l),var(--gold));color:var(--navy-d);box-shadow:var(--sh-gold)}.btn-gold:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.btn-gold{background:var(--brass);background-size:220% 100%;animation:metalsheen 5.5s ease-in-out infinite;color:#241d05;box-shadow:var(--sh-gold),inset 0 1px 0 rgba(255,255,255,.55)}.btn-gold:hover{filter:brightness(1.06);transform:translateY(-1px)}
+@keyframes metalsheen{0%{background-position:-180% 0}100%{background-position:280% 0}}
 .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg)}
 .btn-green{background:var(--green);color:#fff}.btn-red{background:var(--red);color:#fff}
 .btn-amber{background:var(--amber);color:#fff}
@@ -163,6 +171,8 @@ tbody tr:nth-child(n+9){animation-delay:.26s}
 table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
 th{background:var(--navy);color:#fff;padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
 td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr{transition:background .22s}
+tbody tr:hover{background:rgba(198,154,63,.06)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#f8fafc}
 .thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;cursor:pointer;border:2px solid var(--border);transition:transform var(--dur-fast) var(--ease-spring),border-color var(--dur-fast)}
@@ -192,7 +202,7 @@ tr:hover td{background:#f8fafc}
 button.stat-card{cursor:pointer}
 button.stat-card:hover .stat-lbl{color:var(--navy)}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-.stat-val{font-family:var(--font-display);font-size:29px;font-weight:600;color:var(--navy);line-height:1}
+.stat-val{font-family:var(--font-display);font-size:29px;font-weight:600;color:var(--navy);line-height:1;letter-spacing:-.6px}
 .stat-lbl{font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
 
 /* Section */
@@ -206,7 +216,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .filter-bar select,.filter-bar input{background:#fff;border:1.5px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:auto;min-width:120px}
 
 /* Topbar */
-.topbar{background:linear-gradient(180deg,var(--navy-l),var(--navy));padding:0 20px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px;height:62px;flex-wrap:nowrap;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.28);border-bottom:1px solid rgba(232,199,106,.22)}
+.topbar{background:linear-gradient(180deg,var(--navy-l),var(--navy));padding:0 20px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));display:flex;align-items:center;justify-content:space-between;gap:10px;height:62px;flex-wrap:nowrap;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.28);border-bottom:1px solid rgba(232,199,106,.22);overflow:hidden}
+.topbar::after{content:'';position:absolute;bottom:0;left:0;width:26%;height:1px;background:linear-gradient(90deg,transparent,rgba(240,217,155,.85),transparent);animation:topbarSweep 7s linear infinite}
+@keyframes topbarSweep{0%{transform:translateX(-100%)}100%{transform:translateX(420%)}}
 .topbar-brand{display:flex;align-items:center;gap:12px;color:#fff;min-width:0;flex:1 1 auto}
 .topbar-brand-text{min-width:0;overflow:hidden}
 .topbar-logo{width:36px;height:36px;border-radius:8px;object-fit:cover;box-shadow:0 0 0 1px rgba(232,199,106,.3);flex-shrink:0}
@@ -221,9 +233,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   background-image:linear-gradient(to right,var(--navy-d) 30%,rgba(15,23,42,0)),linear-gradient(to right,rgba(15,23,42,0),var(--navy-d) 70%) 100% 0,radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.35),rgba(0,0,0,0)),radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.35),rgba(0,0,0,0)) 100% 0;
   background-repeat:no-repeat;background-color:var(--navy-d);background-size:24px 100%,24px 100%,10px 100%,10px 100%;background-attachment:local,local,scroll,scroll}
 .tabs::-webkit-scrollbar{display:none}
-.tab-btn{padding:12px 16px;background:none;border:none;color:rgba(255,255,255,.5);font-size:13px;font-weight:600;white-space:nowrap;border-bottom:3px solid transparent;transition:all .2s;cursor:pointer}
+.tab-btn{position:relative;padding:12px 16px;background:none;border:none;color:rgba(255,255,255,.5);font-size:13px;font-weight:600;white-space:nowrap;border-bottom:3px solid transparent;transition:color .25s;cursor:pointer}
 .tab-btn:hover{color:rgba(255,255,255,.8)}
-.tab-btn.active{color:#fff;border-bottom-color:var(--gold)}
+.tab-btn.active{color:var(--gold-l)}
+.tab-btn.active::after{content:'';position:absolute;left:12px;right:12px;bottom:0;height:2px;border-radius:2px;background:var(--brass);box-shadow:0 0 12px rgba(240,217,155,.6)}
 .tab-content{display:none;padding:24px 20px}
 .tab-content.active{display:block}
 
@@ -242,15 +255,29 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 /* ════════════════════════════════════════
    GUARD PORTAL
 ════════════════════════════════════════ */
-#guard-page{min-height:100vh;background:linear-gradient(160deg,#0a0f1e 0%,#1a2744 50%,#1e3a5f 100%);position:relative;overflow:hidden}
-#guard-page::before{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(201,168,76,.12) 0%,transparent 70%);top:-100px;right:-100px;pointer-events:none}
-.guard-container{max-width:480px;margin:0 auto;padding:24px 16px 40px;position:relative}
+#guard-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1) 0%,var(--ink-2) 48%,var(--ink-3) 100%);position:relative;overflow:hidden}
+#guard-page::before{content:'';position:absolute;width:520px;height:520px;top:-190px;right:-200px;background:radial-gradient(circle,rgba(198,154,63,.2) 0%,transparent 68%);pointer-events:none;animation:boDrift 19s ease-in-out infinite;z-index:0}
+#guard-page::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 78% at 50% 32%,transparent 42%,rgba(3,6,12,.6) 100%);z-index:0}
+@keyframes boDrift{0%,100%{transform:translate(0,0)}50%{transform:translate(14px,-12px)}}
+/* position:fixed rather than absolute+inset:-40% — the latter needs an
+   overflow:hidden positioned ancestor to stay clipped, and #admin-page
+   can't take overflow:hidden without breaking its sticky topbar. Fixed
+   sidesteps that entirely: it's viewport-relative, so no ancestor
+   plumbing is required and nothing can be pushed into overflow. */
+.bo-grain{position:fixed;inset:0;pointer-events:none;opacity:.05;mix-blend-mode:overlay;z-index:0;
+  animation:boGrain 7s steps(6) infinite;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
+@keyframes boGrain{
+  0%{transform:translate(0,0)}20%{transform:translate(-6%,4%)}40%{transform:translate(4%,-5%)}
+  60%{transform:translate(-3%,-3%)}80%{transform:translate(5%,3%)}100%{transform:translate(0,0)}
+}
+.guard-container{max-width:480px;margin:0 auto;padding:24px 16px 40px;position:relative;z-index:1}
 .guard-header{text-align:center;margin-bottom:32px;padding-top:16px}
 .guard-logo-wrap{width:72px;height:72px;margin:0 auto 16px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(201,168,76,.4)}
 .guard-logo-wrap img{width:100%;height:100%;object-fit:cover}
 .guard-title{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.3px}
 .guard-subtitle{font-size:13px;color:rgba(255,255,255,.5);margin-top:4px}
-.guard-card{background:rgba(255,255,255,.05);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.guard-card{background:var(--glass);backdrop-filter:blur(18px) saturate(150%);border:1px solid rgba(255,255,255,.11);border-radius:20px;padding:28px 24px;box-shadow:0 24px 60px -26px rgba(0,0,0,.7),var(--glass-edge)}
 .guard-card .form-label{color:rgba(255,255,255,.6)}
 .guard-card .form-control{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff}
 .guard-card .form-control::placeholder{color:rgba(255,255,255,.35)}
@@ -297,7 +324,8 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 /* ════════════════════════════════════════
    LOGIN
 ════════════════════════════════════════ */
-#login-page{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#080b14 0%,#151f38 55%,#1a2744 100%);padding:16px;overflow:hidden}
+#login-page{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(168deg,var(--ink-1) 0%,var(--ink-2) 48%,var(--ink-3) 100%);padding:16px;overflow:hidden}
+#login-page::before{content:'';position:absolute;width:520px;height:520px;top:-190px;right:-200px;background:radial-gradient(circle,rgba(198,154,63,.2) 0%,transparent 68%);pointer-events:none;animation:boDrift 19s ease-in-out infinite;z-index:0}
 .login-hero{position:absolute;inset:0;background-image:url('/img/login-hero.jpg');background-size:cover;background-position:center;opacity:.55;filter:saturate(1.1) contrast(1.05);animation:heroZoom 26s ease-in-out infinite alternate}
 .login-hero::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 32%,rgba(10,15,30,.15) 0%,rgba(8,11,20,.72) 62%,#080b14 100%)}
 @keyframes heroZoom{from{transform:scale(1)}to{transform:scale(1.06)}}
@@ -311,7 +339,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .login-card .form-control{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.14);color:#fff}
 .login-card .form-control::placeholder{color:rgba(255,255,255,.28)}
 .login-card .form-control:focus{background:rgba(255,255,255,.1);border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,168,76,.12)}
-.login-card .btn-primary{background:linear-gradient(135deg,var(--gold-l),var(--gold) 55%,var(--gold-d));color:var(--navy-d);box-shadow:var(--sh-gold);letter-spacing:.2px}
+.login-card .btn-primary{background:var(--brass);background-size:220% 100%;animation:metalsheen 5.5s ease-in-out infinite;color:#241d05;box-shadow:var(--sh-gold),inset 0 1px 0 rgba(255,255,255,.55);letter-spacing:.2px}
 .login-card .btn-primary:hover{filter:brightness(1.08)}
 
 /* ════════════════════════════════════════
@@ -458,7 +486,8 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .sched-head-cell{background:var(--navy);color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:10px 6px;text-align:center;border-right:1px solid rgba(255,255,255,.12)}
 .sched-head-cell .shd{font-size:10px;font-weight:600;opacity:.6;margin-top:1px}
 .sched-row-label{background:var(--bg);font-weight:700;color:var(--navy);font-size:13px;padding:8px 10px;border-right:1px solid var(--border);border-top:1px solid var(--border);display:flex;align-items:center}
-.sched-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:6px;min-height:60px}
+.sched-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:6px;min-height:60px;transition:background .25s,border-color .25s}
+.sched-cell:hover{background:rgba(198,154,63,.06)}
 .sched-add-btn{width:22px;height:22px;border-radius:6px;background:var(--bg);border:1px dashed var(--border);color:var(--muted);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all var(--dur-fast) var(--ease-out);margin-bottom:4px}
 .sched-add-btn:hover{background:var(--navy);color:#fff;border-color:var(--navy);border-style:solid;transform:scale(1.08)}
 .sched-chip{display:block;width:100%;text-align:left;background:var(--navy);color:#fff;border:none;border-radius:6px;padding:4px 6px;font-size:11px;margin-bottom:4px;cursor:pointer;line-height:1.3;transition:transform var(--dur-fast) var(--ease-spring)}
@@ -645,6 +674,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
 <!-- ══════════════════════════════════════════ GUARD PORTAL -->
 <div id="guard-page">
+  <div class="bo-grain"></div>
   <div class="guard-container">
     <div class="guard-header">
       <div class="guard-logo-wrap">
@@ -999,6 +1029,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
 <!-- ══════════════════════════════════════════ ADMIN DASHBOARD -->
 <div id="admin-page" class="hidden">
+  <div class="bo-grain"></div>
   <div class="topbar">
     <div class="topbar-brand">
       <img id="admin-logo" class="topbar-logo hidden" src="/logo" alt="" onerror="this.classList.add('hidden')">
