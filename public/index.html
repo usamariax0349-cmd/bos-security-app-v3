@@ -286,6 +286,13 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
    GUARD PORTAL
 ════════════════════════════════════════ */
 #guard-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1) 0%,var(--ink-2) 48%,var(--ink-3) 100%);position:relative;overflow:hidden}
+/* Same atmospheric hero photo the Admin Login screen uses (.login-hero),
+   reused here at low opacity so the whole portal — not just the login
+   step — carries that depth, instead of the flat gradient alone. Kept
+   dim enough that the glass cards on top stay readable over any part of
+   the frame; the ::after vignette below darkens it further at the edges. */
+.guard-hero-bg{position:absolute;inset:0;background-image:url('/img/login-hero.jpg');background-size:cover;background-position:center 30%;opacity:.16;filter:saturate(1.1) contrast(1.05);animation:heroZoom 34s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+@media(prefers-reduced-motion:reduce){.guard-hero-bg{animation:none}}
 #guard-page::before{content:'';position:absolute;width:520px;height:520px;top:-190px;right:-200px;background:radial-gradient(circle,rgba(198,154,63,.2) 0%,transparent 68%);pointer-events:none;animation:boDrift 19s ease-in-out infinite;z-index:0}
 #guard-page::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 78% at 50% 32%,transparent 42%,rgba(3,6,12,.6) 100%);z-index:0}
 @keyframes boDrift{0%,100%{transform:translate(0,0)}50%{transform:translate(14px,-12px)}}
@@ -319,7 +326,12 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   box-shadow:0 6px 14px -6px rgba(198,154,63,.6)}
 .bo-map-links a:hover{filter:brightness(1.06)}
 .guard-container{max-width:480px;margin:0 auto;padding:24px 16px 40px;position:relative;z-index:1}
-.guard-header{text-align:center;margin-bottom:32px;padding-top:16px}
+.guard-header{text-align:center;margin-bottom:32px;padding-top:16px;position:relative}
+/* Same travelling brass hairline as the admin topbar's ::after, so the
+   guard portal's header carries the identical in-motion accent instead
+   of sitting static while admin's chrome shimmers. */
+.guard-header-sweep{position:absolute;bottom:-16px;left:50%;transform:translateX(-60px);width:120px;height:1px;overflow:hidden;pointer-events:none}
+.guard-header-sweep::after{content:'';position:absolute;bottom:0;left:0;width:40%;height:1px;background:linear-gradient(90deg,transparent,rgba(240,217,155,.85),transparent);animation:topbarSweep 7s linear infinite}
 .guard-logo-wrap{width:72px;height:72px;margin:0 auto 16px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(201,168,76,.4)}
 .guard-logo-wrap img{width:100%;height:100%;object-fit:cover}
 .guard-title{font-size:22px;font-weight:800;color:#fff;letter-spacing:-.3px}
@@ -803,6 +815,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
 <!-- ══════════════════════════════════════════ GUARD PORTAL -->
 <div id="guard-page">
+  <div class="guard-hero-bg" aria-hidden="true"></div>
   <div class="bo-grain"></div>
   <div class="guard-container">
     <div class="guard-header">
@@ -825,6 +838,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div id="offline-queue-badge" class="hidden" style="margin-top:10px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.35);color:#fbbf24;padding:8px 12px;border-radius:8px;font-size:12px;text-align:center"></div>
       <button id="panic-btn" class="hidden" data-i18n="emergency_btn" onclick="openPanicConfirm()" style="margin-top:12px;width:100%;background:#dc2626;color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">🆘 Emergency</button>
+      <div class="guard-header-sweep" aria-hidden="true"></div>
     </div>
 
     <!-- Step 0: Guard login -->
