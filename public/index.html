@@ -374,6 +374,88 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .mode-btn .mi{font-size:26px}
 .mode-btn .mt{font-weight:700;font-size:15px}
 .mode-btn .ms{font-size:12px;color:rgba(255,255,255,.5);margin-top:2px}
+
+/* ════════════════════════════════════════
+   GUARD BOTTOM NAV + HOME / PAY TABS
+════════════════════════════════════════ */
+.guard-bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:150;display:flex;justify-content:space-around;
+  background:rgba(9,14,26,.86);backdrop-filter:blur(18px) saturate(140%);border-top:1px solid rgba(255,255,255,.07);
+  padding:9px 10px calc(16px + env(safe-area-inset-bottom))}
+.guard-bottom-nav::before{content:'';position:absolute;top:0;left:16%;right:16%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(240,217,155,.55),transparent)}
+.gbn-tab{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:rgba(255,255,255,.45);padding:4px 8px;min-width:52px;font-weight:600;transition:color .2s;cursor:pointer;position:relative}
+.gbn-icon{font-size:19px;display:inline-block;position:relative;transition:transform .2s var(--ease-spring),filter .2s}
+.gbn-label{font-size:10px;letter-spacing:.02em}
+.gbn-tab.active{color:var(--gold-l)}
+.gbn-tab.active .gbn-icon{transform:translateY(-1px) scale(1.14);filter:drop-shadow(0 0 10px rgba(240,217,155,.75))}
+.gbn-dot{position:absolute;top:-2px;right:-7px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.guard-container{padding-bottom:110px}
+
+/* Incident/Availability/Profile read as bottom sheets: rounded top, grab handle */
+.guard-card.as-sheet{border-radius:26px 26px 20px 20px;position:relative;padding-top:34px}
+.guard-card.as-sheet::before{content:'';position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.22)}
+
+/* Home */
+.gh-clock-card{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid rgba(255,255,255,.08)}
+.gh-out-row{display:flex;align-items:center;gap:14px}
+.gh-dial{position:relative;flex-shrink:0;width:108px;height:108px;background:none;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:none;padding:0}
+.gh-dial-svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.gh-dial-ring2{fill:none;stroke:rgba(240,217,155,.35);stroke-width:1.5;stroke-dasharray:2 12;animation:ringspin 14s linear infinite;transform-origin:60px 60px}
+.gh-dial-track{fill:none;stroke:rgba(255,255,255,.1);stroke-width:8}
+.gh-dial-progress{fill:none;stroke:var(--gold-l);stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .05s linear;filter:drop-shadow(0 0 8px rgba(240,217,155,.5))}
+.gh-dial-label{position:relative;z-index:1;font-family:var(--font-display);font-size:20px;font-weight:600;color:#fff}
+.gh-dial-sub{position:absolute;bottom:20px;left:0;right:0;text-align:center;font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.5)}
+@keyframes ringspin{to{transform:rotate(360deg)}}
+.gh-out-text{min-width:0}
+.gh-out-next{font-size:12px;font-weight:700;color:var(--gold-l);margin-bottom:2px}
+.gh-out-site{font-size:17px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gh-out-sub{font-size:12.5px;color:rgba(255,255,255,.55);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gh-noshift{text-align:center;padding:12px 0}
+.gh-noshift-icon{font-size:32px;margin-bottom:8px}
+.gh-noshift-title{font-weight:700;color:#fff;font-size:15px}
+.gh-noshift-sub{font-size:12.5px;color:rgba(255,255,255,.5);margin-top:2px}
+.gh-in-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.gh-in-dot{width:8px;height:8px;border-radius:50%;background:#4fd6a0;animation:softpulse 2s infinite}
+@keyframes softpulse{50%{opacity:1;transform:scale(1.18)}}
+.gh-in-label{font-size:11px;font-weight:700;letter-spacing:.1em;color:#4fd6a0}
+.gh-in-pill{margin-left:auto;font-size:11px;font-weight:700;color:#4fd6a0;background:rgba(18,168,112,.16);padding:3px 10px;border-radius:20px;max-width:50%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gh-in-elapsed{font-family:var(--font-display);font-size:44px;font-weight:600;color:#fff;line-height:1;letter-spacing:-1px}
+.gh-in-caption{font-size:10.5px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.45);margin:4px 0 12px}
+.gh-in-progress-track{height:6px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:16px}
+.gh-in-progress-fill{height:100%;background:var(--brass);transition:width .8s;width:0}
+.gh-in-btns{display:flex;gap:10px}
+.gh-in-plus{width:44px;height:44px;flex-shrink:0;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:22px;cursor:pointer}
+.gh-stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.gh-stat-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;text-align:left;cursor:pointer;transition:transform .2s,border-color .2s}
+.gh-stat-card:hover{transform:translateY(-2px);border-color:rgba(240,217,155,.35)}
+.gh-stat-val{font-family:var(--font-display);font-size:24px;font-weight:600;color:#fff}
+.gh-stat-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.5);margin-top:2px}
+.gh-quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.08);border-radius:14px;overflow:hidden;margin-bottom:18px}
+.gh-quick-btn{background:rgba(20,27,46,.55);border:none;padding:16px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(255,255,255,.8);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .2s}
+.gh-quick-btn:hover{background:rgba(255,255,255,.06)}
+.gqi{font-size:20px}
+.gh-sos{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;border:1px solid rgba(239,68,68,.45);
+  background:linear-gradient(135deg,rgba(220,38,38,.3),rgba(127,29,29,.35));cursor:pointer;text-align:left}
+.gh-sos-icon{font-size:26px}
+.gh-sos-title{font-weight:800;color:#fff;font-size:14px;letter-spacing:.05em}
+.gh-sos-sub{font-size:11.5px;color:rgba(255,255,255,.7)}
+
+/* Pay */
+.gp-hero{text-align:center;padding:8px 0 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px}
+.gp-hero-val{font-family:var(--font-display);font-size:44px;font-weight:600;color:#fff;letter-spacing:-1px}
+.gp-hero-sub{font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.5);margin-top:4px}
+.gp-pills{display:flex;gap:8px;justify-content:center;margin-bottom:18px;flex-wrap:wrap}
+.gp-pill{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px}
+.gp-pill.approved{background:rgba(18,168,112,.16);color:#4fd6a0}
+.gp-pill.pending{background:rgba(240,180,41,.16);color:var(--gold-l)}
+.gp-pill.rejected{background:rgba(229,72,77,.16);color:#f87171}
+.gp-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.gp-row:last-child{border-bottom:none}
+.gp-row-site{font-size:13.5px;font-weight:600;color:#fff}
+.gp-row-sub{font-size:11.5px;color:rgba(255,255,255,.5);margin-top:2px}
+.gp-row-amt{font-family:var(--font-display);font-size:15px;font-weight:600;color:#fff;margin-bottom:3px}
 .gavail-nav{display:flex;align-items:center;gap:10px;margin-bottom:4px}
 .gavail-range{flex:1;text-align:center;font-weight:700;color:#fff;font-size:14px}
 .gaday-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
@@ -718,35 +800,33 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </p>
     </div>
 
-    <!-- Mode menu -->
-    <div class="guard-card hidden" id="step-menu">
-      <div class="step-title" data-i18n="menu_title">What would you like to do?</div>
-      <div class="mode-grid">
-        <button class="mode-btn" onclick="startShiftFlow()">
-          <span class="mi">🕐</span>
-          <span><div class="mt" data-i18n="menu_myshifts_title">My Shifts</div><div class="ms" data-i18n="menu_myshifts_sub">View your roster &amp; clock in / clock out</div></span>
+    <!-- Home: shift-first landing, replaces the old 6-button menu -->
+    <div class="guard-card hidden" id="step-home">
+      <div id="gh-clock-card" class="gh-clock-card"></div>
+
+      <div class="gh-stats-row">
+        <button class="gh-stat-card" onclick="showGuardTab('patrol')">
+          <div class="gh-stat-val" id="gh-stat-checkpoints">—</div>
+          <div class="gh-stat-lbl" data-i18n="home_checkpoints_lbl">Checkpoints</div>
         </button>
-        <button class="mode-btn" onclick="startPatrolFlow()">
-          <span class="mi">🚶</span>
-          <span><div class="mt" data-i18n="menu_patrol_title">Patrol Checkpoints</div><div class="ms" data-i18n="menu_patrol_sub">Check in at site checkpoints during your shift</div></span>
-        </button>
-        <button class="mode-btn" onclick="startIncidentFlow()">
-          <span class="mi">🚨</span>
-          <span><div class="mt" data-i18n="menu_incident_title">Report Incident</div><div class="ms" data-i18n="menu_incident_sub">Log an incident with photo &amp; location</div></span>
-        </button>
-        <button class="mode-btn" onclick="startAvailabilityFlow()">
-          <span class="mi">📅</span>
-          <span><div class="mt" data-i18n="menu_availability_title">My Availability</div><div class="ms" data-i18n="menu_availability_sub">Let the office know when you're free</div></span>
-        </button>
-        <button class="mode-btn" onclick="startMessagesFlow()">
-          <span class="mi">💬</span>
-          <span><div class="mt"><span data-i18n="menu_messages_title">Messages</span><span id="msg-unread-dot" class="msg-nav-dot hidden"></span></div><div class="ms" data-i18n="menu_messages_sub">Chat directly with the office</div></span>
-        </button>
-        <button class="mode-btn" onclick="startPhotoFlow()">
-          <span class="mi">📷</span>
-          <span><div class="mt" data-i18n="menu_photo_title">My Photo</div><div class="ms" data-i18n="menu_photo_sub">Upload a profile photo for the office</div></span>
+        <button class="gh-stat-card" onclick="showGuardTab('pay')">
+          <div class="gh-stat-val" id="gh-stat-pay">—</div>
+          <div class="gh-stat-lbl" data-i18n="home_fortnight_lbl">This Fortnight</div>
         </button>
       </div>
+
+      <div class="gh-quick-grid">
+        <button class="gh-quick-btn" onclick="startIncidentFlow()"><span class="gqi">🚨</span><span data-i18n="home_quick_incident">Report incident</span></button>
+        <button class="gh-quick-btn" onclick="startAvailabilityFlow()"><span class="gqi">📅</span><span data-i18n="home_quick_availability">My availability</span></button>
+        <button class="gh-quick-btn" onclick="showGuardTab('patrol')"><span class="gqi">🚶</span><span data-i18n="home_quick_patrol">Start patrol</span></button>
+        <button class="gh-quick-btn" onclick="startPhotoFlow()"><span class="gqi">📷</span><span data-i18n="home_quick_photo">My photo</span></button>
+      </div>
+
+      <button id="panic-btn-home" class="gh-sos hidden" onclick="openPanicConfirm()">
+        <span class="gh-sos-icon">🆘</span>
+        <span><div class="gh-sos-title" data-i18n="home_sos_title">SOS</div><div class="gh-sos-sub" data-i18n="home_sos_sub">Tap to alert the control room</div></span>
+      </button>
+
       <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" data-i18n="push_enable_btn" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
       <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
         <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
@@ -766,6 +846,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="guard-card hidden" id="step-clockout">
       <div class="step-title"><span data-i18n="clockout_title_prefix">Clock Out — </span><span id="co-site-name"></span></div>
       <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px" data-i18n="clockout_sub">Optional: attach a photo and any notes before finishing this shift.</p>
+      <div id="co-geo-status" class="geo-status hidden"></div>
       <div class="form-group">
         <label class="form-label" data-i18n="notes_label">Notes (optional)</label>
         <textarea id="co-notes" class="form-control" rows="2" data-i18n-placeholder="notes_placeholder" placeholder="Any incidents or additional info..."></textarea>
@@ -786,7 +867,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     </div>
 
     <!-- My Photo -->
-    <div class="guard-card hidden" id="step-photo">
+    <div class="guard-card as-sheet hidden" id="step-photo">
       <div class="step-title" data-i18n="menu_photo_title">📷 My Photo</div>
       <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:16px" data-i18n="photo_sub">
         This is shown to the office so they can recognize you — it's never shown to other guards.
@@ -836,8 +917,20 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
+    <!-- Pay -->
+    <div class="guard-card hidden" id="step-pay">
+      <div class="step-title" data-i18n="pay_title">💰 My Pay</div>
+      <div class="gp-hero">
+        <div class="gp-hero-val" id="gp-hero-total">$0.00</div>
+        <div class="gp-hero-sub" id="gp-hero-sub">0 HOURS · 0 SHIFTS</div>
+      </div>
+      <div class="gp-pills" id="gp-pills"></div>
+      <div id="gp-rows"></div>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px" onclick="startMessagesFlow()" data-i18n="pay_report_discrepancy">Report a pay discrepancy</button>
+    </div>
+
     <!-- Report Incident -->
-    <div class="guard-card hidden" id="step-incident">
+    <div class="guard-card as-sheet hidden" id="step-incident">
       <div class="step-title" data-i18n="incident_title">🚨 Report Incident</div>
       <div class="form-group">
         <label class="form-label" data-i18n="site_label">Site</label>
@@ -884,7 +977,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     </div>
 
     <!-- Incident success -->
-    <div class="guard-card hidden" id="step-incident-success">
+    <div class="guard-card as-sheet hidden" id="step-incident-success">
       <div class="success-card">
         <div class="success-icon">✅</div>
         <div class="success-title" data-i18n="incident_reported_title">Incident Reported</div>
@@ -895,7 +988,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     </div>
 
     <!-- My Availability: week list -->
-    <div class="guard-card hidden" id="step-availability">
+    <div class="guard-card as-sheet hidden" id="step-availability">
       <div class="step-title" data-i18n="availability_title">📅 My Availability</div>
       <div class="gavail-nav">
         <button class="nav-btn nav-back" style="flex:0" onclick="gaShiftWeek(-1)">‹</button>
@@ -909,7 +1002,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     </div>
 
     <!-- My Availability: edit one day -->
-    <div class="guard-card hidden" id="step-avail-edit">
+    <div class="guard-card as-sheet hidden" id="step-avail-edit">
       <div class="step-title" id="gae-title" data-i18n="avail_edit_title">Set Availability</div>
       <label class="gavm-opt"><input type="radio" name="gae-mode" value="free" onchange="gaeSync()"><span><strong data-i18n="avail_free_all_day">Available all day</strong><br><small data-i18n="avail_free_all_day_sub">Clears any unavailability for this day</small></span></label>
       <label class="gavm-opt"><input type="radio" name="gae-mode" value="partial" onchange="gaeSync()"><span><strong data-i18n="avail_free_from">Free from a time</strong><br><small data-i18n="avail_free_from_sub">Busy earlier, available after this</small></span></label>
@@ -995,8 +1088,15 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:10px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
-    <div class="admin-link"><a href="#" onclick="showLogin();return false" data-i18n="admin_login_link">Admin Login</a></div>
+    <div class="admin-link" id="guard-admin-link"><a href="#" onclick="showLogin();return false" data-i18n="admin_login_link">Admin Login</a></div>
   </div>
+  <nav id="guard-bottom-nav" class="guard-bottom-nav hidden">
+    <button class="gbn-tab" data-gtab="home" onclick="showGuardTab('home')"><span class="gbn-icon">◆</span><span class="gbn-label" data-i18n="gbn_home">Home</span></button>
+    <button class="gbn-tab" data-gtab="shifts" onclick="showGuardTab('shifts')"><span class="gbn-icon">▦</span><span class="gbn-label" data-i18n="gbn_shifts">Shifts</span></button>
+    <button class="gbn-tab" data-gtab="patrol" onclick="showGuardTab('patrol')"><span class="gbn-icon">◎</span><span class="gbn-label" data-i18n="gbn_patrol">Patrol</span></button>
+    <button class="gbn-tab" data-gtab="pay" onclick="showGuardTab('pay')"><span class="gbn-icon">$</span><span class="gbn-label" data-i18n="gbn_pay">Pay</span></button>
+    <button class="gbn-tab" data-gtab="inbox" onclick="showGuardTab('inbox')"><span class="gbn-icon">✉<span id="gbn-inbox-dot" class="gbn-dot hidden"></span></span><span class="gbn-label" data-i18n="gbn_inbox">Inbox</span></button>
+  </nav>
 </div>
 
 <!-- ══════════════════════════════════════════ ADMIN LOGIN -->
@@ -2152,6 +2252,18 @@ const TRANSLATIONS = {
     login_title: "Guard Login", login_email_label: "Email Address", login_password_label: "Password",
     login_btn: "Login →", login_contact_office: "No account yet, or forgot your password? Contact the office.",
     menu_title: "What would you like to do?",
+    gbn_home: "Home", gbn_shifts: "Shifts", gbn_patrol: "Patrol", gbn_pay: "Pay", gbn_inbox: "Inbox",
+    home_checkpoints_lbl: "Checkpoints", home_fortnight_lbl: "This Fortnight",
+    home_quick_incident: "Report incident", home_quick_availability: "My availability",
+    home_quick_patrol: "Start patrol", home_quick_photo: "My photo",
+    home_sos_title: "SOS", home_sos_sub: "Tap to alert the control room",
+    home_no_shift: "No shift today", home_no_shift_sub: "Nothing rostered for you right now",
+    home_next_shift_prefix: "Next shift · ", home_on_site: "On site",
+    home_clock_in_lbl: "IN", home_hold_2s: "HOLD 2s", home_clocking_in: "Clocking in…",
+    home_on_shift: "ON SHIFT", home_clock_out_btn: "Clock out", home_elapsed_of_prefix: "ELAPSED OF ",
+    pay_title: "My Pay", pay_report_discrepancy: "Report a pay discrepancy",
+    pay_no_history: "No pay history yet — it'll appear here once your first shift is approved.",
+    pay_approved: "Approved", pay_pending: "Pending", pay_rejected: "Query",
     menu_myshifts_title: "My Shifts", menu_myshifts_sub: "View your roster & clock in / clock out",
     menu_patrol_title: "Patrol Checkpoints", menu_patrol_sub: "Check in at site checkpoints during your shift",
     menu_incident_title: "Report Incident", menu_incident_sub: "Log an incident with photo & location",
@@ -2871,6 +2983,8 @@ function sendPanicAlert(){
 }
 function refreshPanicButton(){
   document.getElementById('panic-btn').classList.toggle('hidden', !selectedGuard);
+  const homeBtn = document.getElementById('panic-btn-home');
+  if(homeBtn) homeBtn.classList.toggle('hidden', !selectedGuard);
 }
 window.addEventListener('online', syncPendingActions);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncPendingActions(); });
@@ -3249,25 +3363,36 @@ async function loadSitesForPortal(){
   try{ sitesData = await apiFetch('/api/sites'); }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-menu','step-myshifts','step-clockout','step-success','step-patrol','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages'];
+const GUARD_CARDS = ['step-0','step-home','step-myshifts','step-clockout','step-success','step-patrol','step-pay','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages','step-photo'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
+  document.getElementById('guard-admin-link').classList.toggle('hidden', id!=='step-0');
 }
-function showModeMenu(){
+// Bottom-nav tabs. Incident/Availability/Profile are reached from Home's
+// quick actions instead (rendered as bottom sheets via the .as-sheet class
+// on their existing .guard-card — see startIncidentFlow() etc. below) so
+// they're deliberately not part of this map; the nav bar itself only
+// reflects which of these five is current.
+const GUARD_TAB_CARD = {home:'step-home', shifts:'step-myshifts', patrol:'step-patrol', pay:'step-pay', inbox:'step-messages'};
+function showGuardTab(tab){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
-  showGuardCard('step-menu');
+  showGuardCard(GUARD_TAB_CARD[tab]);
+  document.getElementById('guard-bottom-nav').classList.remove('hidden');
+  document.querySelectorAll('.gbn-tab').forEach(b=>b.classList.toggle('active', b.dataset.gtab===tab));
   refreshPushUI();
   refreshPanicButton();
+  if(tab==='home') loadGuardHome();
+  else if(tab==='shifts') loadMyShifts();
+  else if(tab==='pay') loadGuardPay();
+  else if(tab==='inbox') loadGuardMessagesEntry();
 }
-function startShiftFlow(){
-  showGuardCard('step-myshifts');
-  loadMyShifts();
-}
-function startPatrolFlow(){ showGuardCard('step-patrol'); }
+function showModeMenu(){ showGuardTab('home'); }
+function startShiftFlow(){ showGuardTab('shifts'); }
+function startPatrolFlow(){ showGuardTab('patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
 function startAvailabilityFlow(){ showGuardCard('step-availability'); loadGuardAvailability(); }
-function startMessagesFlow(){ showGuardCard('step-messages'); loadGuardMessagesEntry(); }
+function startMessagesFlow(){ showGuardTab('inbox'); }
 // ── My Photo ─────────────────────────────────────────────────────────────────
 let profilePhotoB64 = null, profilePhotoExt = null;
 async function startPhotoFlow(){
@@ -3369,6 +3494,178 @@ const SHIFT_STATUS_LABEL = {
   completed:  {label:'Clocked Out',       badge:'role-viewer'},
   cancelled:  {label:'Cancelled',         badge:'rejected'},
 };
+// ── Home tab: shift-first landing ───────────────────────────────────────────
+let guardElapsedInterval = null;
+function guardCurrentOrNextShift(){
+  const inProgress = myShiftsData.find(s=>s.status==='in_progress');
+  if(inProgress) return {shift:inProgress, state:'in'};
+  const upcoming = myShiftsData.find(s=>s.status==='scheduled' || s.status==='missed');
+  if(upcoming) return {shift:upcoming, state:'out'};
+  return {shift:null, state:'none'};
+}
+async function loadGuardHome(){
+  try{ myShiftsData = await guardApiFetch('/api/guard/shifts'); }catch(e){}
+  renderGuardHome();
+  loadGuardHomeStats();
+}
+function renderGuardHome(){
+  const card = document.getElementById('gh-clock-card');
+  if(!card) return;
+  if(guardElapsedInterval){ clearInterval(guardElapsedInterval); guardElapsedInterval=null; }
+  const {shift, state} = guardCurrentOrNextShift();
+  if(state==='none'){
+    card.innerHTML = `<div class="gh-noshift">
+      <div class="gh-noshift-icon">🗓️</div>
+      <div class="gh-noshift-title">${t('home_no_shift')}</div>
+      <div class="gh-noshift-sub">${t('home_no_shift_sub')}</div>
+    </div>`;
+  } else if(state==='out'){
+    card.innerHTML = `<div class="gh-out-row">
+      <button class="gh-dial" id="gh-dial-btn" tabindex="0">
+        <svg viewBox="0 0 120 120" width="108" height="108" class="gh-dial-svg">
+          <circle cx="60" cy="60" r="59" class="gh-dial-ring2"/>
+          <circle cx="60" cy="60" r="54" class="gh-dial-track"/>
+          <circle cx="60" cy="60" r="54" class="gh-dial-progress" id="gh-dial-progress" stroke-dasharray="339.3" stroke-dashoffset="339.3"/>
+        </svg>
+        <span class="gh-dial-label" id="gh-dial-label">${t('home_clock_in_lbl')}</span>
+        <span class="gh-dial-sub" id="gh-dial-sub">${t('home_hold_2s')}</span>
+      </button>
+      <div class="gh-out-text">
+        <div class="gh-out-next"><span dir="ltr">${t('home_next_shift_prefix')}${shift.start_time}</span></div>
+        <div class="gh-out-site">${escapeHtml(shift.site_name)}</div>
+        <div class="gh-out-sub">${shift.position?escapeHtml(shift.position)+' · ':''}<span dir="ltr">${shift.start_time}–${shift.end_time||t('shift_required_label')}</span></div>
+      </div>
+    </div>`;
+    wireGuardHoldDial(shift.id);
+  } else {
+    card.innerHTML = `<div class="gh-in-top">
+        <span class="gh-in-dot"></span><span class="gh-in-label">${t('home_on_shift')}</span>
+        <span class="gh-in-pill">${escapeHtml(shift.site_name)}</span>
+      </div>
+      <div class="gh-in-elapsed" id="gh-elapsed">00:00:00</div>
+      <div class="gh-in-caption" id="gh-elapsed-caption"></div>
+      <div class="gh-in-progress-track"><div class="gh-in-progress-fill" id="gh-in-fill"></div></div>
+      <div class="gh-in-btns">
+        <button class="btn btn-gold" style="flex:1" onclick="openClockOut('${shift.id}')">${t('home_clock_out_btn')}</button>
+        <button class="gh-in-plus" onclick="startIncidentFlow()" aria-label="${t('menu_incident_title')}">+</button>
+      </div>`;
+    startGuardElapsedTimer(shift);
+  }
+}
+function wireGuardHoldDial(shiftId){
+  const btn = document.getElementById('gh-dial-btn');
+  if(!btn) return;
+  const progress = document.getElementById('gh-dial-progress');
+  const label = document.getElementById('gh-dial-label');
+  const sub = document.getElementById('gh-dial-sub');
+  const CIRC = 339.3, DURATION = 2000;
+  let startTs = null, raf = null, done = false;
+  function resetVisual(){
+    progress.setAttribute('stroke-dashoffset', String(CIRC));
+    label.textContent = t('home_clock_in_lbl');
+    sub.textContent = t('home_hold_2s');
+  }
+  function frame(ts){
+    if(startTs===null) startTs = ts;
+    const pct = Math.min(1, (ts-startTs)/DURATION);
+    progress.setAttribute('stroke-dashoffset', String(CIRC*(1-pct)));
+    label.textContent = pct<1 ? Math.round(pct*100)+'%' : t('home_clock_in_lbl');
+    if(pct>=1 && !done){
+      done = true;
+      sub.textContent = t('home_clocking_in');
+      clockIn(shiftId);
+      return;
+    }
+    if(pct<1) raf = requestAnimationFrame(frame);
+  }
+  function start(e){ if(done) return; e.preventDefault(); startTs=null; if(raf) cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
+  function cancel(){ if(done) return; if(raf) cancelAnimationFrame(raf); raf=null; startTs=null; resetVisual(); }
+  btn.onpointerdown = start;
+  btn.onpointerup = cancel;
+  btn.onpointerleave = cancel;
+  btn.onpointercancel = cancel;
+  // Keyboard equivalent for the hold gesture, per accessibility requirements.
+  btn.onkeydown = e=>{
+    if((e.key==='Enter' || e.key===' ') && !done){
+      e.preventDefault();
+      if(confirm(t('home_clock_in_lbl')+' — '+shift_confirm_label())){ done=true; clockIn(shiftId); }
+    }
+  };
+  function shift_confirm_label(){ return t('confirm_btn')||'Confirm?'; }
+}
+function startGuardElapsedTimer(shift){
+  const el = document.getElementById('gh-elapsed');
+  const cap = document.getElementById('gh-elapsed-caption');
+  const fill = document.getElementById('gh-in-fill');
+  if(!el || !shift.clock_in_at) return;
+  const startMs = new Date(shift.clock_in_at).getTime();
+  let plannedHours = 8;
+  if(shift.end_time){
+    const [sh,sm] = shift.start_time.split(':').map(Number);
+    const [eh,em] = shift.end_time.split(':').map(Number);
+    let mins = (eh*60+em)-(sh*60+sm); if(mins<=0) mins += 24*60;
+    plannedHours = mins/60;
+  }
+  function tick(){
+    const secs = Math.max(0, Math.floor((Date.now()-startMs)/1000));
+    const h = String(Math.floor(secs/3600)).padStart(2,'0');
+    const m = String(Math.floor((secs%3600)/60)).padStart(2,'0');
+    const s = String(secs%60).padStart(2,'0');
+    el.textContent = `${h}:${m}:${s}`;
+    cap.textContent = t('home_elapsed_of_prefix') + plannedHours.toFixed(1) + 'h';
+    if(fill) fill.style.width = Math.min(100, (secs/3600/plannedHours*100)) + '%';
+  }
+  tick();
+  guardElapsedInterval = setInterval(tick, 1000);
+}
+async function loadGuardHomeStats(){
+  const {shift} = guardCurrentOrNextShift();
+  const cpEl = document.getElementById('gh-stat-checkpoints');
+  if(shift){
+    try{
+      const cps = await apiFetch(`/api/checkpoints?site_id=${shift.site_id}`);
+      cpEl.textContent = cps.length;
+    }catch(e){ cpEl.textContent = '—'; }
+  } else {
+    cpEl.textContent = '—';
+  }
+  try{
+    const pay = await guardApiFetch('/api/guard/pay');
+    document.getElementById('gh-stat-pay').textContent = '$'+pay.hero_total.toFixed(0);
+  }catch(e){ document.getElementById('gh-stat-pay').textContent = '—'; }
+}
+
+// ── Pay tab ──────────────────────────────────────────────────────────────────
+async function loadGuardPay(){
+  try{
+    const d = await guardApiFetch('/api/guard/pay');
+    renderGuardPay(d);
+  }catch(e){
+    document.getElementById('gp-rows').innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('could_not_load_shifts')}</p>`;
+  }
+}
+function renderGuardPay(d){
+  document.getElementById('gp-hero-total').textContent = '$'+d.hero_total.toFixed(2);
+  document.getElementById('gp-hero-sub').textContent = `${d.hero_hours} HOURS · ${d.hero_shifts} SHIFT${d.hero_shifts===1?'':'S'}`;
+  document.getElementById('gp-pills').innerHTML = `
+    <span class="gp-pill approved">${d.pills.approved} ${t('pay_approved')}</span>
+    <span class="gp-pill pending">${d.pills.pending} ${t('pay_pending')}</span>
+    <span class="gp-pill rejected">${d.pills.rejected} ${t('pay_rejected')}</span>`;
+  const rowsEl = document.getElementById('gp-rows');
+  if(!d.rows.length){
+    rowsEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('pay_no_history')}</p>`;
+    return;
+  }
+  rowsEl.innerHTML = d.rows.map(r=>{
+    const badge = r.status==='approved'?'approved':r.status==='rejected'?'rejected':'pending';
+    const label = r.status==='approved'?t('pay_approved'):r.status==='rejected'?t('pay_rejected'):t('pay_pending');
+    return `<div class="gp-row">
+      <div><div class="gp-row-site">${escapeHtml(r.site_name)}</div><div class="gp-row-sub"><span dir="ltr">${r.shift_date} · ${r.total_hours}h @ $${r.rate.toFixed(2)}</span></div></div>
+      <div style="text-align:right"><div class="gp-row-amt">$${r.amount.toFixed(2)}</div><span class="badge badge-${badge}">${label}</span></div>
+    </div>`;
+  }).join('');
+}
+
 async function loadMyShifts(){
   if(!selectedGuard) return;
   const listEl = document.getElementById('myshifts-list');
@@ -3381,6 +3678,7 @@ async function loadMyShifts(){
   }
 }
 function renderMyShiftsList(){
+  if(typeof renderGuardHome==='function') renderGuardHome();
   const listEl = document.getElementById('myshifts-list');
   if(!myShiftsData.length){
     listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">${t('no_shifts')}</p>`;
@@ -3862,7 +4160,7 @@ async function checkUnreadMessages(){
   try{
     const rows = await guardApiFetch('/api/guard/messages');
     const unread = rows.filter(m=>m.sender==='admin' && !m.read_at).length;
-    document.getElementById('msg-unread-dot')?.classList.toggle('hidden', unread===0);
+    document.getElementById('gbn-inbox-dot')?.classList.toggle('hidden', unread===0);
   }catch(e){}
 }
 const GUARD_QUERY_STATUS_STYLE = {
@@ -4056,7 +4354,7 @@ async function loadGuardMessages(){
     renderGuardQueryStatus(status);
     if(rows.some(m=>m.sender==='admin' && !m.read_at)){
       await guardApiFetch('/api/guard/messages/read', {method:'POST'});
-      document.getElementById('msg-unread-dot')?.classList.add('hidden');
+      document.getElementById('gbn-inbox-dot')?.classList.add('hidden');
     }
   }catch(e){ box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('could_not_load_messages')}</p>`; }
 }
