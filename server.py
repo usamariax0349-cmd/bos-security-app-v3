@@ -2394,6 +2394,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ''', (gsx['guard_id'],)).fetchall())
                 db.close(); self.send_json(rows); return
 
+            # A guard's own pay history — the same submissions/rates join the
+            # admin invoice view uses, scoped to this guard and with a
+            # "this fortnight" rollup for the Pay tab's hero numbers.
+            if path == '/api/guard/pay':
+                db = get_db()
+                rows = RL(db.execute('''
+                    SELECT sub.id, sub.shift_date, sub.start_time, sub.end_time, sub.total_hours,
+                           sub.status, sub.submitted_at, s.name as site_name,
+                           COALESCE(r.rate, g.base_rate) as rate
+                    FROM submissions sub
+                    JOIN sites s ON s.id=sub.site_id
+                    JOIN guards g ON g.id=sub.guard_id
+                    LEFT JOIN rates r ON r.guard_id=sub.guard_id AND r.site_id=sub.site_id
+                    WHERE sub.guard_id=? AND sub.shift_date >= date('now','-90 days')
+                    ORDER BY sub.shift_date DESC, sub.start_time DESC LIMIT 60
+                ''', (gsx['guard_id'],)).fetchall())
+                db.close()
+                for r in rows:
+                    r['amount'] = round(r['total_hours'] * r['rate'], 2)
+                fortnight_from = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d')
+                fortnight = [r for r in rows if r['shift_date'] >= fortnight_from]
+                self.send_json({
+                    'hero_total': round(sum(r['amount'] for r in fortnight), 2),
+                    'hero_hours': round(sum(r['total_hours'] for r in fortnight), 2),
+                    'hero_shifts': len(fortnight),
+                    'pills': {
+                        'approved': sum(1 for r in rows if r['status']=='approved'),
+                        'pending':  sum(1 for r in rows if r['status']=='pending'),
+                        'rejected': sum(1 for r in rows if r['status']=='rejected'),
+                    },
+                    'rows': rows,
+                }); return
+
             if path == '/api/guard/incidents':
                 db = get_db()
                 rows = RL(db.execute('''
