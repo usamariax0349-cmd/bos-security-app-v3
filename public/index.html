@@ -301,6 +301,23 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   0%{transform:translate(0,0)}20%{transform:translate(-6%,4%)}40%{transform:translate(4%,-5%)}
   60%{transform:translate(-3%,-3%)}80%{transform:translate(5%,3%)}100%{transform:translate(0,0)}
 }
+/* ── premium map chrome (Leaflet: zoom control, popups, pins) ────────────── */
+.leaflet-container{font-family:var(--font-body);background:#eef1f6}
+.leaflet-control-zoom{border:none!important;border-radius:10px!important;overflow:hidden;
+  box-shadow:0 10px 26px -10px rgba(16,26,46,.4)!important}
+.leaflet-control-zoom a{background:var(--card)!important;color:var(--navy)!important;
+  border-color:var(--border)!important;font-weight:700}
+.leaflet-control-zoom a:hover{background:var(--gold-l)!important;color:var(--navy-d)!important}
+.leaflet-popup-content-wrapper{border-radius:12px!important;
+  box-shadow:0 20px 50px -18px rgba(16,26,46,.45)!important}
+.leaflet-popup-content{font-family:var(--font-body);font-size:13px;margin:10px 14px}
+.leaflet-popup-tip{box-shadow:none!important}
+.bo-map-pin{filter:drop-shadow(0 6px 10px rgba(16,26,46,.4))}
+.bo-map-links{display:inline-flex;gap:8px;flex-wrap:wrap}
+.bo-map-links a{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;
+  padding:5px 10px;border-radius:20px;background:var(--brass);color:#241d05;text-decoration:none;
+  box-shadow:0 6px 14px -6px rgba(198,154,63,.6)}
+.bo-map-links a:hover{filter:brightness(1.06)}
 .guard-container{max-width:480px;margin:0 auto;padding:24px 16px 40px;position:relative;z-index:1}
 .guard-header{text-align:center;margin-bottom:32px;padding-top:16px}
 .guard-logo-wrap{width:72px;height:72px;margin:0 auto 16px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:36px;border:2px solid rgba(201,168,76,.4)}
@@ -3525,8 +3542,33 @@ if(!LEAFLET_OK){
   window.L = {
     map:()=>Object.assign(Object.create(stub), stub, {_group:stub}),
     tileLayer:()=>stub, layerGroup:()=>stub, circle:()=>stub,
-    marker:()=>stub, circleMarker:()=>stub, latLngBounds:()=>stub,
+    marker:()=>stub, circleMarker:()=>stub, latLngBounds:()=>stub, divIcon:()=>({}),
   };
+} else {
+  // Brass pin replaces Leaflet's default blue-teardrop marker everywhere in the
+  // app — every L.marker(...) call site picks this up automatically since none
+  // of them pass a custom `icon` option.
+  L.Marker.prototype.options.icon = L.divIcon({
+    className: 'bo-map-pin',
+    html: `<svg width="28" height="38" viewBox="0 0 28 38" xmlns="http://www.w3.org/2000/svg">
+      <path d="M14 0C6.3 0 0 6.3 0 14c0 9.8 14 24 14 24s14-14.2 14-24C28 6.3 21.7 0 14 0z" fill="url(#bo-pin-g)"/>
+      <circle cx="14" cy="14" r="5.5" fill="#101a2e"/>
+      <defs><linearGradient id="bo-pin-g" x1="0" y1="0" x2="28" y2="38" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#f0d99b"/><stop offset=".6" stop-color="#c69a3f"/><stop offset="1" stop-color="#8f7228"/>
+      </linearGradient></defs>
+    </svg>`,
+    iconSize: [28,38], iconAnchor: [14,38], popupAnchor: [0,-34]
+  });
+}
+// Deep-links so a coordinate can be opened in the guard's/admin's own native
+// map app instead of only ever viewing it inside the embedded Leaflet panel.
+function mapAppLinks(lat, lng, label){
+  if(lat==null || lng==null) return '';
+  const q = encodeURIComponent(label||'');
+  return `<span class="bo-map-links">
+    <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lng}" target="_blank" rel="noopener">Google Maps</a>
+    <a href="https://maps.apple.com/?ll=${lat},${lng}${q?`&q=${q}`:''}" target="_blank" rel="noopener">Apple Maps</a>
+  </span>`;
 }
 function getMap(elId, center, zoom){
   const el = document.getElementById(elId);
@@ -3538,7 +3580,9 @@ function getMap(elId, center, zoom){
   }
   if(!_maps[elId]){
     _maps[elId] = L.map(elId, {attributionControl:false, zoomControl:true});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(_maps[elId]);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
+      maxZoom:20, subdomains:'abcd', detectRetina:true
+    }).addTo(_maps[elId]);
     _maps[elId]._group = L.layerGroup().addTo(_maps[elId]);
   }
   _maps[elId].setView(center, zoom||16);
@@ -4570,16 +4614,30 @@ async function openPanicAlertsModal(){
     listEl.innerHTML = rows.length===0
       ? `<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">No active alerts.</p>`
       : rows.map(r=>{
-          const mapLink = (r.lat!=null && r.lng!=null)
-            ? `<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">Open location in Maps</a>`
-            : `<span style="color:var(--muted)">Location unavailable</span>`;
+          const hasLoc = r.lat!=null && r.lng!=null;
+          const mapEl = hasLoc
+            ? `<div id="panic-map-${r.id}" class="hidden" style="height:150px;border-radius:10px;margin-bottom:10px;overflow:hidden"></div>`
+            : '';
+          const linkRow = hasLoc
+            ? mapAppLinks(r.lat, r.lng, r.guard_name)
+            : `<span style="color:var(--muted);font-size:13px">Location unavailable</span>`;
           return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
-            <div style="font-weight:700;margin-bottom:4px">${r.guard_name}${r.guard_phone?' · '+r.guard_phone:''}</div>
+            <div style="font-weight:700;margin-bottom:4px">${escapeHtml(r.guard_name)}${r.guard_phone?' · '+escapeHtml(r.guard_phone):''}</div>
             <div style="font-size:12px;color:var(--muted);margin-bottom:8px">${fmtDateTime(r.created_at)}</div>
-            <div style="font-size:13px;margin-bottom:10px">${mapLink}</div>
+            ${mapEl}
+            <div style="margin-bottom:10px">${linkRow}</div>
             <button class="btn btn-sm btn-primary" onclick="resolvePanicAlert('${r.id}')">Mark Resolved</button>
           </div>`;
         }).join('');
+    // Live location preview — a text link alone made an emergency alert one
+    // extra tap away from actually seeing where the guard is; this shows it
+    // inline the moment the modal opens.
+    rows.forEach(r=>{
+      if(r.lat==null || r.lng==null) return;
+      const map = getMap(`panic-map-${r.id}`, [r.lat, r.lng], 16);
+      L.circle([r.lat,r.lng], {radius:60, color:'#dc2626', fillColor:'#dc2626', fillOpacity:.18}).addTo(map._group);
+      L.marker([r.lat,r.lng]).addTo(map._group).bindTooltip(r.guard_name);
+    });
   }catch(e){ listEl.innerHTML = `<p style="color:var(--red);font-size:13px">Could not load alerts.</p>`; }
 }
 async function resolvePanicAlert(id){
@@ -6820,7 +6878,8 @@ function openIncidentReview(id){
       <div><div class="form-label">When</div>${fmtDateTime(r.occurred_at)}</div>
     </div>
     ${r.description?`<div class="form-group"><div class="form-label">Description</div><p style="font-size:13px">${r.description}</p></div>`:''}
-    ${r.lat!=null?`<div id="incident-review-map" class="map-box light" style="height:180px;margin-bottom:14px"></div>`:''}
+    ${r.lat!=null?`<div id="incident-review-map" class="map-box light" style="height:180px;margin-bottom:8px"></div>
+      <div style="margin-bottom:14px">${mapAppLinks(r.lat, r.lng, r.site_name)}</div>`:''}
     ${r.photo_filename?`<div style="margin-bottom:16px"><div class="form-label">Photo</div>
       <img src="/uploads/${r.photo_filename}?t=${Date.now()}" style="max-width:100%;border-radius:8px;cursor:pointer" onclick="viewPhoto('/uploads/${r.photo_filename}')"></div>`:''}
     <div class="form-group"><label class="form-label">Status</label>
