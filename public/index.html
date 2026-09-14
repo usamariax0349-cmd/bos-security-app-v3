@@ -1153,6 +1153,68 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
     </div>
 
+    <!-- ID card (new) -->
+    <div class="guard-card hidden" id="step-id">
+      <div class="gid-head">
+        <div class="gid-avatar" id="gid-avatar"></div>
+        <div style="min-width:0;flex:1">
+          <div class="gid-hi" id="gid-greeting"></div>
+          <div class="gid-hi-sub" id="gid-greeting-sub"></div>
+        </div>
+        <button class="gid-sos-btn" data-i18n="sos_short" onclick="openPanicConfirm()">SOS</button>
+      </div>
+
+      <button class="gid-flip-btn" onclick="toggleIdCard()" aria-label="Flip ID card">
+        <div class="gid-flip" id="gid-flip">
+          <!-- front -->
+          <div class="gid-face" id="gid-face-front">
+            <div class="gid-id-row">
+              <div class="gid-photo" id="gid-photo"></div>
+              <div style="min-width:0">
+                <div class="gid-name" id="gid-name">—</div>
+                <div class="gid-role" id="gid-role"></div>
+                <div id="gid-status"></div>
+              </div>
+            </div>
+            <div class="gid-grid">
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_licence">Licence</div><div class="gid-cell-val" id="gid-licence">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_class">Class</div><div class="gid-cell-val" id="gid-class">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_valid_until">Valid until</div><div class="gid-cell-val" id="gid-expiry">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_first_aid">First aid</div><div class="gid-cell-val" id="gid-firstaid">—</div></div>
+            </div>
+            <div class="gid-barcode-wrap">
+              <div class="gid-barcode" id="gid-barcode"></div>
+              <div class="gid-barcode-cap" id="gid-barcode-cap"></div>
+            </div>
+          </div>
+          <!-- back -->
+          <div class="gid-face gid-back" id="gid-face-back" aria-hidden="true">
+            <div class="gid-eyebrow" data-i18n="id_emergency">In an emergency</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_control_room">Control room</span><span class="gid-erow-val" id="gid-control">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_next_of_kin">Next of kin</span><span class="gid-erow-val" id="gid-kin">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_blood">Blood type</span><span class="gid-erow-val" id="gid-blood">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_access">Site access</span><span class="gid-erow-val" id="gid-access">—</span></div>
+            </div>
+            <div class="gid-note" style="margin-top:auto" data-i18n="id_lost_badge_note">
+              Lost your badge? Report it from Inbox and the office will void this card immediately.
+            </div>
+          </div>
+        </div>
+      </button>
+      <div class="gid-hint" id="gid-hint" data-i18n="id_flip_hint">Tap the card for emergency details</div>
+
+      <button class="btn-brass-lg" style="margin-top:14px" data-i18n="id_present_btn" onclick="openPresentBadge()">Present badge</button>
+
+      <div class="gid-sec-lbl" data-i18n="id_your_record">Your record</div>
+      <div class="gid-stats">
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-streak">—</div><div class="gid-stat-lbl" data-i18n="id_streak">On-time streak</div></div>
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-patrols">—</div><div class="gid-stat-lbl" data-i18n="id_patrols">Patrols done</div></div>
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-reports">—</div><div class="gid-stat-lbl" data-i18n="id_reports">Reports filed</div></div>
+      </div>
+      <div class="gid-nudge hidden" id="gid-nudge"></div>
+    </div>
+
     <!-- My Shifts (roster + clock in/out) -->
     <div class="guard-card hidden" id="step-myshifts">
       <div class="step-title" data-i18n="myshifts_title">🕐 My Shifts</div>
