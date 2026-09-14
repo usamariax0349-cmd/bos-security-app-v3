@@ -1,0 +1,9 @@
+# Dev/test-only dependencies — not needed to run the app itself (see requirements.txt).
+#
+# Setup:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   playwright install chromium
+#   pytest tests/
+-r requirements.txt
+pytest>=8.0.0
+playwright>=1.40.0
