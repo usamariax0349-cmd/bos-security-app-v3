@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Brown Owl Security</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1a2744">
@@ -500,6 +500,15 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .gh-sos-icon{font-size:26px}
 .gh-sos-title{font-weight:800;color:#fff;font-size:14px;letter-spacing:.05em}
 .gh-sos-sub{font-size:11.5px;color:rgba(255,255,255,.7)}
+.gh-push-nudge{width:100%;display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;margin-bottom:14px;
+  background:rgba(240,217,155,.1);border:1px solid rgba(240,217,155,.28)}
+.gpn-icon{font-size:20px;flex-shrink:0}
+.gpn-text{flex:1;min-width:0}
+.gpn-title{font-size:12.5px;font-weight:700;color:#fff}
+.gpn-sub{font-size:11px;color:rgba(255,255,255,.6);margin-top:2px;line-height:1.4}
+.gpn-enable{flex-shrink:0;background:var(--brass);color:#241d05;border:none;border-radius:9px;padding:8px 13px;
+  font-size:12px;font-weight:700;cursor:pointer}
+.gpn-dismiss{flex-shrink:0;background:none;border:none;color:rgba(255,255,255,.4);font-size:14px;cursor:pointer;padding:4px}
 
 /* Pay */
 .gp-hero{text-align:center;padding:8px 0 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px}
@@ -883,12 +892,24 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="gh-quick-btn" onclick="startPhotoFlow()"><span class="gqi">📷</span><span data-i18n="home_quick_photo">My photo</span></button>
       </div>
 
+      <!-- Proactive nudge, not just a button waiting to be noticed: shown until
+           the guard enables push or dismisses it (re-offered after a week if
+           still not enabled, since a shift/message alert genuinely matters). -->
+      <div id="push-nudge-card" class="gh-push-nudge hidden">
+        <div class="gpn-icon">🔔</div>
+        <div class="gpn-text">
+          <div class="gpn-title" data-i18n="push_nudge_title">Turn on notifications</div>
+          <div class="gpn-sub" data-i18n="push_nudge_sub">Know the moment a new shift is published or the office messages you.</div>
+        </div>
+        <button class="gpn-enable" onclick="enablePushNotifications()" data-i18n="push_nudge_enable_btn">Enable</button>
+        <button class="gpn-dismiss" onclick="dismissPushNudge()" aria-label="Dismiss">✕</button>
+      </div>
+
       <button id="panic-btn-home" class="gh-sos hidden" onclick="openPanicConfirm()">
         <span class="gh-sos-icon">🆘</span>
         <span><div class="gh-sos-title" data-i18n="home_sos_title">SOS</div><div class="gh-sos-sub" data-i18n="home_sos_sub">Tap to alert the control room</div></span>
       </button>
 
-      <button id="push-enable-btn" class="btn btn-ghost btn-sm hidden" data-i18n="push_enable_btn" style="width:100%;margin-top:14px" onclick="enablePushNotifications()">🔔 Enable Notifications</button>
       <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
         <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
       </div>
@@ -2367,6 +2388,7 @@ const TRANSLATIONS = {
     photo_sub: "This is shown to the office so they can recognize you — it's never shown to other guards.",
     save_photo_btn: "Save Photo", saving_photo_btn: "Saving…", photo_saved_toast: "Photo saved",
     push_enable_btn: "🔔 Enable Notifications", push_enabled_prefix: "🔔 Notifications on —", push_turn_off: "turn off",
+    push_nudge_title: "Turn on notifications", push_nudge_sub: "Know the moment a new shift is published or the office messages you.", push_nudge_enable_btn: "Enable",
     logout_btn: "Logout",
     myshifts_title: "🕐 My Shifts", back_to_menu: "← Back to Menu",
     clockout_title_prefix: "Clock Out — ", clockout_sub: "Optional: attach a photo and any notes before finishing this shift.",
@@ -3000,21 +3022,30 @@ function urlBase64ToUint8Array(base64String){
   const raw = atob(base64);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
+const PUSH_NUDGE_DISMISS_KEY = 'sg_push_nudge_dismissed_at';
+const PUSH_NUDGE_COOLDOWN_MS = 7*24*60*60*1000; // re-offer after a week if still not enabled
+function dismissPushNudge(){
+  try{ localStorage.setItem(PUSH_NUDGE_DISMISS_KEY, String(Date.now())); }catch(e){}
+  document.getElementById('push-nudge-card').classList.add('hidden');
+}
 async function refreshPushUI(){
-  const btn = document.getElementById('push-enable-btn');
+  const nudge = document.getElementById('push-nudge-card');
   const note = document.getElementById('push-enabled-note');
   if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
-    btn.classList.add('hidden'); note.classList.add('hidden'); return;
+    nudge.classList.add('hidden'); note.classList.add('hidden'); return;
   }
   try{
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if(sub){ btn.classList.add('hidden'); note.classList.remove('hidden'); return; }
+    if(sub){ nudge.classList.add('hidden'); note.classList.remove('hidden'); return; }
     note.classList.add('hidden');
-    if(Notification.permission === 'denied'){ btn.classList.add('hidden'); return; }
+    if(Notification.permission === 'denied'){ nudge.classList.add('hidden'); return; }
+    let dismissedAt = 0;
+    try{ dismissedAt = parseInt(localStorage.getItem(PUSH_NUDGE_DISMISS_KEY)||'0',10); }catch(e){}
+    if(dismissedAt && (Date.now()-dismissedAt) < PUSH_NUDGE_COOLDOWN_MS){ nudge.classList.add('hidden'); return; }
     const cfg = await guardApiFetch('/api/guard/push/vapid-key').catch(()=>({enabled:false}));
-    btn.classList.toggle('hidden', !cfg.enabled);
-  }catch(e){ btn.classList.add('hidden'); note.classList.add('hidden'); }
+    nudge.classList.toggle('hidden', !cfg.enabled);
+  }catch(e){ nudge.classList.add('hidden'); note.classList.add('hidden'); }
 }
 async function enablePushNotifications(){
   try{
