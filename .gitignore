@@ -3,3 +3,4 @@ __pycache__/
 data/
 uploads/*
 !uploads/.gitkeep
+.pytest_cache/
