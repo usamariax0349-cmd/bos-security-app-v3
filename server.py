@@ -2610,6 +2610,67 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             'revenue_month': round(rev_row, 2), 'recent': recent,
                             'expiring_licenses': expiring}); return
 
+        if path == '/api/dashboard/trends':
+            # Weekly buckets (Monday-start) for the dashboard's trend charts.
+            # Revenue/hours use the exact same approved-submission join the
+            # revenue_month stat and invoices already use (COALESCE(rate,
+            # guard's base_rate)) — never a second, drifting calculation.
+            weeks_n = qs.get('weeks',['8'])[0]
+            try: weeks_n = max(4, min(int(weeks_n), 26))
+            except ValueError: weeks_n = 8
+            cutoff_dt = datetime.now() - timedelta(weeks=weeks_n)
+            cutoff = cutoff_dt.strftime('%Y-%m-%d')
+            db = get_db()
+            sub_rows = RL(db.execute('''
+                SELECT sub.shift_date, sub.total_hours,
+                       (sub.total_hours * COALESCE(r.rate, g.base_rate)) as amount
+                FROM submissions sub
+                JOIN guards g ON g.id=sub.guard_id
+                LEFT JOIN rates r ON r.guard_id=sub.guard_id AND r.site_id=sub.site_id
+                WHERE sub.status='approved' AND sub.shift_date >= ?
+            ''', (cutoff,)).fetchall())
+            inc_rows = RL(db.execute(
+                "SELECT occurred_at, status FROM incidents WHERE occurred_at >= ?", (cutoff,)
+            ).fetchall())
+            db.close()
+
+            def week_start(date_str):
+                d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+                return (d - timedelta(days=d.weekday())).strftime('%Y-%m-%d')
+
+            weeks = []
+            cursor = cutoff_dt - timedelta(days=cutoff_dt.weekday())
+            end = datetime.now()
+            while cursor <= end:
+                weeks.append(cursor.strftime('%Y-%m-%d'))
+                cursor += timedelta(days=7)
+
+            revenue = {w: 0.0 for w in weeks}
+            hours   = {w: 0.0 for w in weeks}
+            for r in sub_rows:
+                wk = week_start(r['shift_date'])
+                if wk in revenue:
+                    revenue[wk] += r['amount'] or 0
+                    hours[wk]   += r['total_hours'] or 0
+
+            incidents = {w: {'open':0,'reviewing':0,'resolved':0} for w in weeks}
+            for r in inc_rows:
+                wk = week_start(r['occurred_at'])
+                if wk in incidents:
+                    st = r['status'] if r['status'] in ('open','reviewing','resolved') else 'open'
+                    incidents[wk][st] += 1
+
+            self.send_json({
+                'weeks': weeks,
+                'revenue': [round(revenue[w], 2) for w in weeks],
+                'hours': [round(hours[w], 1) for w in weeks],
+                'incidents': {
+                    'open':      [incidents[w]['open']      for w in weeks],
+                    'reviewing': [incidents[w]['reviewing'] for w in weeks],
+                    'resolved':  [incidents[w]['resolved']  for w in weeks],
+                }
+            }); return
+
         if path == '/api/licenses/expiring':
             # within_days omitted = everyone with an expiry date on file, for
             # the Reports export; the dashboard panel always passes 30.

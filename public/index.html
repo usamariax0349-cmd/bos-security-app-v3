@@ -407,6 +407,19 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 #admin-page{min-height:100vh;background:var(--bg)}
 .admin-content{max-width:1200px;margin:0 auto}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+/* ── dashboard trend charts (plain inline SVG, no charting library) ──────── */
+.dash-charts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.dash-charts-grid{grid-template-columns:1fr}}
+.dash-chart-card{background:#fff;border-radius:var(--r);padding:16px;border:1px solid rgba(15,23,42,.04);box-shadow:var(--sh)}
+.dcc-title{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px}
+.dcc-chart{position:relative}
+.dcc-chart svg{display:block}
+.dcc-axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-top:2px}
+.dcc-tooltip{position:absolute;top:2px;transform:translateX(-50%);background:var(--navy);color:#fff;font-size:11px;
+  line-height:1.5;padding:6px 9px;border-radius:8px;white-space:nowrap;pointer-events:none;box-shadow:0 8px 20px -8px rgba(0,0,0,.4);z-index:5}
+.dcc-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)}
+.dcc-legend-item{display:inline-flex;align-items:center;gap:5px}
+.dcc-legend-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
 .search-bar{display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:6px 12px}
 .search-bar input{border:none;background:none;font-size:13px;outline:none;min-width:160px}
 .invoice-preview{background:#fff;border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
@@ -1279,6 +1292,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="stat-card" onclick="dashGoTab('guards')" title="Open the guard list"><div class="stat-icon" style="background:#dbeafe">👮</div><div><div class="stat-val" id="s-guards">—</div><div class="stat-lbl">Active Guards</div></div></button>
         <button class="stat-card" onclick="dashGoTab('sites')" title="Open the site list"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></button>
         <button class="stat-card" onclick="dashGoBilling('invoices')" title="Open invoices"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></button>
+      </div>
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head">
+          <span class="section-title">Trends</span>
+          <select id="dash-trends-weeks" class="form-control" style="width:auto;padding:6px 10px;font-size:13px" onchange="loadDashboardTrends()">
+            <option value="8">Last 8 weeks</option>
+            <option value="13">Last 13 weeks</option>
+            <option value="26">Last 26 weeks</option>
+          </select>
+        </div>
+        <div class="dash-charts-grid">
+          <div class="dash-chart-card">
+            <div class="dcc-title">Revenue</div>
+            <div class="dcc-chart" id="chart-revenue"></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Hours Worked</div>
+            <div class="dcc-chart" id="chart-hours"></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Incidents by Status</div>
+            <div class="dcc-chart" id="chart-incidents"></div>
+            <div class="dcc-legend" id="chart-incidents-legend"></div>
+          </div>
+        </div>
       </div>
       <div class="section hidden" id="dash-expiring-section" style="margin-bottom:20px;border-left:3px solid var(--red)">
         <div class="section-head">
@@ -4744,6 +4782,116 @@ async function loadDashboard(){
     </tr>`).join('');
   }catch(e){ console.error(e); }
   loadLiveOps();
+  loadDashboardTrends();
+}
+
+// ── Dashboard trend charts (plain inline SVG — no charting library) ────────
+const CHART_COLORS = {
+  revenue: '#c69a3f',                                        // brand gold, sequential
+  hours:   '#3d7fd6',                                        // distinct hue, sequential
+  status:  {open:'#e5484d', reviewing:'#f0b429', resolved:'#12a870'} // matches existing badge colors
+};
+function fmtWeekLabel(iso){
+  const d = new Date(iso+'T00:00:00');
+  return d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+}
+function renderChartLegend(elId, series){
+  document.getElementById(elId).innerHTML = series.map(s=>
+    `<span class="dcc-legend-item"><span class="dcc-legend-dot" style="background:${s.color}"></span>${s.label}</span>`
+  ).join('');
+}
+function svgLineChart(elId, weeks, values, color, formatValue){
+  const el = document.getElementById(elId); if(!el) return;
+  const W = el.clientWidth || 260, H = 140, padL=6, padR=6, padT=10, padB=20;
+  const innerW=W-padL-padR, innerH=H-padT-padB, n=values.length;
+  const maxV = Math.max(1, ...values);
+  const x = i => padL + (n<=1?innerW/2:innerW*i/(n-1));
+  const y = v => padT + innerH - (v/maxV)*innerH;
+  const pts = values.map((v,i)=>[x(i),y(v)]);
+  const line = pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const area = `${line} L${pts[n-1][0].toFixed(1)},${(padT+innerH).toFixed(1)} L${pts[0][0].toFixed(1)},${(padT+innerH).toFixed(1)} Z`;
+  const gid = 'dccg'+Math.random().toString(36).slice(2,9);
+  const dots = pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${color}"/>`).join('');
+  const hits = pts.map((p,i)=>`<rect x="${(padL+innerW*i/n).toFixed(1)}" y="0" width="${(innerW/n).toFixed(1)}" height="${H}" fill="transparent" class="dcc-hit" data-i="${i}"/>`).join('');
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">
+      <line x1="${padL}" y1="${(padT+innerH).toFixed(1)}" x2="${W-padR}" y2="${(padT+innerH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity=".22"/><stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${area}" fill="url(#${gid})"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}${hits}
+    </svg>
+    <div class="dcc-axis"><span>${fmtWeekLabel(weeks[0])}</span><span>${fmtWeekLabel(weeks[weeks.length-1])}</span></div>
+    <div class="dcc-tooltip hidden" id="${elId}-tip"></div>`;
+  const tip = document.getElementById(elId+'-tip');
+  const show = i => {
+    tip.innerHTML = `<b>${formatValue(values[i])}</b><br>${fmtWeekLabel(weeks[i])}`;
+    tip.style.left = (pts[i][0]/W*100)+'%'; tip.classList.remove('hidden');
+  };
+  el.querySelectorAll('.dcc-hit').forEach(hit=>{
+    const i = +hit.dataset.i;
+    hit.addEventListener('mouseenter', ()=>show(i));
+    hit.addEventListener('mouseleave', ()=>tip.classList.add('hidden'));
+    hit.addEventListener('touchstart', ()=>show(i), {passive:true});
+  });
+}
+function svgStackedBarChart(elId, weeks, series){
+  const el = document.getElementById(elId); if(!el) return;
+  const W = el.clientWidth || 260, H = 140, padL=6, padR=6, padT=10, padB=20;
+  const innerW=W-padL-padR, innerH=H-padT-padB, n=weeks.length;
+  const totals = weeks.map((_,i)=>series.reduce((s,ser)=>s+ser.values[i],0));
+  const maxV = Math.max(1, ...totals);
+  const bw = Math.max(4, innerW/n*0.55);
+  let bars='';
+  const centers=[];
+  for(let i=0;i<n;i++){
+    const cx = padL + innerW*(i+0.5)/n; centers.push(cx);
+    let yCursor = padT+innerH;
+    for(const ser of series){
+      const v = ser.values[i]; if(v<=0) continue;
+      const h = (v/maxV)*innerH;
+      const yTop = yCursor - h;
+      bars += `<rect x="${(cx-bw/2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,h-2).toFixed(1)}" rx="2" fill="${ser.color}" stroke="rgba(15,23,42,.12)" stroke-width="1"/>`;
+      yCursor = yTop - 2;
+    }
+  }
+  const hits = weeks.map((_,i)=>`<rect x="${(padL+innerW*i/n).toFixed(1)}" y="0" width="${(innerW/n).toFixed(1)}" height="${H}" fill="transparent" class="dcc-hit" data-i="${i}"/>`).join('');
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}">
+      <line x1="${padL}" y1="${(padT+innerH).toFixed(1)}" x2="${W-padR}" y2="${(padT+innerH).toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+      ${bars}${hits}
+    </svg>
+    <div class="dcc-axis"><span>${fmtWeekLabel(weeks[0])}</span><span>${fmtWeekLabel(weeks[weeks.length-1])}</span></div>
+    <div class="dcc-tooltip hidden" id="${elId}-tip"></div>`;
+  const tip = document.getElementById(elId+'-tip');
+  const show = i => {
+    const lines = series.map(ser=>`${ser.label}: <b>${ser.values[i]}</b>`).join('<br>');
+    tip.innerHTML = `${fmtWeekLabel(weeks[i])}<br>${lines}`;
+    tip.style.left = (centers[i]/W*100)+'%'; tip.classList.remove('hidden');
+  };
+  el.querySelectorAll('.dcc-hit').forEach(hit=>{
+    const i = +hit.dataset.i;
+    hit.addEventListener('mouseenter', ()=>show(i));
+    hit.addEventListener('mouseleave', ()=>tip.classList.add('hidden'));
+    hit.addEventListener('touchstart', ()=>show(i), {passive:true});
+  });
+}
+async function loadDashboardTrends(){
+  const weeks = document.getElementById('dash-trends-weeks')?.value || 8;
+  try{
+    const d = await apiFetch(`/api/dashboard/trends?weeks=${weeks}`);
+    svgLineChart('chart-revenue', d.weeks, d.revenue, CHART_COLORS.revenue, v=>fmtMoney(v));
+    svgLineChart('chart-hours', d.weeks, d.hours, CHART_COLORS.hours, v=>v.toFixed(1)+'h');
+    const statusSeries = [
+      {key:'open',      label:'Open',      color:CHART_COLORS.status.open,      values:d.incidents.open},
+      {key:'reviewing', label:'Reviewing', color:CHART_COLORS.status.reviewing, values:d.incidents.reviewing},
+      {key:'resolved',  label:'Resolved',  color:CHART_COLORS.status.resolved,  values:d.incidents.resolved},
+    ];
+    svgStackedBarChart('chart-incidents', d.weeks, statusSeries);
+    renderChartLegend('chart-incidents-legend', statusSeries);
+  }catch(e){ console.error(e); }
 }
 async function dashGoGuardCompliance(guardId){
   if(!dashTabVisible('guards')){ toast('Your role does not have access to that section','info'); return; }
