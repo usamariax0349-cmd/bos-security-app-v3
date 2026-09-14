@@ -425,6 +425,13 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .invoice-preview{background:#fff;border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
 .invoice-total-row td{background:#f0f4ff!important;font-weight:700!important;color:var(--navy)!important}
 .empty-state{text-align:center;padding:48px 20px;color:var(--muted)}
+/* ── loading skeletons (replace plain "Loading…" text) ───────────────────── */
+@keyframes skelShimmer{0%{background-position:-135% 0}100%{background-position:135% 0}}
+.skel-line{border-radius:6px;background:linear-gradient(90deg,#eef0f4 25%,#f5f6f9 37%,#eef0f4 63%);
+  background-size:400% 100%;animation:skelShimmer 1.3s ease-in-out infinite}
+.skel-line.dark{background:linear-gradient(90deg,rgba(255,255,255,.06) 25%,rgba(255,255,255,.14) 37%,rgba(255,255,255,.06) 63%);
+  background-size:400% 100%}
+@media(prefers-reduced-motion:reduce){.skel-line{animation:none}}
 .empty-state .ei{font-size:48px;margin-bottom:12px}
 .empty-state p{font-size:14px}
 .role-badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
@@ -1287,11 +1294,36 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <!-- DASHBOARD -->
     <div id="tab-dashboard" class="tab-content active">
       <div class="stats-grid" id="stats-grid">
-        <button class="stat-card" onclick="dashGoSubmissions('pending')" title="See the submissions waiting on you"><div class="stat-icon" style="background:#fef3c7">⏳</div><div><div class="stat-val" id="s-pending">—</div><div class="stat-lbl">Pending Review</div></div></button>
-        <button class="stat-card" onclick="dashGoSubmissions('approved')" title="See approved submissions"><div class="stat-icon" style="background:#dcfce7">✅</div><div><div class="stat-val" id="s-today">—</div><div class="stat-lbl">Approved Today</div></div></button>
-        <button class="stat-card" onclick="dashGoTab('guards')" title="Open the guard list"><div class="stat-icon" style="background:#dbeafe">👮</div><div><div class="stat-val" id="s-guards">—</div><div class="stat-lbl">Active Guards</div></div></button>
-        <button class="stat-card" onclick="dashGoTab('sites')" title="Open the site list"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites">—</div><div class="stat-lbl">Active Sites</div></div></button>
-        <button class="stat-card" onclick="dashGoBilling('invoices')" title="Open invoices"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev">—</div><div class="stat-lbl">Revenue This Month</div></div></button>
+        <button class="stat-card" onclick="dashGoSubmissions('pending')" title="See the submissions waiting on you"><div class="stat-icon" style="background:#fef3c7">⏳</div><div><div class="stat-val" id="s-pending"><span class="skel-line" style="display:inline-block;height:16px;width:32px;vertical-align:middle"></span></div><div class="stat-lbl">Pending Review</div></div></button>
+        <button class="stat-card" onclick="dashGoSubmissions('approved')" title="See approved submissions"><div class="stat-icon" style="background:#dcfce7">✅</div><div><div class="stat-val" id="s-today"><span class="skel-line" style="display:inline-block;height:16px;width:32px;vertical-align:middle"></span></div><div class="stat-lbl">Approved Today</div></div></button>
+        <button class="stat-card" onclick="dashGoTab('guards')" title="Open the guard list"><div class="stat-icon" style="background:#dbeafe">👮</div><div><div class="stat-val" id="s-guards"><span class="skel-line" style="display:inline-block;height:16px;width:32px;vertical-align:middle"></span></div><div class="stat-lbl">Active Guards</div></div></button>
+        <button class="stat-card" onclick="dashGoTab('sites')" title="Open the site list"><div class="stat-icon" style="background:#fce7f3">📍</div><div><div class="stat-val" id="s-sites"><span class="skel-line" style="display:inline-block;height:16px;width:32px;vertical-align:middle"></span></div><div class="stat-lbl">Active Sites</div></div></button>
+        <button class="stat-card" onclick="dashGoBilling('invoices')" title="Open invoices"><div class="stat-icon" style="background:#d1fae5">💰</div><div><div class="stat-val" id="s-rev"><span class="skel-line" style="display:inline-block;height:16px;width:52px;vertical-align:middle"></span></div><div class="stat-lbl">Revenue This Month</div></div></button>
+      </div>
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head">
+          <span class="section-title">Trends</span>
+          <select id="dash-trends-weeks" class="form-control" style="width:auto;padding:6px 10px;font-size:13px" onchange="loadDashboardTrends()">
+            <option value="8">Last 8 weeks</option>
+            <option value="13">Last 13 weeks</option>
+            <option value="26">Last 26 weeks</option>
+          </select>
+        </div>
+        <div class="dash-charts-grid">
+          <div class="dash-chart-card">
+            <div class="dcc-title">Revenue</div>
+            <div class="dcc-chart" id="chart-revenue"><div class="skel-line" style="height:140px;border-radius:10px"></div></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Hours Worked</div>
+            <div class="dcc-chart" id="chart-hours"><div class="skel-line" style="height:140px;border-radius:10px"></div></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Incidents by Status</div>
+            <div class="dcc-chart" id="chart-incidents"><div class="skel-line" style="height:140px;border-radius:10px"></div></div>
+            <div class="dcc-legend" id="chart-incidents-legend"></div>
+          </div>
+        </div>
       </div>
       <div class="section" style="margin-bottom:20px">
         <div class="section-head">
@@ -2495,7 +2527,7 @@ const TRANSLATIONS = {
     avail_unavailable_label: "Unavailable", avail_available_all_day_label: "Available all day", change_btn: "Change",
     incident_select_site: "Please select a site", submitting_btn: "Submitting…",
     no_messages_yet: "No messages yet. Say hello 👋", office_label: "Office", guard_label: "Guard",
-    loading_label: "Loading…", could_not_load_messages: "Could not load messages.",
+    could_not_load_messages: "Could not load messages.",
     could_not_send_message: "Could not send message",
     status_open: "Awaiting Review", status_in_progress: "In Progress", status_resolved: "Solved",
     status_noted: "Noted", status_rejected: "Rejected",
@@ -2607,7 +2639,7 @@ const TRANSLATIONS = {
     avail_unavailable_label: "अनुपलब्ध", avail_available_all_day_label: "पूरे दिन उपलब्ध", change_btn: "बदलें",
     incident_select_site: "कृपया एक साइट चुनें", submitting_btn: "जमा किया जा रहा है…",
     no_messages_yet: "अभी तक कोई संदेश नहीं। नमस्ते कहें 👋", office_label: "कार्यालय", guard_label: "गार्ड",
-    loading_label: "लोड हो रहा है…", could_not_load_messages: "संदेश लोड नहीं हो सके।",
+    could_not_load_messages: "संदेश लोड नहीं हो सके।",
     could_not_send_message: "संदेश भेजा नहीं जा सका",
     status_open: "समीक्षा की प्रतीक्षा है", status_in_progress: "प्रगति पर है", status_resolved: "हल हो गया",
     status_noted: "नोट कर लिया गया", status_rejected: "अस्वीकृत",
@@ -2719,7 +2751,7 @@ const TRANSLATIONS = {
     avail_unavailable_label: "دستیاب نہیں", avail_available_all_day_label: "پورا دن دستیاب", change_btn: "تبدیل کریں",
     incident_select_site: "براہ کرم ایک سائٹ منتخب کریں", submitting_btn: "جمع کیا جا رہا ہے…",
     no_messages_yet: "ابھی تک کوئی پیغام نہیں۔ سلام کہیں 👋", office_label: "دفتر", guard_label: "گارڈ",
-    loading_label: "لوڈ ہو رہا ہے…", could_not_load_messages: "پیغامات لوڈ نہیں ہو سکے۔",
+    could_not_load_messages: "پیغامات لوڈ نہیں ہو سکے۔",
     could_not_send_message: "پیغام بھیجا نہیں جا سکا",
     status_open: "جائزے کا منتظر", status_in_progress: "زیر عمل", status_resolved: "حل ہو گیا",
     status_noted: "نوٹ کر لیا گیا", status_rejected: "مسترد",
@@ -2831,7 +2863,7 @@ const TRANSLATIONS = {
     avail_unavailable_label: "غير متاح", avail_available_all_day_label: "متاح طوال اليوم", change_btn: "تغيير",
     incident_select_site: "يرجى اختيار موقع", submitting_btn: "جارٍ الإرسال…",
     no_messages_yet: "لا توجد رسائل بعد. قل مرحبًا 👋", office_label: "المكتب", guard_label: "الحارس",
-    loading_label: "جارٍ التحميل…", could_not_load_messages: "تعذّر تحميل الرسائل.",
+    could_not_load_messages: "تعذّر تحميل الرسائل.",
     could_not_send_message: "تعذّر إرسال الرسالة",
     status_open: "بانتظار المراجعة", status_in_progress: "قيد المعالجة", status_resolved: "تم الحل",
     status_noted: "تم التسجيل", status_rejected: "مرفوض",
@@ -3329,7 +3361,7 @@ async function saveClientSiteDetails(){
 const CLIENT_SHIFT_BADGE = {scheduled:'pending', missed:'rejected', in_progress:'approved', completed:'approved'};
 async function loadClientManageShifts(){
   const tbody = document.getElementById('client-manage-shifts-tbody');
-  tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><p>Loading…</p></td></tr>`;
+  tbody.innerHTML = skelRows(7, 3);
   try{
     const rows = await apiFetch(`/api/client/site-shifts?site_id=${clientManageSiteId}`);
     tbody.innerHTML = rows.length===0
@@ -3868,7 +3900,7 @@ function renderGuardPay(d){
 async function loadMyShifts(){
   if(!selectedGuard) return;
   const listEl = document.getElementById('myshifts-list');
-  listEl.innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
+  listEl.innerHTML = `<div style="padding:4px 4px">${skelBlock(3, true)}</div>`;
   try{
     myShiftsData = await guardApiFetch('/api/guard/shifts');
     renderMyShiftsList();
@@ -3917,7 +3949,7 @@ async function loadGuardAvailability(){
   if(!selectedGuard) return;
   const days = Array.from({length:7},(_,i)=>new Date(gaWeekStart.getTime()+i*86400000));
   const dayISO = days.map(fmtISO);
-  document.getElementById('gavail-days').innerHTML = `<p style="font-size:13px;color:rgba(255,255,255,.5);text-align:center;padding:16px 0">Loading…</p>`;
+  document.getElementById('gavail-days').innerHTML = `<div style="padding:4px 4px">${skelBlock(4, true)}</div>`;
   try{
     const [avail, shifts] = await Promise.all([
       guardApiFetch(`/api/guard/availability?date_from=${dayISO[0]}&date_to=${dayISO[6]}`),
@@ -4320,6 +4352,25 @@ async function dismissReminder(){
   document.getElementById('reminder-overlay').classList.add('hidden');
 }
 
+// ── Loading skeletons (replace plain "Loading…" text with shimmer placeholders) ──
+function skelBlock(lines, dark){
+  const widths = ['92%','72%','86%','58%','80%'];
+  let out = '';
+  for(let i=0;i<lines;i++){
+    out += `<div class="skel-line${dark?' dark':''}" style="height:12px;width:${widths[i%widths.length]};margin:${i===0?'2px':'12px'} 0 0"></div>`;
+  }
+  return out;
+}
+function skelRows(cols, rows, dark){
+  let out = '';
+  for(let r=0;r<rows;r++){
+    out += '<tr>' + Array.from({length:cols}).map(()=>
+      `<td><div class="skel-line${dark?' dark':''}" style="height:12px;width:${55+((r*37+cols*13)%35)}%"></div></td>`
+    ).join('') + '</tr>';
+  }
+  return out;
+}
+
 // ── Messages (two-way guard <-> office chat) ─────────────────────────────────
 function escapeHtml(s){
   return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -4543,7 +4594,7 @@ function renderGuardQueryStatus(s){
 }
 async function loadGuardMessages(){
   const box = document.getElementById('msg-thread');
-  box.innerHTML = `<p style="color:var(--muted);font-size:13px">${t('loading_label')}</p>`;
+  box.innerHTML = skelBlock(3, true);
   try{
     const [rows, status] = await Promise.all([
       guardApiFetch('/api/guard/messages'),
@@ -4691,7 +4742,7 @@ async function checkPanicAlerts(){
 async function openPanicAlertsModal(){
   openModal('panic-alerts-modal');
   const listEl = document.getElementById('panic-alerts-list');
-  listEl.innerHTML = `<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">Loading…</p>`;
+  listEl.innerHTML = skelBlock(2);
   try{
     const rows = await apiFetch('/api/panic-alerts?status=active');
     listEl.innerHTML = rows.length===0
@@ -5878,7 +5929,7 @@ async function saveGuardDetails(){
 // ── Sites (blacklist / preferred) ────────────────────────────────────────────
 async function renderGuardSitesTab(){
   const body = document.getElementById('gd-subtab-body');
-  body.innerHTML = `<p>Loading…</p>`;
+  body.innerHTML = skelBlock(4);
   try{
     if(!allSitesAdmin.length) allSitesAdmin = await apiFetch('/api/sites');
     guardSitePrefs = await apiFetch(`/api/guards/${selectedGuardId}/site-prefs`);
@@ -5931,7 +5982,7 @@ const AU_STATES = ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'];
 async function renderGuardComplianceTab(){
   const g = currentGuard();
   const body = document.getElementById('gd-subtab-body');
-  body.innerHTML = `<p>Loading…</p>`;
+  body.innerHTML = skelBlock(4);
   try{ guardCompliance = await apiFetch(`/api/guards/${selectedGuardId}/compliance`); }
   catch(e){ toast(e.message,'error'); return; }
   body.innerHTML = `
@@ -6032,7 +6083,7 @@ async function saveComplianceField(itemId, field, value){
 // ── Leave ─────────────────────────────────────────────────────────────────────
 async function renderGuardLeaveTab(){
   const body = document.getElementById('gd-subtab-body');
-  body.innerHTML = `<p>Loading…</p>`;
+  body.innerHTML = skelBlock(4);
   try{ guardLeave = await apiFetch(`/api/guards/${selectedGuardId}/leave`); }
   catch(e){ toast(e.message,'error'); return; }
   body.innerHTML = `
@@ -6158,7 +6209,7 @@ async function loadSitesAdmin(){
 // ── Bot Knowledge Base ───────────────────────────────────────────────────────
 async function loadBotKb(){
   const box = document.getElementById('botkb-form');
-  box.innerHTML = `<p style="color:var(--muted);font-size:13px">Loading…</p>`;
+  box.innerHTML = skelBlock(5);
   try{
     const {fields} = await apiFetch('/api/bot/knowledge-base');
     const sections = [];
@@ -6276,7 +6327,7 @@ async function openRatingDetail(guardId){
   document.getElementById('ratings-list-section').classList.add('hidden');
   document.getElementById('ratings-detail-section').classList.remove('hidden');
   const box = document.getElementById('ratings-detail');
-  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  box.innerHTML = skelBlock(4);
   try{
     const [rating, notes] = await Promise.all([
       apiFetch(`/api/ratings/guards/${guardId}`),
@@ -6877,7 +6928,7 @@ async function openMessageThread(guardId){
   document.getElementById('msg-admin-ticket-info').textContent = ticketBits.join(' · ');
   renderMsgThreadsList();
   const box = document.getElementById('msg-admin-thread');
-  box.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  box.innerHTML = skelBlock(4);
   try{
     const rows = await apiFetch(`/api/messages?guard_id=${guardId}`);
     renderMsgThread(box, rows, 'admin');
