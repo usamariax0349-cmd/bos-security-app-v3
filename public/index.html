@@ -669,7 +669,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
 /* Pay */
 .gp-hero{text-align:center;padding:8px 0 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px}
-.gp-hero-val{font-family:var(--font-display);font-size:44px;font-weight:600;color:#fff;letter-spacing:-1px}
+.gp-hero-val{font-family:var(--font-display);font-size:46px;font-weight:600;color:#fff;letter-spacing:-1.2px}
 .gp-hero-sub{font-size:11px;font-weight:700;letter-spacing:.1em;color:rgba(255,255,255,.5);margin-top:4px}
 .gp-pills{display:flex;gap:8px;justify-content:center;margin-bottom:18px;flex-wrap:wrap}
 .gp-pill{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px}
@@ -722,6 +722,38 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .cp-row.done{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.08)}
 .cp-name{font-weight:700;color:#fff;font-size:14px}
 .cp-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+
+/* Patrol tab: progress ring + restyled checkpoint rows (own classes, not
+   .cp-row, since that class is shared with the Shifts roster list) */
+.patrol-progress-card{display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px;margin-bottom:14px}
+.patrol-ring-wrap{position:relative;width:98px;height:98px;flex-shrink:0}
+.patrol-ring-svg{transform:rotate(-90deg)}
+.patrol-ring-outer{fill:none;stroke:rgba(240,217,155,.3);stroke-width:1.5;stroke-dasharray:2 12;
+  transform-origin:60px 60px;animation:ringspin 14s linear infinite}
+.patrol-ring-track{fill:none;stroke:rgba(255,255,255,.1);stroke-width:8}
+.patrol-ring-progress{fill:none;stroke:var(--gold-l);stroke-width:8;stroke-linecap:round;
+  transition:stroke-dashoffset .5s var(--ease-out);filter:drop-shadow(0 0 8px rgba(240,217,155,.5))}
+.patrol-ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:22px;font-weight:600;color:#fff}
+.patrol-progress-eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:rgba(232,199,106,.75)}
+.patrol-progress-site{font-family:var(--font-display);font-size:18px;font-weight:600;color:#fff;margin-top:4px}
+.patrol-progress-next{font-size:12px;color:rgba(255,255,255,.5);margin-top:2px}
+.pcp-row{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.11);border-radius:14px;padding:14px;margin-bottom:10px}
+.pcp-row.done{background:rgba(18,168,112,.1);border-color:rgba(79,214,160,.38)}
+.pcp-badge{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;font-size:15px;color:rgba(255,255,255,.55);flex-shrink:0}
+.pcp-row.done .pcp-badge{background:rgba(18,168,112,.28);color:#8ff0c6}
+.pcp-main{flex:1;min-width:0}
+.pcp-name{font-size:13.5px;font-weight:600;color:#fff}
+.pcp-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+.pcp-scanned-lbl{font-size:11px;color:#8ff0c6;font-weight:700}
+.patrol-done-strip{text-align:center;background:rgba(18,168,112,.12);border:1px solid rgba(79,214,160,.32);
+  border-radius:14px;padding:18px 16px;margin-top:4px}
+.patrol-done-medal{font-size:28px}
+.patrol-done-text{font-size:13px;color:#8ff0c6;margin-top:8px;line-height:1.5}
 .activity-row{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}
 .activity-row:last-child{border-bottom:none}
 .activity-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
@@ -2814,6 +2846,10 @@ const TRANSLATIONS = {
     could_not_load_shifts: "Could not load your shifts.",
     no_checkpoints: "No checkpoints have been set up for this site yet.",
     check_in_radius: "Check-in radius", check_in_btn: "Check In", checked_in_btn: "Checked In",
+    patrol_this_round: "This round", patrol_all_scanned: "All checkpoints scanned",
+    patrol_checkpoints_left: "{n} checkpoint(s) left this round",
+    patrol_round_complete: "Full round complete — logged and sent to the office.",
+    patrol_scanned_lbl: "Scanned",
     offline_saved_clockin: "No connection — clock-in saved, will sync automatically",
     offline_saved_checkin: "No connection — check-in saved, will sync automatically",
     offline_clockout_title: "Clock-Out Saved!",
@@ -4687,11 +4723,34 @@ function renderPatrolList(){
     document.getElementById('patrol-map').classList.add('hidden');
     return;
   }
-  wrap.innerHTML = patrolCheckpoints.map(cp=>{
-    const done = patrolScanned.has(cp.id);
-    return `<div class="cp-row ${done?'done':''}" id="cp-row-${cp.id}">
-      <div><div class="cp-name">${done?'✅ ':''}${cp.name}</div><div class="cp-sub">${t('check_in_radius')} ${cp.radius_m}m</div></div>
-      <button class="btn btn-sm ${done?'btn-ghost':'btn-gold'}" ${done?'disabled':''} onclick="scanCheckpoint('${cp.id}')">${done?t('checked_in_btn'):t('check_in_btn')}</button>
+  const total = patrolCheckpoints.length, done = patrolScanned.size;
+  const CIRC = 339.3, offset = CIRC - CIRC * (total ? done/total : 0);
+  const progressCard = `<div class="patrol-progress-card">
+    <div class="patrol-ring-wrap">
+      <svg viewBox="0 0 120 120" width="98" height="98" class="patrol-ring-svg">
+        <circle cx="60" cy="60" r="59" class="patrol-ring-outer"/>
+        <circle cx="60" cy="60" r="54" class="patrol-ring-track"/>
+        <circle cx="60" cy="60" r="54" class="patrol-ring-progress" stroke-dasharray="${CIRC}" stroke-dashoffset="${offset}"/>
+      </svg>
+      <div class="patrol-ring-label">${done}/${total}</div>
+    </div>
+    <div>
+      <div class="patrol-progress-eyebrow">${t('patrol_this_round')}</div>
+      <div class="patrol-progress-site">${escapeHtml(patrolSite ? patrolSite.name : '')}</div>
+      <div class="patrol-progress-next">${done>=total ? t('patrol_all_scanned') : t('patrol_checkpoints_left').replace('{n}', total-done)}</div>
+    </div>
+  </div>`;
+  const doneStrip = done>=total ? `<div class="patrol-done-strip">
+      <div class="patrol-done-medal">🏅</div>
+      <div class="patrol-done-text">${t('patrol_round_complete')}</div>
+    </div>` : '';
+  wrap.innerHTML = progressCard + doneStrip + patrolCheckpoints.map(cp=>{
+    const rowDone = patrolScanned.has(cp.id);
+    return `<div class="pcp-row ${rowDone?'done':''}" id="cp-row-${cp.id}">
+      <div class="pcp-badge">${rowDone?'✓':'◎'}</div>
+      <div class="pcp-main"><div class="pcp-name">${escapeHtml(cp.name)}</div><div class="pcp-sub">${t('check_in_radius')} ${cp.radius_m}m</div></div>
+      ${rowDone ? `<span class="pcp-scanned-lbl">${t('patrol_scanned_lbl')}</span>`
+                : `<button class="btn btn-sm btn-gold" onclick="scanCheckpoint('${cp.id}')">${t('check_in_btn')}</button>`}
     </div>`;
   }).join('');
   if(patrolSite && patrolSite.lat!=null){
