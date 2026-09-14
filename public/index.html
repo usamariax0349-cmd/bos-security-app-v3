@@ -6543,6 +6543,18 @@ async function renderGuardComplianceTab(){
       ${g.license_file?`<button class="btn btn-ghost btn-sm" onclick="window.open('/uploads/${g.license_file}','_blank')">View File</button>`:''}
       <button class="btn btn-primary btn-sm" onclick="saveLicense()">Save Licence</button>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+      <div style="flex:1;min-width:180px;font-size:12.5px;color:var(--muted)">
+        ${g.license_verified_at
+          ? `✅ Verified on LARS ${fmtDate(g.license_verified_at)} by ${escapeHtml(g.license_verified_by||'')}`
+          : `⚪ Not yet checked against LARS`}
+      </div>
+      <a class="btn btn-ghost btn-sm" href="https://www.lars.police.vic.gov.au/" target="_blank" rel="noopener">Open LARS ↗</a>
+      <button class="btn btn-ghost btn-sm" onclick="verifyLicenseOnLars()">Mark checked today</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:-6px 0 10px">
+      Victoria Police's LARS register has no public API — this opens the lookup for you to check by hand, then records that you did.
+    </p>
 
     <div class="gd-section-title">Digital ID Card</div>
     <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Shown on the guard's ID card in the Guard Portal, and on the back when flipped for emergencies.</p>
@@ -6598,6 +6610,16 @@ async function saveLicense(){
     const g = await apiFetch(`/api/guards/${selectedGuardId}`,{method:'PUT',body:JSON.stringify(body)});
     const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
     toast('Licence saved','success');
+    renderGuardComplianceTab();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function verifyLicenseOnLars(){
+  if(!confirm("Confirm you've checked this guard's licence on LARS and it's current?")) return;
+  try{
+    const g = await apiFetch(`/api/guards/${selectedGuardId}/verify-license`,{method:'POST'});
+    const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
+    toast('Marked as checked','success');
+    renderGuardComplianceTab();
   }catch(e){ toast(e.message,'error'); }
 }
 async function saveIdCardDetails(){
