@@ -1162,6 +1162,16 @@ def init_db():
         ("sites", "uniform_note",   "ALTER TABLE sites ADD COLUMN uniform_note TEXT DEFAULT ''"),
         ("sites", "sign_in_method", "ALTER TABLE sites ADD COLUMN sign_in_method TEXT DEFAULT ''"),
         ("sites", "bot_notes",      "ALTER TABLE sites ADD COLUMN bot_notes TEXT DEFAULT ''"),
+        # Digital ID card (guard portal). license_number/license_expiry and the
+        # First Aid Certificate compliance item already carry the licence and
+        # first-aid data — only genuinely new fields get new columns here, so
+        # there's one source of truth for licence info, not two that drift.
+        ("guards", "license_class",     "ALTER TABLE guards ADD COLUMN license_class TEXT DEFAULT ''"),
+        ("guards", "blood_type",        "ALTER TABLE guards ADD COLUMN blood_type TEXT DEFAULT ''"),
+        ("guards", "next_of_kin_name",  "ALTER TABLE guards ADD COLUMN next_of_kin_name TEXT DEFAULT ''"),
+        ("guards", "next_of_kin_phone", "ALTER TABLE guards ADD COLUMN next_of_kin_phone TEXT DEFAULT ''"),
+        ("guards", "access_level",      "ALTER TABLE guards ADD COLUMN access_level TEXT DEFAULT ''"),
+        ("guards", "employee_no",       "ALTER TABLE guards ADD COLUMN employee_no TEXT DEFAULT ''"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -2349,16 +2359,92 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'id':s0['admin_id'],'name':s0['name'],'email':s0['email'],'role':s0['role'],
                             'must_change_password': s0.get('must_change_password', False)}); return
 
-        # Available even mid-forced-password-change, like /api/me for admins
+        # Available even mid-forced-password-change, like /api/me for admins.
+        # Doubles as the Digital ID card's one-call data source: licence/
+        # emergency-contact fields, active + next shift, and the record
+        # counters, all folded in here rather than a second endpoint — the
+        # ID tab wants exactly what a guard checking their own status wants.
         if path == '/api/guard/me':
             gs0 = self.get_guard_session()
             if not gs0: self.err('Unauthorized', 401); return
             db = get_db()
-            photo = R(db.execute('SELECT photo_filename FROM guards WHERE id=?', (gs0['guard_id'],)).fetchone())
+            g = R(db.execute('SELECT * FROM guards WHERE id=?', (gs0['guard_id'],)).fetchone())
+            if not g: db.close(); self.err('Guard not found', 404); return
+            resp = {
+                'id': gs0['guard_id'], 'name': gs0['name'], 'email': gs0['email'],
+                'must_change_password': gs0.get('must_change_password', False),
+                'photo_filename': g['photo_filename'],
+                'photo_url': f"/uploads/{g['photo_filename']}" if g['photo_filename'] else None,
+            }
+            if not gs0.get('must_change_password'):
+                today = datetime.now().strftime('%Y-%m-%d')
+                now_hm = datetime.now().strftime('%H:%M')
+                active = R(db.execute('''
+                    SELECT sh.*, s.name as site_name FROM shifts sh JOIN sites s ON s.id=sh.site_id
+                    WHERE sh.guard_id=? AND sh.clock_in_at IS NOT NULL AND sh.clock_out_at IS NULL AND sh.cancelled=0
+                    ORDER BY sh.clock_in_at DESC LIMIT 1''', (gs0['guard_id'],)).fetchone())
+                nxt = R(db.execute('''
+                    SELECT sh.*, s.name as site_name FROM shifts sh JOIN sites s ON s.id=sh.site_id
+                    WHERE sh.guard_id=? AND sh.published=1 AND sh.cancelled=0 AND sh.clock_in_at IS NULL
+                      AND (sh.shift_date > ? OR (sh.shift_date = ? AND sh.end_time > ?))
+                    ORDER BY sh.shift_date, sh.start_time LIMIT 1''', (gs0['guard_id'], today, today, now_hm)).fetchone()
+                    )
+                fa = R(db.execute('''
+                    SELECT gc.expiry_date FROM guard_compliance gc JOIN compliance_items ci ON ci.id=gc.item_id
+                    WHERE gc.guard_id=? AND ci.name='First Aid Certificate' AND gc.checked=1''',
+                    (gs0['guard_id'],)).fetchone())
+                first_aid_current = bool(fa) and (not fa['expiry_date'] or fa['expiry_date'] >= today)
+                kb = R(db.execute("SELECT value FROM bot_knowledge_base WHERE key='contact_office_phone'").fetchone())
+
+                # On-time streak: consecutive most-recent completed shifts
+                # clocked in at or before 5 minutes past the scheduled start,
+                # most recent first; best_streak is the longest such run in
+                # the same history, for the "N more to beat your best" nudge.
+                completed = RL(db.execute('''
+                    SELECT shift_date, start_time, clock_in_at FROM shifts
+                    WHERE guard_id=? AND clock_in_at IS NOT NULL AND clock_out_at IS NOT NULL AND cancelled=0
+                    ORDER BY shift_date DESC, start_time DESC LIMIT 60''', (gs0['guard_id'],)).fetchall())
+                def is_ontime(row):
+                    try:
+                        sched = datetime.strptime(row['shift_date']+' '+row['start_time'], '%Y-%m-%d %H:%M')
+                        return (datetime.fromisoformat(row['clock_in_at']) - sched).total_seconds() <= 5*60
+                    except (ValueError, TypeError):
+                        return False
+                streak = 0
+                for row in completed:
+                    if is_ontime(row): streak += 1
+                    else: break
+                best = cur = 0
+                for row in reversed(completed):
+                    if is_ontime(row): cur += 1; best = max(best, cur)
+                    else: cur = 0
+                patrols = db.execute('SELECT COUNT(*) FROM checkpoint_scans WHERE guard_id=?', (gs0['guard_id'],)).fetchone()[0]
+                reports = db.execute('SELECT COUNT(*) FROM incidents WHERE guard_id=?', (gs0['guard_id'],)).fetchone()[0]
+
+                resp.update({
+                    'position': 'Security Officer',
+                    'employee_no': g['employee_no'] or None,
+                    'licence_no': g['license_number'] or None,
+                    'licence_class': g['license_class'] or None,
+                    'licence_expiry': g['license_expiry'] or None,
+                    'licence_expiry_days': (datetime.strptime(g['license_expiry'], '%Y-%m-%d') - datetime.now()).days
+                                            if g['license_expiry'] else None,
+                    'first_aid_current': first_aid_current,
+                    # No photo-approval workflow exists in this app — an
+                    # uploaded photo is usable immediately, same as today.
+                    'photo_approved': True,
+                    'control_room_phone': (kb['value'] if kb and kb['value'] else None),
+                    'next_of_kin': (f"{g['next_of_kin_name']} · {g['next_of_kin_phone']}"
+                                    if (g['next_of_kin_name'] or g['next_of_kin_phone']) else None),
+                    'blood_type': g['blood_type'] or None,
+                    'access_level': g['access_level'] or None,
+                    'active_shift': active,
+                    'next_shift': ({'site_name': nxt['site_name'], 'start_time': nxt['start_time'],
+                                     'end_time': nxt['end_time']} if nxt else None),
+                    'record': {'on_time_streak': streak, 'best_streak': best, 'patrols': patrols, 'reports': reports},
+                })
             db.close()
-            self.send_json({'id':gs0['guard_id'],'name':gs0['name'],'email':gs0['email'],
-                            'must_change_password': gs0.get('must_change_password', False),
-                            'photo_filename': photo['photo_filename'] if photo else None}); return
+            self.send_json(resp); return
 
         # ── Guard-authenticated: every /api/guard/* GET route lives inside this
         # block so a request for anything else (admin routes included) skips
@@ -4288,7 +4374,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             updates=[]; params=[]
             for f in ('name','license_number','phone','email','notes','license_state',
-                      'license_expiry'):
+                      'license_expiry','license_class','blood_type','next_of_kin_name',
+                      'next_of_kin_phone','access_level','employee_no'):
                 if f in data: updates.append(f'{f}=?'); params.append(data[f])
             if 'base_rate' in data:
                 updates.append('base_rate=?'); params.append(float(data['base_rate']))
