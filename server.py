@@ -1175,6 +1175,12 @@ def init_db():
         # Break/resume on the Shift tab — nets break time out of total_hours at clock-out.
         ("shifts", "break_started_at", "ALTER TABLE shifts ADD COLUMN break_started_at TEXT"),
         ("shifts", "break_seconds",    "ALTER TABLE shifts ADD COLUMN break_seconds INTEGER DEFAULT 0"),
+        # Manual licence-verification record (no public API exists for Victoria
+        # Police's LARS register, so this tracks a human check rather than an
+        # automatic one) — set only by the dedicated verify-license endpoint,
+        # never by the general guard-update PUT, so it carries a real audit trail.
+        ("guards", "license_verified_at", "ALTER TABLE guards ADD COLUMN license_verified_at TEXT"),
+        ("guards", "license_verified_by", "ALTER TABLE guards ADD COLUMN license_verified_by TEXT DEFAULT ''"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -3863,6 +3869,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 )
             self.send_json({'ok':True,'temp_password':temp_pw,'emailed':emailed}); return
 
+        # Records that an admin manually checked this guard's licence against
+        # LARS (Victoria Police's register) — there's no public API for it, so
+        # this is a checked-by-a-human timestamp, not a live verification.
+        m = re.match(r'^/api/guards/([^/]+)/verify-license$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (m.group(1),)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            now = datetime.now().isoformat()
+            db.execute('UPDATE guards SET license_verified_at=?, license_verified_by=? WHERE id=?',
+                       (now, s2['name'], m.group(1)))
+            audit(db, s2, 'GUARD_LICENSE_VERIFIED', guard['name']); db.commit()
+            g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone()))
+            db.close(); self.send_json(g); return
+
         m = re.match(r'^/api/panic-alerts/([^/]+)/resolve$', path)
         if m:
             s2 = self.require_admin('manager')
@@ -4433,6 +4456,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                       'license_expiry','license_class','blood_type','next_of_kin_name',
                       'next_of_kin_phone','access_level','employee_no'):
                 if f in data: updates.append(f'{f}=?'); params.append(data[f])
+            # A verification only means anything for the details it was checked
+            # against — if the licence number, state or expiry changes, the old
+            # verification is stale and must not keep showing as current.
+            if any(f in data for f in ('license_number','license_state','license_expiry')):
+                updates.append('license_verified_at=?'); params.append(None)
+                updates.append('license_verified_by=?'); params.append('')
             if 'base_rate' in data:
                 updates.append('base_rate=?'); params.append(float(data['base_rate']))
             for f in ('active','hide_on_schedule','no_license_required',
