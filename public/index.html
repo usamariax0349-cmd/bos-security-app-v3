@@ -6549,7 +6549,7 @@ async function renderGuardComplianceTab(){
           ? `✅ Verified on LARS ${fmtDate(g.license_verified_at)} by ${escapeHtml(g.license_verified_by||'')}`
           : `⚪ Not yet checked against LARS`}
       </div>
-      <a class="btn btn-ghost btn-sm" href="https://www.lars.police.vic.gov.au/" target="_blank" rel="noopener">Open LARS ↗</a>
+      <a class="btn btn-ghost btn-sm" href="https://www.lars.police.vic.gov.au/LARS/LARS.asp?File=/components/screens/psinfp03/psinfp03.asp" target="_blank" rel="noopener">Open LARS ↗</a>
       <button class="btn btn-ghost btn-sm" onclick="verifyLicenseOnLars()">Mark checked today</button>
     </div>
     <p style="font-size:11px;color:var(--muted);margin:-6px 0 10px">
