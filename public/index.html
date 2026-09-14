@@ -530,6 +530,110 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   font-size:12px;font-weight:700;cursor:pointer}
 .gpn-dismiss{flex-shrink:0;background:none;border:none;color:rgba(255,255,255,.4);font-size:14px;cursor:pointer;padding:4px}
 
+/* ════════════════════════════════════════
+   GUARD ID CARD  (new)
+════════════════════════════════════════ */
+.gid-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.gid-avatar{width:42px;height:42px;border-radius:50%;padding:2px;border:1.5px solid rgba(232,199,106,.55);flex-shrink:0;overflow:hidden}
+.gid-avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.gid-hi{font-size:15.5px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gid-hi-sub{font-size:11.5px;color:rgba(255,255,255,.5)}
+.gid-sos-btn{height:42px;padding:0 15px;border-radius:12px;border:1px solid rgba(239,68,68,.5);
+  background:linear-gradient(135deg,rgba(220,38,38,.32),rgba(127,29,29,.38));color:#fff;
+  font-size:12.5px;font-weight:800;letter-spacing:.08em;cursor:pointer;flex-shrink:0}
+
+/* flip card */
+.gid-flip-btn{width:100%;border:none;background:none;padding:0;cursor:pointer;perspective:1400px;text-align:left}
+.gid-flip{position:relative;transform-style:preserve-3d;transition:transform .7s var(--ease-out)}
+.gid-flip.flipped{transform:rotateY(180deg)}
+.gid-face{backface-visibility:hidden;-webkit-backface-visibility:hidden;position:relative;
+  background:var(--glass);backdrop-filter:blur(18px) saturate(150%);
+  border:1px solid rgba(232,199,106,.24);border-radius:24px;padding:26px 20px 20px;
+  box-shadow:0 24px 60px -26px rgba(0,0,0,.75),var(--glass-edge);overflow:hidden}
+.gid-face::before{content:'';position:absolute;top:0;left:14%;right:14%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(232,199,106,.55),transparent)}
+.gid-back{position:absolute;inset:0;transform:rotateY(180deg);padding:24px 20px;
+  display:flex;flex-direction:column;gap:14px;overflow:visible}
+.gid-id-row{display:flex;align-items:center;gap:16px}
+.gid-photo{width:104px;height:104px;flex-shrink:0;border-radius:50%;padding:3px;
+  border:2px solid rgba(232,199,106,.55);background:rgba(255,255,255,.06);
+  box-shadow:0 16px 34px -16px rgba(0,0,0,.8)}
+.gid-photo img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.gid-photo-empty{width:100%;height:100%;border-radius:50%;border:2px dashed rgba(255,255,255,.25);
+  display:flex;align-items:center;justify-content:center;font-size:30px;color:rgba(255,255,255,.35)}
+.gid-name{font-family:var(--font-display);font-size:24px;font-weight:600;color:#fff;letter-spacing:-.3px;line-height:1.15}
+.gid-role{font-size:12px;color:rgba(255,255,255,.55);margin-top:4px}
+.gid-chip{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:6px 12px;border-radius:20px;
+  font-size:10.5px;font-weight:700;letter-spacing:.09em}
+.gid-chip.on{background:rgba(18,168,112,.16);color:#4fd6a0}
+.gid-chip.off{background:rgba(240,180,41,.14);color:var(--gold-l)}
+.gid-chip.pending{background:rgba(240,180,41,.14);color:var(--gold-l)}
+.gid-chip-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.gid-chip.on .gid-chip-dot{animation:softpulse 2s infinite}
+.gid-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.09);margin:22px -20px 0}
+.gid-cell{background:rgba(16,26,46,.4);padding:13px 20px}
+.gid-cell-lbl{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.gid-cell-val{font-size:14.5px;font-weight:600;color:#fff;margin-top:3px}
+.gid-barcode-wrap{margin:0 -20px;padding:15px 20px 0;background:rgba(16,26,46,.4);border-top:1px solid rgba(255,255,255,.09)}
+.gid-barcode{height:38px;border-radius:5px;opacity:.85;
+  background:repeating-linear-gradient(90deg,#fff 0 2px,transparent 2px 4px,#fff 4px 7px,transparent 7px 12px,#fff 12px 13px,transparent 13px 17px)}
+.gid-barcode-cap{font-size:10px;font-weight:600;letter-spacing:.22em;color:rgba(255,255,255,.5);text-align:center;margin:7px 0 12px}
+.gid-hint{text-align:center;font-size:11.5px;color:rgba(255,255,255,.4);margin-top:11px}
+.gid-eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:rgba(232,199,106,.75)}
+.gid-erow{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.06);
+  border-radius:11px;padding:12px 14px;gap:10px}
+.gid-erow-lbl{font-size:12.5px;color:rgba(255,255,255,.6);font-weight:600}
+.gid-erow-val{font-size:14px;font-weight:700;color:#fff;text-align:right}
+.gid-note{font-size:11.5px;line-height:1.55;color:rgba(255,255,255,.42)}
+
+/* record tiles */
+.gid-sec-lbl{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:rgba(255,255,255,.42);margin-top:22px}
+.gid-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:11px}
+.gid-stat{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:13px 11px}
+.gid-stat-val{font-family:var(--font-display);font-size:22px;font-weight:600;color:#fff}
+.gid-stat-lbl{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-top:2px}
+.gid-nudge{display:flex;align-items:center;gap:11px;margin-top:14px;background:rgba(240,180,41,.1);
+  border:1px solid rgba(240,180,41,.26);border-radius:13px;padding:13px 14px;font-size:12.5px;line-height:1.5;color:var(--gold-l)}
+
+/* present-badge overlay */
+.gid-present{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:24px;padding:40px 28px;border:none;cursor:pointer;
+  background:linear-gradient(168deg,#fbeeca,#f0d99b 40%,#c69a3f)}
+.gid-present-photo{width:196px;height:196px;border-radius:50%;padding:5px;background:#fff;
+  box-shadow:0 26px 60px -20px rgba(60,40,0,.55)}
+.gid-present-photo img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.gid-present-name{font-family:var(--font-display);font-size:33px;font-weight:700;color:#241d05;letter-spacing:-.5px}
+.gid-present-sub{font-size:13.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:rgba(36,29,5,.62);margin-top:8px}
+.gid-present-valid{background:#241d05;color:var(--gold-l);padding:12px 22px;border-radius:14px;
+  font-size:13px;font-weight:700;letter-spacing:.06em}
+.gid-present-close{font-size:12.5px;color:rgba(36,29,5,.6);font-weight:600}
+
+/* login polish */
+.login-greet{font-family:var(--font-display);font-size:30px;font-weight:600;color:#fff;letter-spacing:-.6px;line-height:1.1}
+.login-greet-sub{font-size:13.5px;line-height:1.5;color:rgba(255,255,255,.6);margin-top:6px}
+.guard-card .form-control.tall{height:54px;border-radius:13px;padding:0 15px;font-size:15px}
+.pw-wrap{position:relative;display:flex;align-items:center}
+.pw-wrap .form-control{padding-right:52px}
+.pw-eye{position:absolute;right:6px;width:40px;height:40px;border-radius:11px;border:none;
+  background:transparent;color:rgba(255,255,255,.55);font-size:16px;cursor:pointer}
+.login-remember-row{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:2px 0 16px;font-size:12.5px;color:rgba(255,255,255,.6);cursor:pointer}
+.gid-toggle{display:inline-block;flex-shrink:0}
+.gid-toggle-track{display:block;width:42px;height:26px;border-radius:13px;background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.2);position:relative;transition:background .2s,border-color .2s}
+.gid-toggle-knob{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;
+  background:rgba(255,255,255,.7);transition:transform .2s var(--ease-out)}
+.gid-toggle.on .gid-toggle-track{background:rgba(201,168,76,.35);border-color:rgba(232,199,106,.5)}
+.gid-toggle.on .gid-toggle-knob{transform:translateX(16px);background:#f0d99b}
+.btn-brass-lg{height:54px;width:100%;border:none;border-radius:15px;background:var(--brass);
+  background-size:220% 100%;animation:metalsheen 5.5s ease-in-out infinite;color:#241d05;
+  font-size:16px;font-weight:700;letter-spacing:.2px;cursor:pointer;
+  box-shadow:var(--sh-gold),inset 0 1px 0 rgba(255,255,255,.55)}
+.btn-brass-lg:active:not(:disabled){transform:scale(.97)}
+.btn-brass-lg:disabled{opacity:.6;cursor:progress;transform:none}
+
 /* Pay */
 .gp-hero{text-align:center;padding:8px 0 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:16px}
 .gp-hero-val{font-family:var(--font-display);font-size:44px;font-weight:600;color:#fff;letter-spacing:-1px}
@@ -842,6 +946,16 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div>
 
+<button id="gid-present" class="gid-present hidden" onclick="closePresentBadge()">
+  <div class="gid-present-photo" id="gid-present-photo"></div>
+  <div style="text-align:center">
+    <div class="gid-present-name" id="gid-present-name"></div>
+    <div class="gid-present-sub" id="gid-present-sub"></div>
+  </div>
+  <div class="gid-present-valid" id="gid-present-valid"></div>
+  <div class="gid-present-close" data-i18n="id_tap_close">Screen brightened · tap to close</div>
+</button>
+
 <!-- ══════════════════════════════════════════ GUARD PORTAL -->
 <div id="guard-page">
   <div class="guard-hero-bg" aria-hidden="true"></div>
@@ -872,21 +986,36 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 
     <!-- Step 0: Guard login -->
     <div class="guard-card" id="step-0">
-      <div class="step-title" data-i18n="login_title">Guard Login</div>
-      <div id="glogin-err" style="display:none;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px"></div>
-      <div class="form-group">
+      <div class="login-greet" id="glogin-greet">Good evening.</div>
+      <div class="login-greet-sub" data-i18n="login_greet_sub_default">Sign in to your Guard Portal.</div>
+      <div id="glogin-err" style="display:none;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:10px 14px;border-radius:8px;font-size:13px;margin:16px 0"></div>
+      <div class="form-group" style="margin-top:16px">
         <label class="form-label" data-i18n="login_email_label">Email Address</label>
-        <input type="email" id="glogin-email" class="form-control" placeholder="you@example.com" autocomplete="email"
+        <input type="email" id="glogin-email" class="form-control tall" placeholder="you@example.com" autocomplete="email"
                onkeydown="if(event.key==='Enter')document.getElementById('glogin-pass').focus()">
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="login_password_label">Password</label>
-        <input type="password" id="glogin-pass" class="form-control" placeholder="••••••••" autocomplete="current-password"
-               onkeydown="if(event.key==='Enter')guardDoLogin()">
+        <div class="pw-wrap">
+          <input type="password" id="glogin-pass" class="form-control tall" placeholder="••••••••" autocomplete="current-password"
+                 onkeydown="if(event.key==='Enter')guardDoLogin()">
+          <button type="button" class="pw-eye" id="glogin-pw-eye" onclick="toggleGuardPwVisibility()" aria-label="Show password">👁</button>
+        </div>
       </div>
-      <button class="nav-btn nav-next" data-i18n="login_btn" onclick="guardDoLogin()" style="width:100%;margin-top:8px">Login →</button>
-      <p style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px" data-i18n="login_contact_office">
-        No account yet, or forgot your password? Contact the office.
+      <div class="login-remember-row">
+        <span data-i18n="login_keep_signed_in">Keep me signed in on this phone</span>
+        <span class="gid-toggle on" id="glogin-remember-toggle" onclick="toggleGuardRemember()" role="checkbox" aria-checked="true" tabindex="0"
+              onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleGuardRemember();}">
+          <span class="gid-toggle-track"><span class="gid-toggle-knob"></span></span>
+        </span>
+        <input type="checkbox" id="glogin-remember" checked style="display:none">
+      </div>
+      <button class="btn-brass-lg" id="glogin-submit" data-i18n="login_btn" onclick="guardDoLogin()">Login →</button>
+      <p style="font-size:12px;color:rgba(255,255,255,.45);text-align:center;margin-top:16px" data-i18n="login_forgot">
+        Forgot password? Contact the office.
+      </p>
+      <p style="font-size:12px;color:rgba(232,199,106,.75);text-align:center;margin-top:4px;font-weight:600" data-i18n="login_call_office">
+        No account yet? Call the office.
       </p>
     </div>
 
@@ -934,6 +1063,68 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
       </div>
       <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
+    </div>
+
+    <!-- ID card (new) -->
+    <div class="guard-card hidden" id="step-id">
+      <div class="gid-head">
+        <div class="gid-avatar" id="gid-avatar"></div>
+        <div style="min-width:0;flex:1">
+          <div class="gid-hi" id="gid-greeting"></div>
+          <div class="gid-hi-sub" id="gid-greeting-sub"></div>
+        </div>
+        <button class="gid-sos-btn" data-i18n="sos_short" onclick="openPanicConfirm()">SOS</button>
+      </div>
+
+      <button class="gid-flip-btn" onclick="toggleIdCard()" aria-label="Flip ID card">
+        <div class="gid-flip" id="gid-flip">
+          <!-- front -->
+          <div class="gid-face" id="gid-face-front">
+            <div class="gid-id-row">
+              <div class="gid-photo" id="gid-photo"></div>
+              <div style="min-width:0">
+                <div class="gid-name" id="gid-name">—</div>
+                <div class="gid-role" id="gid-role"></div>
+                <div id="gid-status"></div>
+              </div>
+            </div>
+            <div class="gid-grid">
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_licence">Licence</div><div class="gid-cell-val" id="gid-licence">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_class">Class</div><div class="gid-cell-val" id="gid-class">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_valid_until">Valid until</div><div class="gid-cell-val" id="gid-expiry">—</div></div>
+              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_first_aid">First aid</div><div class="gid-cell-val" id="gid-firstaid">—</div></div>
+            </div>
+            <div class="gid-barcode-wrap">
+              <div class="gid-barcode" id="gid-barcode"></div>
+              <div class="gid-barcode-cap" id="gid-barcode-cap"></div>
+            </div>
+          </div>
+          <!-- back -->
+          <div class="gid-face gid-back" id="gid-face-back" aria-hidden="true">
+            <div class="gid-eyebrow" data-i18n="id_emergency">In an emergency</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_control_room">Control room</span><span class="gid-erow-val" id="gid-control">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_next_of_kin">Next of kin</span><span class="gid-erow-val" id="gid-kin">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_blood">Blood type</span><span class="gid-erow-val" id="gid-blood">—</span></div>
+              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_access">Site access</span><span class="gid-erow-val" id="gid-access">—</span></div>
+            </div>
+            <div class="gid-note" style="margin-top:auto" data-i18n="id_lost_badge_note">
+              Lost your badge? Report it from Inbox and the office will void this card immediately.
+            </div>
+          </div>
+        </div>
+      </button>
+      <div class="gid-hint" id="gid-hint" data-i18n="id_flip_hint">Tap the card for emergency details</div>
+
+      <button class="btn-brass-lg" style="margin-top:14px" data-i18n="id_present_btn" onclick="openPresentBadge()">Present badge</button>
+
+      <div class="gid-sec-lbl" data-i18n="id_your_record">Your record</div>
+      <div class="gid-stats">
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-streak">—</div><div class="gid-stat-lbl" data-i18n="id_streak">On-time streak</div></div>
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-patrols">—</div><div class="gid-stat-lbl" data-i18n="id_patrols">Patrols done</div></div>
+        <div class="gid-stat"><div class="gid-stat-val" id="gid-reports">—</div><div class="gid-stat-lbl" data-i18n="id_reports">Reports filed</div></div>
+      </div>
+      <div class="gid-nudge hidden" id="gid-nudge"></div>
     </div>
 
     <!-- My Shifts (roster + clock in/out) -->
@@ -1193,7 +1384,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="admin-link" id="guard-admin-link"><a href="#" onclick="showLogin();return false" data-i18n="admin_login_link">Admin Login</a></div>
   </div>
   <nav id="guard-bottom-nav" class="guard-bottom-nav hidden">
-    <button class="gbn-tab" data-gtab="home" onclick="showGuardTab('home')"><span class="gbn-icon">◆</span><span class="gbn-label" data-i18n="gbn_home">Home</span></button>
+    <button class="gbn-tab" data-gtab="id" onclick="showGuardTab('id')"><span class="gbn-icon">◆</span><span class="gbn-label" data-i18n="gbn_id">ID</span></button>
     <button class="gbn-tab" data-gtab="shifts" onclick="showGuardTab('shifts')"><span class="gbn-icon">▦</span><span class="gbn-label" data-i18n="gbn_shifts">Shifts</span></button>
     <button class="gbn-tab" data-gtab="patrol" onclick="showGuardTab('patrol')"><span class="gbn-icon">◎</span><span class="gbn-label" data-i18n="gbn_patrol">Patrol</span></button>
     <button class="gbn-tab" data-gtab="pay" onclick="showGuardTab('pay')"><span class="gbn-icon">$</span><span class="gbn-label" data-i18n="gbn_pay">Pay</span></button>
@@ -2436,8 +2627,23 @@ const TRANSLATIONS = {
   en: {
     login_title: "Guard Login", login_email_label: "Email Address", login_password_label: "Password",
     login_btn: "Login →", login_contact_office: "No account yet, or forgot your password? Contact the office.",
+    greet_morning: "Good morning", greet_afternoon: "Good afternoon", greet_evening: "Good evening",
+    login_greet_sub_default: "Sign in to your Guard Portal.",
+    login_keep_signed_in: "Keep me signed in on this phone",
+    login_forgot: "Forgot password? Contact the office.", login_call_office: "No account yet? Call the office.",
     menu_title: "What would you like to do?",
-    gbn_home: "Home", gbn_shifts: "Shifts", gbn_patrol: "Patrol", gbn_pay: "Pay", gbn_inbox: "Inbox",
+    gbn_home: "Home", gbn_id: "ID", gbn_shifts: "Shifts", gbn_patrol: "Patrol", gbn_pay: "Pay", gbn_inbox: "Inbox",
+    sos_short: "SOS", role_security_officer: "Security Officer",
+    id_licence: "Licence", id_class: "Class", id_valid_until: "Valid until", id_first_aid: "First aid",
+    id_current: "Current", id_none: "Not recorded",
+    id_on_shift: "ON SHIFT", id_not_clocked_on: "NOT CLOCKED ON", id_photo_pending: "AWAITING OFFICE APPROVAL",
+    id_emergency: "In an emergency", id_control_room: "Control room", id_next_of_kin: "Next of kin",
+    id_blood: "Blood type", id_access: "Site access",
+    id_lost_badge_note: "Lost your badge? Report it from Inbox and the office will void this card immediately.",
+    id_flip_hint: "Tap the card for emergency details", id_flip_back: "Tap to see the front",
+    id_present_btn: "Present badge", id_tap_close: "Tap to close",
+    id_your_record: "Your record", id_streak: "On-time streak", id_patrols: "Patrols done", id_reports: "Reports filed",
+    id_streak_nudge: "{n} more on-time starts and you beat your best streak.",
     home_checkpoints_lbl: "Checkpoints", home_fortnight_lbl: "This Fortnight",
     home_quick_incident: "Report incident", home_quick_availability: "My availability",
     home_quick_patrol: "Start patrol", home_quick_photo: "My photo",
@@ -2901,7 +3107,7 @@ function t(key){ return (TRANSLATIONS[guardLang] && TRANSLATIONS[guardLang][key]
 function applyTranslations(){
   document.querySelectorAll('#guard-page [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
   document.querySelectorAll('#guard-page [data-i18n-placeholder]').forEach(el=>{ el.placeholder = t(el.getAttribute('data-i18n-placeholder')); });
-  document.querySelectorAll('#panic-confirm-modal [data-i18n], #guard-firstpw-modal [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('#panic-confirm-modal [data-i18n], #guard-firstpw-modal [data-i18n], #gid-present [data-i18n]').forEach(el=>{ el.textContent = t(el.getAttribute('data-i18n')); });
   const langBtns = document.querySelectorAll('.lang-btn');
   langBtns.forEach(b=>b.classList.toggle('active', b.dataset.lang===guardLang));
   // Urdu/Arabic are RTL scripts — scope the direction to the guard portal and
@@ -2927,7 +3133,7 @@ function setGuardLang(lang){
 
 // ── State ──────────────────────────────────────────────────────────────────────
 let authToken = localStorage.getItem('sg_token') || null;
-let guardAuthToken = localStorage.getItem('sg_guard_token') || null;
+let guardAuthToken = localStorage.getItem('sg_guard_token') || sessionStorage.getItem('sg_guard_token') || null;
 let currentRole = null;
 let guardsData = [], sitesData = [], allGuardsAdmin = [], allSitesAdmin = [];
 let selectedGuard = null;
@@ -3192,6 +3398,29 @@ function hideAllPages(){
 function showGuard(){
   hideAllPages();
   document.getElementById('guard-page').classList.remove('hidden');
+  setGuardLoginGreeting();
+}
+function setGuardLoginGreeting(){
+  const el = document.getElementById('glogin-greet');
+  if(!el) return;
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'greet_morning' : hour < 17 ? 'greet_afternoon' : 'greet_evening';
+  el.textContent = t(part) + '.';
+}
+function toggleGuardPwVisibility(){
+  const input = document.getElementById('glogin-pass');
+  const btn = document.getElementById('glogin-pw-eye');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? '👁' : '🙈';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+}
+function toggleGuardRemember(){
+  const cb = document.getElementById('glogin-remember');
+  const toggle = document.getElementById('glogin-remember-toggle');
+  cb.checked = !cb.checked;
+  toggle.classList.toggle('on', cb.checked);
+  toggle.setAttribute('aria-checked', String(cb.checked));
 }
 function showLogin(){
   hideAllPages();
@@ -3556,7 +3785,7 @@ async function init(){
           toast(t('offline_showing_cached'), 'info', 4000);
         }
       } else {
-        guardAuthToken=null; localStorage.removeItem('sg_guard_token');
+        guardAuthToken=null; localStorage.removeItem('sg_guard_token'); sessionStorage.removeItem('sg_guard_token');
       }
     }
   }
@@ -3567,7 +3796,7 @@ async function loadSitesForPortal(){
   try{ sitesData = await apiFetch('/api/sites'); }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-home','step-myshifts','step-clockout','step-success','step-patrol','step-pay','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages','step-photo'];
+const GUARD_CARDS = ['step-0','step-home','step-id','step-myshifts','step-clockout','step-success','step-patrol','step-pay','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages','step-photo'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -3578,7 +3807,7 @@ function showGuardCard(id){
 // on their existing .guard-card — see startIncidentFlow() etc. below) so
 // they're deliberately not part of this map; the nav bar itself only
 // reflects which of these five is current.
-const GUARD_TAB_CARD = {home:'step-home', shifts:'step-myshifts', patrol:'step-patrol', pay:'step-pay', inbox:'step-messages'};
+const GUARD_TAB_CARD = {id:'step-id', home:'step-home', shifts:'step-myshifts', patrol:'step-patrol', pay:'step-pay', inbox:'step-messages'};
 function showGuardTab(tab){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
   showGuardCard(GUARD_TAB_CARD[tab]);
@@ -3586,12 +3815,17 @@ function showGuardTab(tab){
   document.querySelectorAll('.gbn-tab').forEach(b=>b.classList.toggle('active', b.dataset.gtab===tab));
   refreshPushUI();
   refreshPanicButton();
-  if(tab==='home') loadGuardHome();
+  if(tab==='id') loadGuardId();
+  else if(tab==='home') loadGuardHome();
   else if(tab==='shifts') loadMyShifts();
   else if(tab==='pay') loadGuardPay();
   else if(tab==='inbox') loadGuardMessagesEntry();
 }
-function showModeMenu(){ showGuardTab('home'); }
+// The ID card is the landing screen after login (was the clock-in Home
+// screen) — Shifts already has its own clock in/out button on every row,
+// so nothing becomes unreachable; step-home itself is untouched and still
+// works for anything that still targets it directly.
+function showModeMenu(){ showGuardTab('id'); }
 function startShiftFlow(){ showGuardTab('shifts'); }
 function startPatrolFlow(){ showGuardTab('patrol'); }
 function startIncidentFlow(){ showGuardCard('step-incident'); }
@@ -3866,6 +4100,84 @@ async function loadGuardHomeStats(){
   }catch(e){ document.getElementById('gh-stat-pay').textContent = '—'; }
 }
 
+// ── ID card ──────────────────────────────────────────────────────────────────
+let gidFlipped = false, gidData = null;
+
+async function loadGuardId(){
+  try{ gidData = await guardApiFetch('/api/guard/me'); }catch(e){ return; }
+  const g = gidData || {};
+  const hour = new Date().getHours();
+  const part = hour < 12 ? 'greet_morning' : hour < 17 ? 'greet_afternoon' : 'greet_evening';
+  const first = (g.name || '').split(' ')[0];
+
+  document.getElementById('gid-greeting').textContent = t(part) + (first ? ', ' + first : '');
+  document.getElementById('gid-greeting-sub').textContent =
+    g.next_shift ? `${g.next_shift.site_name} · ${g.next_shift.start_time}–${g.next_shift.end_time||''}`
+                 : t('home_no_shift');
+
+  const photo = g.photo_url ? `<img src="${escapeHtml(g.photo_url)}" alt="">` : `<div class="gid-photo-empty">👤</div>`;
+  document.getElementById('gid-photo').innerHTML = photo;
+  document.getElementById('gid-avatar').innerHTML = photo;
+
+  document.getElementById('gid-name').textContent = g.name || '';
+  document.getElementById('gid-role').textContent =
+    [g.position || t('role_security_officer'), g.employee_no].filter(Boolean).join(' · ');
+
+  const st = document.getElementById('gid-status');
+  if(g.active_shift){
+    st.innerHTML = `<div class="gid-chip on"><span class="gid-chip-dot"></span>${t('id_on_shift')}</div>`;
+  } else if(g.photo_url && !g.photo_approved){
+    st.innerHTML = `<div class="gid-chip pending"><span class="gid-chip-dot"></span>${t('id_photo_pending')}</div>`;
+  } else {
+    st.innerHTML = `<div class="gid-chip off"><span class="gid-chip-dot"></span>${t('id_not_clocked_on')}</div>`;
+  }
+
+  document.getElementById('gid-licence').textContent  = g.licence_no || '—';
+  document.getElementById('gid-class').textContent    = g.licence_class || '—';
+  const expiryEl = document.getElementById('gid-expiry');
+  expiryEl.textContent = g.licence_expiry ? fmtDate(g.licence_expiry) : '—';
+  expiryEl.style.color = (g.licence_expiry_days != null && g.licence_expiry_days < 60) ? 'var(--gold-l)' : '';
+  document.getElementById('gid-firstaid').textContent = g.first_aid_current ? t('id_current') : t('id_none');
+  document.getElementById('gid-barcode-cap').textContent =
+    ['BOS', (g.licence_no || '').replace(/-/g, ' '), g.licence_class].filter(Boolean).join(' · ');
+
+  document.getElementById('gid-control').textContent = g.control_room_phone || '—';
+  document.getElementById('gid-kin').textContent     = g.next_of_kin || '—';
+  document.getElementById('gid-blood').textContent   = g.blood_type || '—';
+  document.getElementById('gid-access').textContent  = g.access_level || '—';
+
+  const r = g.record || {};
+  document.getElementById('gid-streak').textContent  = r.on_time_streak ?? '—';
+  document.getElementById('gid-patrols').textContent = r.patrols ?? '—';
+  document.getElementById('gid-reports').textContent = r.reports ?? '—';
+  const nudge = document.getElementById('gid-nudge');
+  if(r.on_time_streak && r.best_streak && r.on_time_streak < r.best_streak){
+    nudge.innerHTML = `<span style="font-size:17px">⚡</span><span>${t('id_streak_nudge').replace('{n}', r.best_streak - r.on_time_streak + 1)}</span>`;
+    nudge.classList.remove('hidden');
+  } else nudge.classList.add('hidden');
+}
+
+function toggleIdCard(){
+  gidFlipped = !gidFlipped;
+  document.getElementById('gid-flip').classList.toggle('flipped', gidFlipped);
+  document.getElementById('gid-hint').textContent = t(gidFlipped ? 'id_flip_back' : 'id_flip_hint');
+  document.getElementById('gid-face-front').setAttribute('aria-hidden', gidFlipped ? 'true' : 'false');
+  document.getElementById('gid-face-back').setAttribute('aria-hidden', gidFlipped ? 'false' : 'true');
+}
+
+function openPresentBadge(){
+  const g = gidData || {};
+  document.getElementById('gid-present-photo').innerHTML =
+    g.photo_url ? `<img src="${escapeHtml(g.photo_url)}" alt="">` : '';
+  document.getElementById('gid-present-name').textContent = g.name || '';
+  document.getElementById('gid-present-sub').textContent =
+    [t('id_licence') + ' ' + (g.licence_no || ''), g.licence_class].filter(Boolean).join(' · ');
+  document.getElementById('gid-present-valid').textContent =
+    t('id_valid_until').toUpperCase() + ' ' + (g.licence_expiry ? fmtDate(g.licence_expiry) : '—');
+  document.getElementById('gid-present').classList.remove('hidden');
+}
+function closePresentBadge(){ document.getElementById('gid-present').classList.add('hidden'); }
+
 // ── Pay tab ──────────────────────────────────────────────────────────────────
 async function loadGuardPay(){
   try{
@@ -4129,7 +4441,9 @@ async function guardDoLogin(){
     const d = await res.json();
     if(!res.ok) throw new Error(d.error || 'Login failed');
     guardAuthToken = d.token;
-    localStorage.setItem('sg_guard_token', d.token);
+    localStorage.removeItem('sg_guard_token'); sessionStorage.removeItem('sg_guard_token');
+    const remember = document.getElementById('glogin-remember')?.checked !== false;
+    (remember ? localStorage : sessionStorage).setItem('sg_guard_token', d.token);
     if(d.force_password_change){
       document.getElementById('gfp-err').style.display='none';
       ['gfp-new','gfp-confirm'].forEach(id=>document.getElementById(id).value='');
@@ -4167,7 +4481,7 @@ async function guardSubmitFirstPassword(){
 async function guardLogout(){
   try{ await guardApiFetch('/api/guard/logout', {method:'POST'}); }catch(e){}
   guardAuthToken = null; selectedGuard = null;
-  localStorage.removeItem('sg_guard_token');
+  localStorage.removeItem('sg_guard_token'); sessionStorage.removeItem('sg_guard_token');
   localStorage.removeItem('sg_guard_identity');
   refreshPanicButton();
   showGuardCard('step-0');
@@ -6009,6 +6323,25 @@ async function renderGuardComplianceTab(){
       <button class="btn btn-primary btn-sm" onclick="saveLicense()">Save Licence</button>
     </div>
 
+    <div class="gd-section-title">Digital ID Card</div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Shown on the guard's ID card in the Guard Portal, and on the back when flipped for emergencies.</p>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Licence Class</label><input id="gd-id-class" class="form-control" placeholder="e.g. 1A · Unarmed" value="${g.license_class||''}"></div>
+      <div class="form-group"><label class="form-label">Employee #</label><input id="gd-id-empno" class="form-control" placeholder="e.g. BOS-0412" value="${g.employee_no||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Blood Type</label><input id="gd-id-blood" class="form-control" placeholder="e.g. O+" value="${g.blood_type||''}"></div>
+      <div class="form-group"><label class="form-label">Site Access Level</label><input id="gd-id-access" class="form-control" placeholder="e.g. Level 2 · all gates" value="${g.access_level||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Next of Kin — Name</label><input id="gd-id-kin-name" class="form-control" value="${g.next_of_kin_name||''}"></div>
+      <div class="form-group"><label class="form-label">Next of Kin — Phone</label><input id="gd-id-kin-phone" class="form-control" value="${g.next_of_kin_phone||''}"></div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px">Control room number shown on the card comes from Organization → Bot Knowledge Base → Office phone. First aid status comes from the Compliance table below.</p>
+    <div style="margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveIdCardDetails()">Save ID Card Details</button>
+    </div>
+
     <div class="gd-section-title">Compliance</div>
     <div class="tbl-wrap">
       <table class="gd-comp-table">
@@ -6044,6 +6377,21 @@ async function saveLicense(){
     const g = await apiFetch(`/api/guards/${selectedGuardId}`,{method:'PUT',body:JSON.stringify(body)});
     const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
     toast('Licence saved','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function saveIdCardDetails(){
+  const body = {
+    license_class: document.getElementById('gd-id-class').value,
+    employee_no: document.getElementById('gd-id-empno').value,
+    blood_type: document.getElementById('gd-id-blood').value,
+    access_level: document.getElementById('gd-id-access').value,
+    next_of_kin_name: document.getElementById('gd-id-kin-name').value,
+    next_of_kin_phone: document.getElementById('gd-id-kin-phone').value,
+  };
+  try{
+    const g = await apiFetch(`/api/guards/${selectedGuardId}`,{method:'PUT',body:JSON.stringify(body)});
+    const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
+    toast('ID card details saved','success');
   }catch(e){ toast(e.message,'error'); }
 }
 function readFileAsBase64(file){
