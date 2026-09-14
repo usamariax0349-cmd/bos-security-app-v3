@@ -6549,7 +6549,7 @@ async function renderGuardComplianceTab(){
           ? `✅ Verified on LARS ${fmtDate(g.license_verified_at)} by ${escapeHtml(g.license_verified_by||'')}`
           : `⚪ Not yet checked against LARS`}
       </div>
-      <a class="btn btn-ghost btn-sm" href="https://www.lars.police.vic.gov.au/LARS/LARS.asp?File=/components/screens/psinfp03/psinfp03.asp" target="_blank" rel="noopener noreferrer">Open LARS ↗</a>
+      <button class="btn btn-ghost btn-sm" onclick="openLarsWithCopy()">Open LARS ↗</button>
       <button class="btn btn-ghost btn-sm" onclick="verifyLicenseOnLars()">Mark checked today</button>
     </div>
     <p style="font-size:11px;color:var(--muted);margin:-6px 0 10px">
@@ -6612,6 +6612,24 @@ async function saveLicense(){
     toast('Licence saved','success');
     renderGuardComplianceTab();
   }catch(e){ toast(e.message,'error'); }
+}
+async function openLarsWithCopy(){
+  // Can't reach into LARS's own page to fill its form (cross-origin — no
+  // site can script another's DOM), so this copies the licence number to
+  // the clipboard first, letting a single paste stand in for retyping it.
+  const licInput = document.getElementById('gd-lic-num');
+  const lic = (licInput && licInput.value || '').trim();
+  if(lic){
+    try{
+      await navigator.clipboard.writeText(lic);
+      toast("Licence number copied — paste it into LARS's search", 'success');
+    }catch(e){
+      toast('Opening LARS — copy the licence number above to paste in', 'info');
+    }
+  } else {
+    toast('No licence number on file — enter one above first', 'info');
+  }
+  window.open('https://www.lars.police.vic.gov.au/LARS/LARS.asp?File=/components/screens/psinfp03/psinfp03.asp', '_blank', 'noopener,noreferrer');
 }
 async function verifyLicenseOnLars(){
   if(!confirm("Confirm you've checked this guard's licence on LARS and it's current?")) return;
