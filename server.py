@@ -1172,6 +1172,9 @@ def init_db():
         ("guards", "next_of_kin_phone", "ALTER TABLE guards ADD COLUMN next_of_kin_phone TEXT DEFAULT ''"),
         ("guards", "access_level",      "ALTER TABLE guards ADD COLUMN access_level TEXT DEFAULT ''"),
         ("guards", "employee_no",       "ALTER TABLE guards ADD COLUMN employee_no TEXT DEFAULT ''"),
+        # Break/resume on the Shift tab — nets break time out of total_hours at clock-out.
+        ("shifts", "break_started_at", "ALTER TABLE shifts ADD COLUMN break_started_at TEXT"),
+        ("shifts", "break_seconds",    "ALTER TABLE shifts ADD COLUMN break_seconds INTEGER DEFAULT 0"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -2513,6 +2516,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'rows': rows,
                 }); return
 
+            # Previous guard's clock-out notes for this shift's site — the app
+            # already collects these (co-notes) but never surfaces them to
+            # anyone; this is the only new query the handover card needs.
+            if path == '/api/guard/handover':
+                shift_id = (qs.get('shift_id') or [None])[0]
+                if not shift_id: self.send_json(None); return
+                db = get_db()
+                sh = R(db.execute('SELECT site_id FROM shifts WHERE id=? AND guard_id=?',
+                                   (shift_id, gsx['guard_id'])).fetchone())
+                if not sh: db.close(); self.send_json(None); return
+                prev = R(db.execute('''
+                    SELECT sub.notes, g.name as guard_name, sh2.clock_out_at
+                    FROM shifts sh2
+                    JOIN guards g ON g.id=sh2.guard_id
+                    LEFT JOIN submissions sub ON sub.id=sh2.submission_id
+                    WHERE sh2.site_id=? AND sh2.clock_out_at IS NOT NULL AND sh2.id!=?
+                    ORDER BY sh2.clock_out_at DESC LIMIT 1
+                ''', (sh['site_id'], shift_id)).fetchone())
+                db.close()
+                if not prev or not (prev['notes'] or '').strip():
+                    self.send_json(None); return
+                self.send_json({'notes': prev['notes'], 'guard_name': prev['guard_name'], 'at': prev['clock_out_at']})
+                return
+
             if path == '/api/guard/incidents':
                 db = get_db()
                 rows = RL(db.execute('''
@@ -3667,7 +3694,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 verified = 1
             now = datetime.now()
             clock_in_dt = datetime.fromisoformat(sh['clock_in_at'])
-            total_hours = round((now - clock_in_dt).total_seconds() / 3600, 2)
+            break_secs = sh['break_seconds'] or 0
+            if sh['break_started_at']:
+                # Guard forgot to end their break before clocking out — count it
+                # through to now rather than leaving it open indefinitely.
+                break_secs += int((now - datetime.fromisoformat(sh['break_started_at'])).total_seconds())
+            total_hours = round(max(0, (now - clock_in_dt).total_seconds() - break_secs) / 3600, 2)
             try:
                 photo = save_uploaded_photo(data)
             except ValueError as e:
@@ -3691,6 +3723,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (m_co.group(1),)).fetchone())])[0]
             db.close(); self.send_json({**row, 'submission_id': sub_id, 'total_hours': total_hours}); return
+
+        if path == '/api/guard/break':
+            shift_id = data.get('shift_id')
+            action = data.get('action')
+            if action not in ('start', 'end'):
+                self.err("action must be 'start' or 'end'", 400); return
+            db = get_db()
+            sh = R(db.execute('SELECT * FROM shifts WHERE id=?', (shift_id,)).fetchone())
+            if not sh: db.close(); self.err('Shift not found', 404); return
+            if sh['guard_id'] != gsx['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
+            if not sh['clock_in_at'] or sh['clock_out_at']:
+                db.close(); self.err('You must be clocked in to take a break', 400); return
+            if action == 'start':
+                if sh['break_started_at']: db.close(); self.err('Already on break', 400); return
+                db.execute('UPDATE shifts SET break_started_at=? WHERE id=?', (datetime.now().isoformat(), shift_id))
+            else:
+                if not sh['break_started_at']: db.close(); self.err('Not currently on break', 400); return
+                started = datetime.fromisoformat(sh['break_started_at'])
+                elapsed = max(0, int((datetime.now() - started).total_seconds()))
+                db.execute('UPDATE shifts SET break_seconds=COALESCE(break_seconds,0)+?, break_started_at=NULL WHERE id=?',
+                           (elapsed, shift_id))
+            db.commit()
+            row = R(db.execute('SELECT break_started_at, break_seconds FROM shifts WHERE id=?', (shift_id,)).fetchone())
+            db.close(); self.send_json(dict(row)); return
 
         if guard_path:
             self.send_response(404); self.end_headers(); return
