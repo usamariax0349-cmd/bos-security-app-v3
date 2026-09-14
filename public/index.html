@@ -610,6 +610,39 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   font-size:13px;font-weight:700;letter-spacing:.06em}
 .gid-present-close{font-size:12.5px;color:rgba(36,29,5,.6);font-weight:600}
 
+/* slide-to-confirm (clock-on + SOS) */
+.gid-slide{position:relative;height:68px;border-radius:18px;overflow:hidden;touch-action:none;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);margin-top:20px}
+.gid-slide-lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:13.5px;font-weight:700;letter-spacing:.06em;color:rgba(255,255,255,.55);pointer-events:none}
+.gid-slide-thumb{position:absolute;top:6px;left:6px;width:56px;height:56px;border-radius:14px;
+  background:var(--brass);display:flex;align-items:center;justify-content:center;font-size:22px;
+  color:#241d05;cursor:grab;touch-action:none;box-shadow:0 8px 20px -6px rgba(198,154,63,.7)}
+.gid-slide-thumb.snapback{transition:transform .28s var(--ease-out)}
+.gid-slide.danger{height:66px;background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.45)}
+.gid-slide.danger .gid-slide-lbl{color:#fca5a5;font-weight:800;letter-spacing:.08em}
+.gid-slide.danger .gid-slide-thumb{background:#e5484d;color:#fff;width:54px;height:54px;
+  box-shadow:0 8px 20px -6px rgba(229,72,77,.8)}
+.gid-slide-fallback{display:block;width:100%;text-align:center;font-size:11.5px;color:rgba(255,255,255,.4);
+  background:none;border:none;text-decoration:underline;cursor:pointer;margin-top:8px;padding:4px}
+
+/* geofence pill + handover note (Shift tab) */
+.gid-geo{display:flex;align-items:center;gap:8px;border-radius:12px;padding:10px 14px;margin-bottom:14px;
+  font-size:12.5px;font-weight:600}
+.gid-geo.ok{background:rgba(18,168,112,.12);border:1px solid rgba(79,214,160,.32);color:#8ff0c6}
+.gid-geo.bad{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.32);color:#fca5a5}
+.gid-geo.wait{background:rgba(240,180,41,.1);border:1px solid rgba(240,180,41,.26);color:var(--gold-l)}
+.gid-handover{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.11);
+  border-left:2px solid rgba(232,199,106,.6);border-radius:13px;padding:14px;margin-top:14px}
+.gid-handover-eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+  color:rgba(232,199,106,.75);margin-bottom:6px}
+.gid-handover-body{font-size:13px;line-height:1.6;color:rgba(255,255,255,.82)}
+.gid-handover-by{font-size:11px;color:rgba(255,255,255,.4);margin-top:8px}
+.gid-break-row{display:flex;gap:10px;margin-top:12px}
+.gid-break-btn{flex:0 0 110px;height:52px;border-radius:13px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.16);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.gid-break-btn.active{background:rgba(240,180,41,.16);border-color:rgba(240,180,41,.4);color:var(--gold-l)}
+
 /* login polish */
 .login-greet{font-family:var(--font-display);font-size:30px;font-weight:600;color:#fff;letter-spacing:-.6px;line-height:1.1}
 .login-greet-sub{font-size:13.5px;line-height:1.5;color:rgba(255,255,255,.6);margin-top:6px}
@@ -1020,52 +1053,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     </div>
 
     <!-- Home: shift-first landing, replaces the old 6-button menu -->
-    <div class="guard-card hidden" id="step-home">
-      <div id="gh-clock-card" class="gh-clock-card"></div>
-
-      <div class="gh-stats-row">
-        <button class="gh-stat-card" onclick="showGuardTab('patrol')">
-          <div class="gh-stat-val" id="gh-stat-checkpoints">—</div>
-          <div class="gh-stat-lbl" data-i18n="home_checkpoints_lbl">Checkpoints</div>
-        </button>
-        <button class="gh-stat-card" onclick="showGuardTab('pay')">
-          <div class="gh-stat-val" id="gh-stat-pay">—</div>
-          <div class="gh-stat-lbl" data-i18n="home_fortnight_lbl">This Fortnight</div>
-        </button>
-      </div>
-
-      <div class="gh-quick-grid">
-        <button class="gh-quick-btn" onclick="startIncidentFlow()"><span class="gqi">🚨</span><span data-i18n="home_quick_incident">Report incident</span></button>
-        <button class="gh-quick-btn" onclick="startAvailabilityFlow()"><span class="gqi">📅</span><span data-i18n="home_quick_availability">My availability</span></button>
-        <button class="gh-quick-btn" onclick="showGuardTab('patrol')"><span class="gqi">🚶</span><span data-i18n="home_quick_patrol">Start patrol</span></button>
-        <button class="gh-quick-btn" onclick="startPhotoFlow()"><span class="gqi">📷</span><span data-i18n="home_quick_photo">My photo</span></button>
-      </div>
-
-      <!-- Proactive nudge, not just a button waiting to be noticed: shown until
-           the guard enables push or dismisses it (re-offered after a week if
-           still not enabled, since a shift/message alert genuinely matters). -->
-      <div id="push-nudge-card" class="gh-push-nudge hidden">
-        <div class="gpn-icon">🔔</div>
-        <div class="gpn-text">
-          <div class="gpn-title" data-i18n="push_nudge_title">Turn on notifications</div>
-          <div class="gpn-sub" data-i18n="push_nudge_sub">Know the moment a new shift is published or the office messages you.</div>
-        </div>
-        <button class="gpn-enable" onclick="enablePushNotifications()" data-i18n="push_nudge_enable_btn">Enable</button>
-        <button class="gpn-dismiss" onclick="dismissPushNudge()" aria-label="Dismiss">✕</button>
-      </div>
-
-      <button id="panic-btn-home" class="gh-sos hidden" onclick="openPanicConfirm()">
-        <span class="gh-sos-icon">🆘</span>
-        <span><div class="gh-sos-title" data-i18n="home_sos_title">SOS</div><div class="gh-sos-sub" data-i18n="home_sos_sub">Tap to alert the control room</div></span>
-      </button>
-
-      <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
-        <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
-      </div>
-      <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
-    </div>
-
-    <!-- ID card (new) -->
+    <!-- ID card (new) — the landing screen; also hosts the quick actions,
+         push nudge and logout that used to live on the retired Home screen,
+         since this is the only place every guard reliably lands. -->
     <div class="guard-card hidden" id="step-id">
       <div class="gid-head">
         <div class="gid-avatar" id="gid-avatar"></div>
@@ -1125,14 +1115,55 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <div class="gid-stat"><div class="gid-stat-val" id="gid-reports">—</div><div class="gid-stat-lbl" data-i18n="id_reports">Reports filed</div></div>
       </div>
       <div class="gid-nudge hidden" id="gid-nudge"></div>
+
+      <div class="gh-stats-row" style="margin-top:22px">
+        <button class="gh-stat-card" onclick="showGuardTab('patrol')">
+          <div class="gh-stat-val" id="gh-stat-checkpoints">—</div>
+          <div class="gh-stat-lbl" data-i18n="home_checkpoints_lbl">Checkpoints</div>
+        </button>
+        <button class="gh-stat-card" onclick="showGuardTab('pay')">
+          <div class="gh-stat-val" id="gh-stat-pay">—</div>
+          <div class="gh-stat-lbl" data-i18n="home_fortnight_lbl">This Fortnight</div>
+        </button>
+      </div>
+
+      <div class="gh-quick-grid">
+        <button class="gh-quick-btn" onclick="startIncidentFlow()"><span class="gqi">🚨</span><span data-i18n="home_quick_incident">Report incident</span></button>
+        <button class="gh-quick-btn" onclick="startAvailabilityFlow()"><span class="gqi">📅</span><span data-i18n="home_quick_availability">My availability</span></button>
+        <button class="gh-quick-btn" onclick="showGuardTab('patrol')"><span class="gqi">🚶</span><span data-i18n="home_quick_patrol">Start patrol</span></button>
+        <button class="gh-quick-btn" onclick="startPhotoFlow()"><span class="gqi">📷</span><span data-i18n="home_quick_photo">My photo</span></button>
+      </div>
+
+      <!-- Proactive nudge, not just a button waiting to be noticed: shown until
+           the guard enables push or dismisses it (re-offered after a week if
+           still not enabled, since a shift/message alert genuinely matters). -->
+      <div id="push-nudge-card" class="gh-push-nudge hidden">
+        <div class="gpn-icon">🔔</div>
+        <div class="gpn-text">
+          <div class="gpn-title" data-i18n="push_nudge_title">Turn on notifications</div>
+          <div class="gpn-sub" data-i18n="push_nudge_sub">Know the moment a new shift is published or the office messages you.</div>
+        </div>
+        <button class="gpn-enable" onclick="enablePushNotifications()" data-i18n="push_nudge_enable_btn">Enable</button>
+        <button class="gpn-dismiss" onclick="dismissPushNudge()" aria-label="Dismiss">✕</button>
+      </div>
+
+      <div id="push-enabled-note" class="hidden" style="font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-top:14px">
+        <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
+      </div>
+      <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
     </div>
 
     <!-- My Shifts (roster + clock in/out) -->
     <div class="guard-card hidden" id="step-myshifts">
       <div class="step-title" data-i18n="myshifts_title">🕐 My Shifts</div>
+      <div id="gh-clock-card" class="gh-clock-card"></div>
+      <div id="gid-handover" class="gid-handover hidden">
+        <div class="gid-handover-eyebrow" data-i18n="handover_eyebrow">Handover from the last shift</div>
+        <div class="gid-handover-body" id="gid-handover-body"></div>
+        <div class="gid-handover-by" id="gid-handover-by"></div>
+      </div>
       <div id="myshifts-status" class="geo-status hidden"></div>
       <div id="myshifts-list"></div>
-      <button class="nav-btn nav-back" data-i18n="back_to_menu" style="width:100%;margin-top:16px" onclick="showModeMenu()">← Back to Menu</button>
     </div>
 
     <!-- Clock Out -->
@@ -2576,7 +2607,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <p style="color:var(--muted);font-size:14px;line-height:1.5" data-i18n="panic_confirm_body">
         This will immediately notify the office with your name and current location. Only use this if you need urgent help.
       </p>
-      <div id="panic-err" style="color:var(--red);font-size:13px;margin-top:4px;display:none"></div>
+      <div class="gid-slide danger" id="sos-slide-track">
+        <div class="gid-slide-lbl" data-i18n="sos_slide">SLIDE TO SEND SOS →</div>
+        <div class="gid-slide-thumb">🆘</div>
+      </div>
+      <div id="panic-err" style="color:var(--red);font-size:13px;margin-top:10px;display:none"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:10px">
       <button class="btn btn-ghost" style="flex:1" data-i18n="panic_cancel" onclick="closeModal('panic-confirm-modal')">Cancel</button>
@@ -2652,6 +2687,17 @@ const TRANSLATIONS = {
     home_next_shift_prefix: "Next shift · ", home_on_site: "On site",
     home_clock_in_lbl: "IN", home_hold_2s: "HOLD 2s", home_clocking_in: "Clocking in…",
     home_on_shift: "ON SHIFT", home_clock_out_btn: "Clock out", home_elapsed_of_prefix: "ELAPSED OF ",
+    home_slide_to_clock_on: "Slide to clock on →", home_clock_in_confirm: "Clock in now?",
+    home_clock_in_tap_fallback: "Can't slide? Tap to clock in instead",
+    home_location_stamped: "Your location is stamped on the record",
+    home_break: "Break", home_resume: "Resume", home_on_break: "PAUSED — ON BREAK",
+    home_break_toast: "Break started", home_resumed_toast: "Break ended — back on shift",
+    geo_checking: "Checking your location…",
+    geo_on_site: "You're on site — {m} m from {gate}",
+    geo_off_site: "You're {m} m from {site} — get closer to clock on",
+    geo_off_site_block: "You're too far from the site to clock in yet.",
+    handover_eyebrow: "Handover from the last shift", handover_from: "Handover from {name}",
+    sos_slide: "SLIDE TO SEND SOS →",
     pay_title: "My Pay", pay_report_discrepancy: "Report a pay discrepancy",
     pay_no_history: "No pay history yet — it'll appear here once your first shift is approved.",
     pay_approved: "Approved", pay_pending: "Pending", pay_rejected: "Query",
@@ -3384,9 +3430,11 @@ function sendPanicAlert(){
 }
 function refreshPanicButton(){
   document.getElementById('panic-btn').classList.toggle('hidden', !selectedGuard);
-  const homeBtn = document.getElementById('panic-btn-home');
-  if(homeBtn) homeBtn.classList.toggle('hidden', !selectedGuard);
 }
+// Slide-to-send is the primary gesture; the modal's existing Cancel/Yes
+// buttons remain as the tap-only fallback per the accessibility requirement
+// that a fallback ship together with the slide, not after.
+wireSlideConfirm('#sos-slide-track', sendPanicAlert);
 window.addEventListener('online', syncPendingActions);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') syncPendingActions(); });
 setInterval(syncPendingActions, 30000);
@@ -3796,7 +3844,7 @@ async function loadSitesForPortal(){
   try{ sitesData = await apiFetch('/api/sites'); }catch(e){ return; }
 }
 
-const GUARD_CARDS = ['step-0','step-home','step-id','step-myshifts','step-clockout','step-success','step-patrol','step-pay','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages','step-photo'];
+const GUARD_CARDS = ['step-0','step-id','step-myshifts','step-clockout','step-success','step-patrol','step-pay','step-incident','step-incident-success','step-availability','step-avail-edit','step-messages','step-photo'];
 function showGuardCard(id){
   GUARD_CARDS.forEach(cid=>document.getElementById(cid).classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -3807,7 +3855,7 @@ function showGuardCard(id){
 // on their existing .guard-card — see startIncidentFlow() etc. below) so
 // they're deliberately not part of this map; the nav bar itself only
 // reflects which of these five is current.
-const GUARD_TAB_CARD = {id:'step-id', home:'step-home', shifts:'step-myshifts', patrol:'step-patrol', pay:'step-pay', inbox:'step-messages'};
+const GUARD_TAB_CARD = {id:'step-id', shifts:'step-myshifts', patrol:'step-patrol', pay:'step-pay', inbox:'step-messages'};
 function showGuardTab(tab){
   if(!selectedGuard){ toast('Please log in first','error'); return; }
   showGuardCard(GUARD_TAB_CARD[tab]);
@@ -3816,15 +3864,12 @@ function showGuardTab(tab){
   refreshPushUI();
   refreshPanicButton();
   if(tab==='id') loadGuardId();
-  else if(tab==='home') loadGuardHome();
   else if(tab==='shifts') loadMyShifts();
   else if(tab==='pay') loadGuardPay();
   else if(tab==='inbox') loadGuardMessagesEntry();
 }
 // The ID card is the landing screen after login (was the clock-in Home
-// screen) — Shifts already has its own clock in/out button on every row,
-// so nothing becomes unreachable; step-home itself is untouched and still
-// works for anything that still targets it directly.
+// screen); the clock-in/out card itself now lives on the Shifts tab.
 function showModeMenu(){ showGuardTab('id'); }
 function startShiftFlow(){ showGuardTab('shifts'); }
 function startPatrolFlow(){ showGuardTab('patrol'); }
@@ -3959,7 +4004,7 @@ const SHIFT_STATUS_LABEL = {
   completed:  {label:'Clocked Out',       badge:'role-viewer'},
   cancelled:  {label:'Cancelled',         badge:'rejected'},
 };
-// ── Home tab: shift-first landing ───────────────────────────────────────────
+// ── Shift tab: live clock-in/out card ───────────────────────────────────────
 let guardElapsedInterval = null;
 function guardCurrentOrNextShift(){
   const inProgress = myShiftsData.find(s=>s.status==='in_progress');
@@ -3968,41 +4013,126 @@ function guardCurrentOrNextShift(){
   if(upcoming) return {shift:upcoming, state:'out'};
   return {shift:null, state:'none'};
 }
-async function loadGuardHome(){
-  try{ myShiftsData = await guardApiFetch('/api/guard/shifts'); }catch(e){}
-  renderGuardHome();
-  loadGuardHomeStats();
+/* ── slide to confirm (clock-on, SOS) ────────────────────────────────── */
+function wireSlideConfirm(sel, onCommit){
+  const track = document.querySelector(sel);
+  if(!track) return;
+  const thumb = track.querySelector('.gid-slide-thumb');
+  const label = track.querySelector('.gid-slide-lbl');
+  let dragging = false, pct = 0;
+  const travel = () => track.clientWidth - thumb.offsetWidth - 12;
+  const paint = () => {
+    thumb.style.transform = 'translateX(' + (pct * travel()) + 'px)';
+    if(label) label.style.opacity = String(1 - pct * 0.9);
+  };
+  const reset = () => {
+    thumb.classList.add('snapback'); pct = 0; paint();
+    setTimeout(() => thumb.classList.remove('snapback'), 300);
+  };
+  thumb.addEventListener('pointerdown', e => {
+    dragging = true; thumb.setPointerCapture?.(e.pointerId); thumb.classList.remove('snapback');
+  });
+  thumb.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const r = track.getBoundingClientRect();
+    pct = Math.max(0, Math.min(1, (e.clientX - r.left - thumb.offsetWidth / 2) / travel()));
+    paint();
+  });
+  const end = () => {
+    if(!dragging) return;
+    dragging = false;
+    if(pct > 0.82){ navigator.vibrate?.(30); onCommit(); pct = 0; paint(); }
+    else reset();
+  };
+  thumb.addEventListener('pointerup', end);
+  thumb.addEventListener('pointercancel', end);
 }
+
+/* ── geofence pill (Shift tab, not-clocked-on state) ─────────────────── */
+let guardGeoOk = true;  // optimistic until we know otherwise; server still enforces the real check
+function haversineClientM(lat1,lng1,lat2,lng2){
+  const R = 6371000, toRad = x => x*Math.PI/180;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function checkGuardGeofence(shift){
+  guardGeoOk = true;
+  const pill = document.getElementById('gh-geo-pill');
+  if(!pill || shift.site_lat==null || shift.site_lng==null || !navigator.geolocation) return;
+  pill.className = 'gid-geo wait'; pill.textContent = '📍 ' + t('geo_checking'); pill.classList.remove('hidden');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const dist = haversineClientM(shift.site_lat, shift.site_lng, pos.coords.latitude, pos.coords.longitude);
+    const radius = shift.geofence_radius || 200;
+    if(dist <= radius){
+      guardGeoOk = true;
+      pill.className = 'gid-geo ok';
+      pill.textContent = '📍 ' + t('geo_on_site').replace('{m}', Math.round(dist)).replace('{gate}', shift.site_name);
+    } else {
+      guardGeoOk = false;
+      pill.className = 'gid-geo bad';
+      pill.textContent = '📍 ' + t('geo_off_site').replace('{m}', Math.round(dist)).replace('{site}', shift.site_name);
+    }
+  }, ()=>{ pill.classList.add('hidden'); }, {enableHighAccuracy:true, timeout:10000, maximumAge:30000});
+}
+
+/* ── handover note from the previous guard at this site ──────────────── */
+async function loadGuardHandover(shift){
+  const wrap = document.getElementById('gid-handover');
+  if(!wrap) return;
+  try{
+    const h = await guardApiFetch(`/api/guard/handover?shift_id=${shift.id}`);
+    if(!h){ wrap.classList.add('hidden'); return; }
+    document.getElementById('gid-handover-body').textContent = h.notes;
+    document.getElementById('gid-handover-by').textContent =
+      t('handover_from').replace('{name}', h.guard_name) + ' · ' + fmtRelativeDays(h.at);
+    wrap.classList.remove('hidden');
+  }catch(e){ wrap.classList.add('hidden'); }
+}
+
+/* ── break / resume ───────────────────────────────────────────────────── */
+async function toggleGuardBreak(shiftId){
+  const onBreak = document.getElementById('gh-break-btn')?.classList.contains('active');
+  try{
+    await guardApiFetch('/api/guard/break', {method:'POST',
+      body: JSON.stringify({shift_id: shiftId, action: onBreak ? 'end' : 'start'})});
+    toast(onBreak ? t('home_resumed_toast') : t('home_break_toast'), 'success');
+    loadMyShifts();
+  }catch(e){ toast(e.message,'error'); }
+}
+
 function renderGuardHome(){
   const card = document.getElementById('gh-clock-card');
   if(!card) return;
   if(guardElapsedInterval){ clearInterval(guardElapsedInterval); guardElapsedInterval=null; }
   const {shift, state} = guardCurrentOrNextShift();
+  const handoverEl = document.getElementById('gid-handover');
   if(state==='none'){
     card.innerHTML = `<div class="gh-noshift">
       <div class="gh-noshift-icon">🗓️</div>
       <div class="gh-noshift-title">${t('home_no_shift')}</div>
       <div class="gh-noshift-sub">${t('home_no_shift_sub')}</div>
     </div>`;
+    if(handoverEl) handoverEl.classList.add('hidden');
   } else if(state==='out'){
-    card.innerHTML = `<div class="gh-out-row">
-      <button class="gh-dial" id="gh-dial-btn" tabindex="0">
-        <svg viewBox="0 0 120 120" width="108" height="108" class="gh-dial-svg">
-          <circle cx="60" cy="60" r="59" class="gh-dial-ring2"/>
-          <circle cx="60" cy="60" r="54" class="gh-dial-track"/>
-          <circle cx="60" cy="60" r="54" class="gh-dial-progress" id="gh-dial-progress" stroke-dasharray="339.3" stroke-dashoffset="339.3"/>
-        </svg>
-        <span class="gh-dial-label" id="gh-dial-label">${t('home_clock_in_lbl')}</span>
-        <span class="gh-dial-sub" id="gh-dial-sub">${t('home_hold_2s')}</span>
-      </button>
-      <div class="gh-out-text">
-        <div class="gh-out-next"><span dir="ltr">${t('home_next_shift_prefix')}${shift.start_time}</span></div>
-        <div class="gh-out-site">${escapeHtml(shift.site_name)}</div>
-        <div class="gh-out-sub">${shift.position?escapeHtml(shift.position)+' · ':''}<span dir="ltr">${shift.start_time}–${shift.end_time||t('shift_required_label')}</span></div>
+    card.innerHTML = `<div id="gh-geo-pill" class="gid-geo hidden"></div>
+      <div class="gid-eyebrow"><span dir="ltr">${t('home_next_shift_prefix')}${shift.start_time}</span></div>
+      <div class="gh-out-site" style="font-family:var(--font-display);font-size:25px;font-weight:600;margin-top:6px">${escapeHtml(shift.site_name)}</div>
+      <div class="gh-out-sub">${shift.position?escapeHtml(shift.position)+' · ':''}<span dir="ltr">${shift.start_time}–${shift.end_time||t('shift_required_label')}</span></div>
+      <div class="gid-slide" id="clockon-track">
+        <div class="gid-slide-lbl">${t('home_slide_to_clock_on')}</div>
+        <div class="gid-slide-thumb">→</div>
       </div>
-    </div>`;
-    wireGuardHoldDial(shift.id);
+      <button class="gid-slide-fallback" onclick="if(confirm(t('home_clock_in_confirm'))) clockIn('${shift.id}')">${t('home_clock_in_tap_fallback')}</button>
+      <div style="font-size:11.5px;color:rgba(255,255,255,.4);text-align:center;margin-top:2px">${t('home_location_stamped')}</div>`;
+    wireSlideConfirm('#clockon-track', () => {
+      if(!guardGeoOk){ toast(t('geo_off_site_block'),'error'); return; }
+      clockIn(shift.id);
+    });
+    checkGuardGeofence(shift);
+    loadGuardHandover(shift);
   } else {
+    const onBreak = !!shift.break_started_at;
     card.innerHTML = `<div class="gh-in-top">
         <span class="gh-in-dot"></span><span class="gh-in-label">${t('home_on_shift')}</span>
         <span class="gh-in-pill">${escapeHtml(shift.site_name)}</span>
@@ -4013,50 +4143,13 @@ function renderGuardHome(){
       <div class="gh-in-btns">
         <button class="btn btn-gold" style="flex:1" onclick="openClockOut('${shift.id}')">${t('home_clock_out_btn')}</button>
         <button class="gh-in-plus" onclick="startIncidentFlow()" aria-label="${t('menu_incident_title')}">+</button>
+      </div>
+      <div class="gid-break-row">
+        <button class="gid-break-btn${onBreak?' active':''}" id="gh-break-btn" onclick="toggleGuardBreak('${shift.id}')">${onBreak?t('home_resume'):t('home_break')}</button>
       </div>`;
     startGuardElapsedTimer(shift);
+    loadGuardHandover(shift);
   }
-}
-function wireGuardHoldDial(shiftId){
-  const btn = document.getElementById('gh-dial-btn');
-  if(!btn) return;
-  const progress = document.getElementById('gh-dial-progress');
-  const label = document.getElementById('gh-dial-label');
-  const sub = document.getElementById('gh-dial-sub');
-  const CIRC = 339.3, DURATION = 2000;
-  let startTs = null, raf = null, done = false;
-  function resetVisual(){
-    progress.setAttribute('stroke-dashoffset', String(CIRC));
-    label.textContent = t('home_clock_in_lbl');
-    sub.textContent = t('home_hold_2s');
-  }
-  function frame(ts){
-    if(startTs===null) startTs = ts;
-    const pct = Math.min(1, (ts-startTs)/DURATION);
-    progress.setAttribute('stroke-dashoffset', String(CIRC*(1-pct)));
-    label.textContent = pct<1 ? Math.round(pct*100)+'%' : t('home_clock_in_lbl');
-    if(pct>=1 && !done){
-      done = true;
-      sub.textContent = t('home_clocking_in');
-      clockIn(shiftId);
-      return;
-    }
-    if(pct<1) raf = requestAnimationFrame(frame);
-  }
-  function start(e){ if(done) return; e.preventDefault(); startTs=null; if(raf) cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
-  function cancel(){ if(done) return; if(raf) cancelAnimationFrame(raf); raf=null; startTs=null; resetVisual(); }
-  btn.onpointerdown = start;
-  btn.onpointerup = cancel;
-  btn.onpointerleave = cancel;
-  btn.onpointercancel = cancel;
-  // Keyboard equivalent for the hold gesture, per accessibility requirements.
-  btn.onkeydown = e=>{
-    if((e.key==='Enter' || e.key===' ') && !done){
-      e.preventDefault();
-      if(confirm(t('home_clock_in_lbl')+' — '+shift_confirm_label())){ done=true; clockIn(shiftId); }
-    }
-  };
-  function shift_confirm_label(){ return t('confirm_btn')||'Confirm?'; }
 }
 function startGuardElapsedTimer(shift){
   const el = document.getElementById('gh-elapsed');
@@ -4064,6 +4157,8 @@ function startGuardElapsedTimer(shift){
   const fill = document.getElementById('gh-in-fill');
   if(!el || !shift.clock_in_at) return;
   const startMs = new Date(shift.clock_in_at).getTime();
+  const breakSecondsDone = shift.break_seconds || 0;
+  const breakStartMs = shift.break_started_at ? new Date(shift.break_started_at).getTime() : null;
   let plannedHours = 8;
   if(shift.end_time){
     const [sh,sm] = shift.start_time.split(':').map(Number);
@@ -4072,12 +4167,15 @@ function startGuardElapsedTimer(shift){
     plannedHours = mins/60;
   }
   function tick(){
-    const secs = Math.max(0, Math.floor((Date.now()-startMs)/1000));
+    const now = Date.now();
+    const liveBreak = breakStartMs ? Math.floor((now-breakStartMs)/1000) : 0;
+    const secs = Math.max(0, Math.floor((now-startMs)/1000) - breakSecondsDone - liveBreak);
     const h = String(Math.floor(secs/3600)).padStart(2,'0');
     const m = String(Math.floor((secs%3600)/60)).padStart(2,'0');
     const s = String(secs%60).padStart(2,'0');
     el.textContent = `${h}:${m}:${s}`;
-    cap.textContent = t('home_elapsed_of_prefix') + plannedHours.toFixed(1) + 'h';
+    cap.textContent = breakStartMs ? t('home_on_break') : (t('home_elapsed_of_prefix') + plannedHours.toFixed(1) + 'h');
+    cap.style.color = breakStartMs ? 'var(--gold-l)' : '';
     if(fill) fill.style.width = Math.min(100, (secs/3600/plannedHours*100)) + '%';
   }
   tick();
@@ -4104,6 +4202,8 @@ async function loadGuardHomeStats(){
 let gidFlipped = false, gidData = null;
 
 async function loadGuardId(){
+  try{ myShiftsData = await guardApiFetch('/api/guard/shifts'); }catch(e){}
+  loadGuardHomeStats();
   try{ gidData = await guardApiFetch('/api/guard/me'); }catch(e){ return; }
   const g = gidData || {};
   const hour = new Date().getHours();
