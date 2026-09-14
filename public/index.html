@@ -1325,6 +1325,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           </div>
         </div>
       </div>
+      <div class="section" style="margin-bottom:20px">
+        <div class="section-head">
+          <span class="section-title">Trends</span>
+          <select id="dash-trends-weeks" class="form-control" style="width:auto;padding:6px 10px;font-size:13px" onchange="loadDashboardTrends()">
+            <option value="8">Last 8 weeks</option>
+            <option value="13">Last 13 weeks</option>
+            <option value="26">Last 26 weeks</option>
+          </select>
+        </div>
+        <div class="dash-charts-grid">
+          <div class="dash-chart-card">
+            <div class="dcc-title">Revenue</div>
+            <div class="dcc-chart" id="chart-revenue"></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Hours Worked</div>
+            <div class="dcc-chart" id="chart-hours"></div>
+          </div>
+          <div class="dash-chart-card">
+            <div class="dcc-title">Incidents by Status</div>
+            <div class="dcc-chart" id="chart-incidents"></div>
+            <div class="dcc-legend" id="chart-incidents-legend"></div>
+          </div>
+        </div>
+      </div>
       <div class="section hidden" id="dash-expiring-section" style="margin-bottom:20px;border-left:3px solid var(--red)">
         <div class="section-head">
           <span class="section-title">⚠️ Licences &amp; Compliance Expiring Soon</span>
