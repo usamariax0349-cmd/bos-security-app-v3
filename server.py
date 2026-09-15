@@ -1181,6 +1181,11 @@ def init_db():
         # never by the general guard-update PUT, so it carries a real audit trail.
         ("guards", "license_verified_at", "ALTER TABLE guards ADD COLUMN license_verified_at TEXT"),
         ("guards", "license_verified_by", "ALTER TABLE guards ADD COLUMN license_verified_by TEXT DEFAULT ''"),
+        # Opaque per-guard token for the public licence-verification page/QR
+        # code — deliberately a separate random value, not the guard's own
+        # id, so it can be rotated (badge lost/compromised) without touching
+        # the guard's real internal id used everywhere else.
+        ("guards", "public_verify_token", "ALTER TABLE guards ADD COLUMN public_verify_token TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -1390,6 +1395,18 @@ def init_db():
             email_note = gemail or '(no email on file — add one before this guard can log in)'
             print(f'    {gname:<30} {email_note:<40} temp password: {temp_pw}')
         conn.commit()
+
+    # Every guard gets a public-verification token up front (not generated
+    # lazily on first QR view) so the admin UI can always show a working QR
+    # code/link, even for a guard nobody has opened this tab for yet.
+    needs_verify_token = conn.execute(
+        "SELECT id FROM guards WHERE public_verify_token IS NULL OR public_verify_token=''").fetchall()
+    if needs_verify_token:
+        for (gid,) in needs_verify_token:
+            conn.execute('UPDATE guards SET public_verify_token=? WHERE id=?',
+                         (secrets.token_urlsafe(24), gid))
+        conn.commit()
+        print(f'  Generated public verification tokens for {len(needs_verify_token)} guard(s)')
 
     conn.close()
 
@@ -2165,6 +2182,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── Static ──
         if path in ('/','/index.html'):
             self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
+        # Public licence-verification page — same SPA shell; client JS reads
+        # the token out of the URL and renders a dedicated read-only view
+        # instead of the login screen. No auth: this is the page a QR code
+        # on a guard's badge opens for office staff or a compliance officer.
+        if re.match(r'^/verify/[^/]+$', path):
+            self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
         if path == '/manifest.json':
             self.serve_file(os.path.join(PUBLIC_PATH,'manifest.json'),'application/manifest+json'); return
         if path == '/sw.js':
@@ -2208,6 +2231,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # ── API ──
         if path == '/api/config':
             self.send_json({'company_name': COMPANY_NAME}); return
+
+        # Public licence-verification lookup for the QR code on a guard's ID
+        # card. Deliberately unauthenticated (office staff and visiting
+        # compliance officers have no login), and deliberately narrow: only
+        # the fields relevant to confirming who's standing in front of you
+        # and whether their licence is current — nothing else on the guard
+        # record (phone, next of kin, notes, etc.) is exposed here.
+        m = re.match(r'^/api/verify/([^/]+)$', path)
+        if m:
+            db = get_db()
+            g = R(db.execute('SELECT * FROM guards WHERE public_verify_token=?', (m.group(1),)).fetchone())
+            db.close()
+            if not g: self.err('Not found', 404); return
+            self.send_json({
+                'name': g['name'],
+                'photo_url': f"/uploads/{g['photo_filename']}" if g.get('photo_filename') else None,
+                'active': bool(g['active']),
+                'employee_no': g.get('employee_no') or None,
+                'licence_no': g.get('license_number') or None,
+                'licence_class': g.get('license_class') or None,
+                'licence_state': g.get('license_state') or None,
+                'licence_expiry': g.get('license_expiry') or None,
+                'verified_at': g.get('license_verified_at') or None,
+                'verified_by': g.get('license_verified_by') or None,
+            }); return
 
         if path == '/api/guards':
             db = get_db()
@@ -3824,11 +3872,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not data.get('name'): self.err('Name required'); return
             gid = str(uuid.uuid4()); db = get_db()
             try:
-                db.execute('''INSERT INTO guards (id,name,license_number,base_rate,phone,email,notes)
-                              VALUES (?,?,?,?,?,?,?)''',
+                db.execute('''INSERT INTO guards (id,name,license_number,base_rate,phone,email,notes,public_verify_token)
+                              VALUES (?,?,?,?,?,?,?,?)''',
                            (gid,data['name'],data.get('license_number',''),
                             float(data.get('base_rate',0)),data.get('phone',''),
-                            data.get('email',''),data.get('notes','')))
+                            data.get('email',''),data.get('notes',''),secrets.token_urlsafe(24)))
             except sqlite3.IntegrityError:
                 db.close(); self.err('Another guard already has that email address', 409); return
             db.commit()
@@ -3883,6 +3931,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('UPDATE guards SET license_verified_at=?, license_verified_by=? WHERE id=?',
                        (now, s2['name'], m.group(1)))
             audit(db, s2, 'GUARD_LICENSE_VERIFIED', guard['name']); db.commit()
+            g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone()))
+            db.close(); self.send_json(g); return
+
+        # Invalidates the old QR code/link immediately (a new random token
+        # means the old one 404s) — for a lost or compromised badge.
+        m = re.match(r'^/api/guards/([^/]+)/regenerate-verify-token$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            guard = R(db.execute('SELECT id,name FROM guards WHERE id=?', (m.group(1),)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            db.execute('UPDATE guards SET public_verify_token=? WHERE id=?',
+                       (secrets.token_urlsafe(24), m.group(1)))
+            audit(db, s2, 'GUARD_VERIFY_TOKEN_REGENERATE', guard['name']); db.commit()
             g = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?',(m.group(1),)).fetchone()))
             db.close(); self.send_json(g); return
 

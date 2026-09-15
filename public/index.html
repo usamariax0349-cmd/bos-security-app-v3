@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js" crossorigin=""></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -609,6 +610,40 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .gid-present-valid{background:#241d05;color:var(--gold-l);padding:12px 22px;border-radius:14px;
   font-size:13px;font-weight:700;letter-spacing:.06em}
 .gid-present-close{font-size:12.5px;color:rgba(36,29,5,.6);font-weight:600}
+
+/* Public licence-verification page (QR code target — no login) */
+#verify-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1),var(--ink-2) 60%,var(--ink-3));
+  display:flex;flex-direction:column;align-items:center;padding:48px 20px calc(40px + env(safe-area-inset-bottom))}
+.vfy-wordmark{display:flex;align-items:center;gap:10px;margin-bottom:28px;color:rgba(255,255,255,.7);
+  font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+.vfy-card{width:100%;max-width:380px;background:var(--glass);backdrop-filter:blur(18px) saturate(150%);
+  border:1px solid rgba(232,199,106,.24);border-radius:24px;padding:28px 22px;box-shadow:var(--sh-lg)}
+.vfy-eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(232,199,106,.75);text-align:center;margin-bottom:18px}
+.vfy-photo{width:104px;height:104px;border-radius:50%;margin:0 auto 16px;padding:3px;
+  border:2px solid rgba(232,199,106,.55);background:rgba(255,255,255,.06);overflow:hidden}
+.vfy-photo img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.vfy-photo-empty{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:34px;color:rgba(255,255,255,.35)}
+.vfy-name{font-family:var(--font-display);font-size:25px;font-weight:600;color:#fff;text-align:center;letter-spacing:-.3px}
+.vfy-chip{display:flex;align-items:center;justify-content:center;gap:7px;margin:10px auto 20px;
+  padding:6px 14px;border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.09em;width:fit-content}
+.vfy-chip.on{background:rgba(18,168,112,.16);color:#4fd6a0}
+.vfy-chip.off{background:rgba(239,68,68,.16);color:#fca5a5}
+.vfy-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,.09);
+  margin:0 -22px;border-top:1px solid rgba(255,255,255,.09)}
+.vfy-cell{background:rgba(16,26,46,.4);padding:13px 22px}
+.vfy-cell-lbl{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.vfy-cell-val{font-size:14.5px;font-weight:600;color:#fff;margin-top:3px}
+.vfy-cell-val.expired{color:#fca5a5}
+.vfy-verified{margin-top:20px;padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.5;text-align:center}
+.vfy-verified.yes{background:rgba(18,168,112,.1);border:1px solid rgba(79,214,160,.3);color:#8ff0c6}
+.vfy-verified.no{background:rgba(240,180,41,.1);border:1px solid rgba(240,180,41,.3);color:var(--gold-l)}
+.vfy-lars-btn{display:block;width:100%;text-align:center;margin-top:16px;height:48px;line-height:48px;
+  border-radius:13px;background:transparent;border:1px solid rgba(255,255,255,.18);color:#fff;
+  font-size:13.5px;font-weight:700;text-decoration:none;cursor:pointer}
+.vfy-footer{margin-top:22px;font-size:11px;color:rgba(255,255,255,.35);text-align:center;max-width:340px;line-height:1.5}
+.vfy-error{color:rgba(255,255,255,.6);text-align:center;font-size:14px;margin-top:60px}
 
 /* slide-to-confirm (clock-on + SOS) */
 .gid-slide{position:relative;height:68px;border-radius:18px;overflow:hidden;touch-action:none;
@@ -2338,6 +2373,18 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div><!-- /client-page -->
 
+<!-- Public licence-verification page — opened by a QR code, no login -->
+<div id="verify-page" class="hidden">
+  <div class="vfy-wordmark">
+    <svg viewBox="0 0 100 100" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 12 L80 12 Q86 12 86 18 L86 52 Q86 78 50 88 Q14 78 14 52 L14 18 Q14 12 20 12 Z"
+            fill="none" stroke="#e8c76a" stroke-width="6"/>
+    </svg>
+    <span id="vfy-company">Brown Owl Security</span>
+  </div>
+  <div id="vfy-body"></div>
+</div>
+
 <!-- Client Portal: add/edit shift -->
 <div id="client-shift-modal" class="modal-overlay hidden">
   <div class="modal" style="max-width:480px">
@@ -3539,7 +3586,7 @@ setInterval(syncPendingActions, 30000);
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function hideAllPages(){
-  ['guard-page','login-page','admin-page','client-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  ['guard-page','login-page','admin-page','client-page','verify-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
 }
 function showGuard(){
   hideAllPages();
@@ -3584,6 +3631,41 @@ function showClientPortal(){
   hideAllPages();
   document.getElementById('client-page').classList.remove('hidden');
   loadClientPortal();
+}
+async function showVerifyPage(token){
+  hideAllPages();
+  document.getElementById('verify-page').classList.remove('hidden');
+  const body = document.getElementById('vfy-body');
+  body.innerHTML = '<div class="vfy-error">Loading…</div>';
+  try{
+    const res = await fetch(`/api/verify/${encodeURIComponent(token)}`);
+    if(!res.ok) throw new Error('not found');
+    const g = await res.json();
+    const expired = g.licence_expiry && g.licence_expiry < fmtISO(new Date());
+    const photo = g.photo_url ? `<img src="${escapeHtml(g.photo_url)}" alt="">` : `<div class="vfy-photo-empty">👤</div>`;
+    const larsUrl = 'https://www.lars.police.vic.gov.au/LARS/LARS.asp?File=/components/screens/psinfp03/psinfp03.asp';
+    body.innerHTML = `
+      <div class="vfy-card">
+        <div class="vfy-eyebrow">Licence Verification</div>
+        <div class="vfy-photo">${photo}</div>
+        <div class="vfy-name">${escapeHtml(g.name)}</div>
+        <div class="vfy-chip ${g.active?'on':'off'}">${g.active ? '● ACTIVE GUARD' : '● NO LONGER ACTIVE'}</div>
+        <div class="vfy-grid">
+          <div class="vfy-cell"><div class="vfy-cell-lbl">Licence #</div><div class="vfy-cell-val">${escapeHtml(g.licence_no||'—')}</div></div>
+          <div class="vfy-cell"><div class="vfy-cell-lbl">Class</div><div class="vfy-cell-val">${escapeHtml(g.licence_class||'—')}</div></div>
+          <div class="vfy-cell"><div class="vfy-cell-lbl">State</div><div class="vfy-cell-val">${escapeHtml(g.licence_state||'—')}</div></div>
+          <div class="vfy-cell"><div class="vfy-cell-lbl">Expiry</div><div class="vfy-cell-val ${expired?'expired':''}">${g.licence_expiry?fmtDate(g.licence_expiry):'—'}</div></div>
+        </div>
+        ${g.verified_at
+          ? `<div class="vfy-verified yes">✅ Verified against LARS ${fmtDate(g.verified_at)} by ${escapeHtml(g.verified_by||'')}</div>`
+          : `<div class="vfy-verified no">⚪ Not yet checked against LARS by the office</div>`}
+        <a class="vfy-lars-btn" href="${larsUrl}" target="_blank" rel="noopener noreferrer">Verify independently on LARS ↗</a>
+      </div>
+      <div class="vfy-footer">This page shows the licence details Brown Owl Security holds on file for this guard. For the authoritative record, verify directly on LARS using the link above.</div>
+    `;
+  }catch(e){
+    body.innerHTML = '<div class="vfy-error">This verification link isn\'t valid, or has been revoked.</div>';
+  }
 }
 function showClientTab(name){
   document.querySelectorAll('#client-page .tab-content').forEach(el=>el.classList.remove('active'));
@@ -3861,6 +3943,10 @@ function showTab(name){
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init(){
+  // QR-code / shared-link target: a standalone read-only page, no login,
+  // no i18n — skip the whole admin/guard/client boot sequence entirely.
+  const vfyMatch = location.pathname.match(/^\/verify\/([^/]+)$/);
+  if(vfyMatch){ showVerifyPage(vfyMatch[1]); return; }
   applyTranslations();
   try{
     const cfg = await apiFetch('/api/config');
@@ -6556,6 +6642,24 @@ async function renderGuardComplianceTab(){
       Victoria Police's LARS register has no public API — this opens the lookup for you to check by hand, then records that you did.
     </p>
 
+    <div class="gd-section-title">Verification QR Code</div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">
+      Print this on the guard's badge or ID card. Scanning it opens a read-only page — no login required — showing their
+      licence details and last-verified status, for office staff or a visiting compliance officer to check on the spot.
+    </p>
+    <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px">
+      <canvas id="gd-verify-qr" width="140" height="140" style="border-radius:8px;border:1px solid var(--border)"></canvas>
+      <div style="flex:1;min-width:220px">
+        <div class="form-group"><label class="form-label">Verification link</label>
+          <input id="gd-verify-url" class="form-control" readonly style="font-size:12px">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="copyVerifyUrl()">Copy Link</button>
+          <button class="btn btn-ghost btn-sm" onclick="regenerateVerifyToken()">Regenerate (revokes old QR)</button>
+        </div>
+      </div>
+    </div>
+
     <div class="gd-section-title">Digital ID Card</div>
     <p style="font-size:12.5px;color:var(--muted);margin:-4px 0 12px">Shown on the guard's ID card in the Guard Portal, and on the back when flipped for emergencies.</p>
     <div class="form-row">
@@ -6597,6 +6701,31 @@ async function renderGuardComplianceTab(){
       </table>
     </div>
   `;
+  renderVerifyQr(g);
+}
+function verifyUrlFor(g){ return `${location.origin}/verify/${g.public_verify_token}`; }
+function renderVerifyQr(g){
+  const urlInput = document.getElementById('gd-verify-url');
+  const canvas = document.getElementById('gd-verify-qr');
+  if(!urlInput || !canvas || !g.public_verify_token) return;
+  const url = verifyUrlFor(g);
+  urlInput.value = url;
+  if(window.QRCode) QRCode.toCanvas(canvas, url, {width:140, margin:1}, err=>{ if(err) console.error(err); });
+}
+function copyVerifyUrl(){
+  const input = document.getElementById('gd-verify-url');
+  input.select();
+  navigator.clipboard?.writeText(input.value).then(()=>toast('Link copied','success'))
+    .catch(()=>document.execCommand('copy'));
+}
+async function regenerateVerifyToken(){
+  if(!confirm("Regenerate this guard's verification link? The old QR code will stop working immediately.")) return;
+  try{
+    const g = await apiFetch(`/api/guards/${selectedGuardId}/regenerate-verify-token`, {method:'POST'});
+    const idx = guardsFull.findIndex(x=>x.id===selectedGuardId); if(idx>=0) guardsFull[idx] = g;
+    toast('Verification link regenerated','success');
+    renderVerifyQr(g);
+  }catch(e){ toast(e.message,'error'); }
 }
 async function saveLicense(){
   const body = {
