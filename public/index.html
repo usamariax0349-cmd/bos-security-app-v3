@@ -7095,6 +7095,44 @@ function renderRatingNoteHistory(entries){
     </div>`).join('')}
   </div>`;
 }
+function renderOverallOverrideBlock(r){
+  const currentStars = r.overall != null ? r.overall : 6;
+  let html = '';
+  if(r.overall_overridden){
+    html += `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;padding:8px 10px;background:rgba(0,0,0,.03);border-radius:6px">
+      ⚙ Overall rating manually set${r.overall_override_source?' by '+escapeHtml(r.overall_override_source):''}${r.overall_override_date?' on '+escapeHtml(r.overall_override_date):''} —
+      system would otherwise show ${r.system_overall!=null?escapeHtml(r.system_overall_label)+' ('+(r.system_overall/2).toFixed(1)+')':'Unrated'}
+      (${r.all_time_completed}/${r.min_shifts} shifts worked).
+      ${r.overall_override_note?`<div style="margin-top:4px">“${escapeHtml(r.overall_override_note)}”</div>`:''}
+      <a href="#" onclick="deleteRatingNote('${r.overall_override_id}');return false" style="color:var(--red)">Clear override</a>
+    </div>`;
+  }
+  html += `<button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="toggleOverallOverrideForm()">${r.overall_overridden?'✎ Change manual override':'✎ Manually set overall rating'}</button>
+    <div id="rn-form-overall" class="hidden" style="margin-bottom:16px;padding:10px;border:1px solid var(--border);border-radius:8px;max-width:340px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Sets this guard's overall rating directly, including guards below the ${r.min_shifts}-shift minimum. Dated and sourced like every other entry here, and ages out after ${r.window_days} days unless renewed.</div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label" style="font-size:11px">Overall rating</label>
+        <select id="rn-stars-overall" class="form-control">${starSelectOptions(currentStars)}</select>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label" style="font-size:11px">Date</label>
+        <input type="date" id="rn-date-overall" class="form-control" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label" style="font-size:11px">Source (who / why)</label>
+        <input type="text" id="rn-source-overall" class="form-control" placeholder="e.g. Ops manager sign-off">
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label class="form-label" style="font-size:11px">Note (required)</label>
+        <textarea id="rn-note-overall" class="form-control" rows="2" placeholder="Why this guard's overall rating is being set manually"></textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="submitRatingNote('overall')">Save</button>
+    </div>`;
+  return html;
+}
+function toggleOverallOverrideForm(){
+  document.getElementById('rn-form-overall').classList.toggle('hidden');
+}
 function renderRatingDetail(r, notes){
   const box = document.getElementById('ratings-detail');
   const tierStyle = RATING_TIER_STYLE[r.tier] || RATING_TIER_STYLE['Unrated'];
@@ -7108,7 +7146,7 @@ function renderRatingDetail(r, notes){
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
         ${r.all_time_completed}/${r.min_shifts} shifts worked — allocate on licence, tickets and availability only until
         enough shifts have been logged. You can still log dated observations below; they'll already be on file once
-        this guard is rated.
+        this guard is rated. Or set an overall rating manually below if there's a documented reason to rate this guard now.
       </div>
     `;
   } else {
@@ -7122,6 +7160,8 @@ function renderRatingDetail(r, notes){
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Window: last ${r.window_days} days · ${r.shifts_in_window} shifts · ${trendText}</div>
     `;
   }
+
+  html += renderOverallOverrideBlock(r);
 
   html += `<div class="tbl-wrap" style="margin-bottom:16px"><table><tbody>`;
   r.categories.forEach(c=>{

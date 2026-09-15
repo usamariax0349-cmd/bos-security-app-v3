@@ -390,6 +390,16 @@ RATING_CATEGORIES = [
 RATING_CATEGORY_LABELS = {k: lbl for k, lbl, _, _ in RATING_CATEGORIES}
 RATING_MANUAL_CATEGORIES = [k for k, _, _, kind in RATING_CATEGORIES if kind == 'manual']
 
+# A pseudo-category, stored in the same guard_rating_notes table/history as
+# the real 9 but deliberately excluded from RATING_CATEGORIES (and so from
+# the weighted-average loop): a dated, sourced note here overrides the
+# OVERALL rating/tier directly, including for a guard below
+# RATING_MIN_SHIFTS. Everything else about it — most-recent-in-window wins,
+# ages out after the window, system value kept alongside — matches the
+# per-category override behaviour on purpose.
+RATING_OVERALL_KEY = 'overall'
+RATING_NOTE_LABELS = {**RATING_CATEGORY_LABELS, RATING_OVERALL_KEY: 'Overall rating (manual override)'}
+
 RATING_TIER5_QUESTIONS = [
     'Has something changed in their circumstances?',
     'Are the shifts they’re offered actually matching their stated availability?',
@@ -642,13 +652,38 @@ def compute_guard_rating(db, guard_id, as_of=None):
     if below_min_shifts:
         overall = None; prev_overall = None; trend = 'flat'; trend_delta = 0
     tier = 'Unrated' if below_min_shifts else rating_tier(overall)
+    system_overall, system_tier = overall, tier
+
+    # An admin can override the OVERALL rating directly — the one gap the
+    # per-category overrides above can't reach, since every one of them still
+    # feeds a weighted average that gets suppressed to None below the shift
+    # minimum. A dated, sourced note under RATING_OVERALL_KEY bypasses that
+    # suppression entirely (an admin may have a documented reason to rate a
+    # guard before they clear the sample-size threshold), the same
+    # most-recent-in-window-wins rule as every other override, and the
+    # system-computed value is always kept alongside so the override never
+    # hides what the raw data actually showed.
+    overall_override = R(db.execute('''
+        SELECT * FROM guard_rating_notes WHERE guard_id=? AND category=?
+          AND entry_date>=? AND entry_date<=? ORDER BY entry_date DESC, created_at DESC LIMIT 1
+    ''', (guard_id, RATING_OVERALL_KEY, window_start.strftime('%Y-%m-%d'), window_end.strftime('%Y-%m-%d'))).fetchone())
+    if overall_override:
+        overall = overall_override['stars']
+        tier = rating_tier(overall)
+    unrated = below_min_shifts and not overall_override
     tier5_plan = RATING_TIER5_QUESTIONS if tier == 'Tier 5 — Review' else None
 
     return {
-        'guard_id': guard_id, 'name': guard['name'], 'unrated': below_min_shifts,
+        'guard_id': guard_id, 'name': guard['name'], 'unrated': unrated,
         'all_time_completed': all_time_completed, 'min_shifts': RATING_MIN_SHIFTS,
         'overall': overall, 'overall_label': stars_label(overall), 'overall_decimal': round(overall/2, 1) if overall is not None else None,
         'tier': tier, 'trend': trend, 'trend_delta': trend_delta, 'prev_overall': prev_overall,
+        'overall_overridden': bool(overall_override),
+        'overall_override_id': overall_override['id'] if overall_override else None,
+        'overall_override_note': overall_override['note'] if overall_override else None,
+        'overall_override_source': overall_override['source'] if overall_override else None,
+        'overall_override_date': overall_override['entry_date'] if overall_override else None,
+        'system_overall': system_overall, 'system_overall_label': stars_label(system_overall), 'system_tier': system_tier,
         'window_days': RATING_WINDOW_DAYS,
         'shifts_in_window': shifts_in_window,
         'categories': [
@@ -4260,8 +4295,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             category = data.get('category')
             note = (data.get('note') or '').strip()
             stars = data.get('stars')
-            if category not in RATING_CATEGORY_LABELS:
-                self.err(f"category must be one of: {', '.join(RATING_CATEGORY_LABELS)}"); return
+            if category not in RATING_NOTE_LABELS:
+                self.err(f"category must be one of: {', '.join(RATING_NOTE_LABELS)}"); return
             if not note:
                 self.err('note required — the rating system never scores anything without a documented reason'); return
             if not isinstance(stars, int) or stars < 0 or stars > 10:
@@ -4274,7 +4309,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('''INSERT INTO guard_rating_notes (id,guard_id,category,stars,note,source,entry_date,created_by)
                           VALUES (?,?,?,?,?,?,?,?)''',
                        (nid, guard_id, category, stars, note, (data.get('source') or '').strip(), entry_date, s2['name']))
-            audit(db, s2, 'RATING_NOTE_ADD', f"{RATING_CATEGORY_LABELS[category]} for guard {guard_id}: {note[:80]}")
+            audit(db, s2, 'RATING_NOTE_ADD', f"{RATING_NOTE_LABELS[category]} for guard {guard_id}: {note[:80]}")
             db.commit(); db.close()
             self.send_json({'id': nid, 'ok': True}, 201); return
 
@@ -4761,7 +4796,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             row = R(db.execute('SELECT guard_id,category,note FROM guard_rating_notes WHERE id=?', (m.group(1),)).fetchone())
             if not row: db.close(); self.err('Note not found', 404); return
             db.execute('DELETE FROM guard_rating_notes WHERE id=?', (m.group(1),))
-            audit(db, s, 'RATING_NOTE_DELETE', f"{RATING_CATEGORY_LABELS.get(row['category'],row['category'])}: {row['note'][:80]}")
+            audit(db, s, 'RATING_NOTE_DELETE', f"{RATING_NOTE_LABELS.get(row['category'],row['category'])}: {row['note'][:80]}")
             db.commit(); db.close()
             self.send_json({'ok':True}); return
         m = re.match(r'^/api/leave/([^/]+)$', path)
