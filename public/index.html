@@ -598,6 +598,19 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .gid-nudge{display:flex;align-items:center;gap:11px;margin-top:14px;background:rgba(240,180,41,.1);
   border:1px solid rgba(240,180,41,.26);border-radius:13px;padding:13px 14px;font-size:12.5px;line-height:1.5;color:var(--gold-l)}
 
+/* policies list (ID tab) */
+#gid-policies-count{color:var(--gold-l);font-weight:700}
+.gid-policy-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:12px 14px}
+.gid-policy-title{font-size:13.5px;font-weight:600;color:#fff}
+.gid-policy-sub{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+.gid-policy-signed{font-size:11.5px;font-weight:700;color:#6fcf97;white-space:nowrap}
+/* pre-clock-in policy gate (Shift tab) */
+.gid-policy-gate{background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.35);border-radius:14px;
+  padding:16px;text-align:center;margin-top:6px}
+.gid-policy-gate-title{font-size:14px;font-weight:700;color:#fca5a5;margin-bottom:4px}
+.gid-policy-gate-sub{font-size:12.5px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:12px}
+
 /* present-badge overlay */
 .gid-present{position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:24px;padding:40px 28px;border:none;cursor:pointer;
@@ -1184,6 +1197,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
       <div class="gid-nudge hidden" id="gid-nudge"></div>
 
+      <div id="gid-policies-section" class="hidden">
+        <div class="gid-sec-lbl"><span data-i18n="policies_section_title">Policies</span> <span id="gid-policies-count"></span></div>
+        <div id="gid-policies-list"></div>
+      </div>
+
       <div class="gh-stats-row" style="margin-top:22px">
         <button class="gh-stat-card" onclick="showGuardTab('patrol')">
           <div class="gh-stat-val" id="gh-stat-checkpoints">—</div>
@@ -1219,68 +1237,6 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <span data-i18n="push_enabled_prefix">🔔 Notifications on —</span> <a href="#" onclick="disablePushNotifications();return false" style="color:inherit;text-decoration:underline" data-i18n="push_turn_off">turn off</a>
       </div>
       <button class="nav-btn nav-back" data-i18n="logout_btn" style="width:100%;margin-top:16px" onclick="guardLogout()">Logout</button>
-    </div>
-
-    <!-- ID card (new) -->
-    <div class="guard-card hidden" id="step-id">
-      <div class="gid-head">
-        <div class="gid-avatar" id="gid-avatar"></div>
-        <div style="min-width:0;flex:1">
-          <div class="gid-hi" id="gid-greeting"></div>
-          <div class="gid-hi-sub" id="gid-greeting-sub"></div>
-        </div>
-        <button class="gid-sos-btn" data-i18n="sos_short" onclick="openPanicConfirm()">SOS</button>
-      </div>
-
-      <button class="gid-flip-btn" onclick="toggleIdCard()" aria-label="Flip ID card">
-        <div class="gid-flip" id="gid-flip">
-          <!-- front -->
-          <div class="gid-face" id="gid-face-front">
-            <div class="gid-id-row">
-              <div class="gid-photo" id="gid-photo"></div>
-              <div style="min-width:0">
-                <div class="gid-name" id="gid-name">—</div>
-                <div class="gid-role" id="gid-role"></div>
-                <div id="gid-status"></div>
-              </div>
-            </div>
-            <div class="gid-grid">
-              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_licence">Licence</div><div class="gid-cell-val" id="gid-licence">—</div></div>
-              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_class">Class</div><div class="gid-cell-val" id="gid-class">—</div></div>
-              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_valid_until">Valid until</div><div class="gid-cell-val" id="gid-expiry">—</div></div>
-              <div class="gid-cell"><div class="gid-cell-lbl" data-i18n="id_first_aid">First aid</div><div class="gid-cell-val" id="gid-firstaid">—</div></div>
-            </div>
-            <div class="gid-barcode-wrap">
-              <div class="gid-barcode" id="gid-barcode"></div>
-              <div class="gid-barcode-cap" id="gid-barcode-cap"></div>
-            </div>
-          </div>
-          <!-- back -->
-          <div class="gid-face gid-back" id="gid-face-back" aria-hidden="true">
-            <div class="gid-eyebrow" data-i18n="id_emergency">In an emergency</div>
-            <div style="display:flex;flex-direction:column;gap:9px">
-              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_control_room">Control room</span><span class="gid-erow-val" id="gid-control">—</span></div>
-              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_next_of_kin">Next of kin</span><span class="gid-erow-val" id="gid-kin">—</span></div>
-              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_blood">Blood type</span><span class="gid-erow-val" id="gid-blood">—</span></div>
-              <div class="gid-erow"><span class="gid-erow-lbl" data-i18n="id_access">Site access</span><span class="gid-erow-val" id="gid-access">—</span></div>
-            </div>
-            <div class="gid-note" style="margin-top:auto" data-i18n="id_lost_badge_note">
-              Lost your badge? Report it from Inbox and the office will void this card immediately.
-            </div>
-          </div>
-        </div>
-      </button>
-      <div class="gid-hint" id="gid-hint" data-i18n="id_flip_hint">Tap the card for emergency details</div>
-
-      <button class="btn-brass-lg" style="margin-top:14px" data-i18n="id_present_btn" onclick="openPresentBadge()">Present badge</button>
-
-      <div class="gid-sec-lbl" data-i18n="id_your_record">Your record</div>
-      <div class="gid-stats">
-        <div class="gid-stat"><div class="gid-stat-val" id="gid-streak">—</div><div class="gid-stat-lbl" data-i18n="id_streak">On-time streak</div></div>
-        <div class="gid-stat"><div class="gid-stat-val" id="gid-patrols">—</div><div class="gid-stat-lbl" data-i18n="id_patrols">Patrols done</div></div>
-        <div class="gid-stat"><div class="gid-stat-val" id="gid-reports">—</div><div class="gid-stat-lbl" data-i18n="id_reports">Reports filed</div></div>
-      </div>
-      <div class="gid-nudge hidden" id="gid-nudge"></div>
     </div>
 
     <!-- My Shifts (roster + clock in/out) -->
@@ -1627,6 +1583,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="tab-dropdown-item" data-tab="sites" onclick="selectOrgTab('sites')">📍 Sites</button>
         <button class="tab-dropdown-item" data-tab="botkb" onclick="selectOrgTab('botkb')">🤖 Bot Knowledge Base</button>
         <button class="tab-dropdown-item" data-tab="ratings" onclick="selectOrgTab('ratings')">⭐ Guard Star Ratings</button>
+        <button class="tab-dropdown-item" data-tab="policies" onclick="selectOrgTab('policies')">📋 Policies</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1930,6 +1887,34 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <button class="btn btn-ghost btn-sm" onclick="closeRatingDetail()">← All guards</button>
         </div>
         <div id="ratings-detail" style="padding:12px 20px 20px"></div>
+      </div>
+    </div>
+
+    <!-- POLICIES -->
+    <div id="tab-policies" class="tab-content">
+      <div class="section" id="policies-list-section">
+        <div class="section-head">
+          <span class="section-title">📋 Policies</span>
+          <button class="btn btn-primary btn-sm" onclick="openPolicyModal()">+ Add Policy</button>
+        </div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          Guards must sign every policy marked <strong>Mandatory</strong> before their first clock-in — the app
+          blocks clock-in server-side until they do, not just in the UI. Retiring a policy keeps its signature
+          history; deleting it removes that history too, so use Retire unless it was a genuine mistake.
+        </p>
+        <div id="policies-list" style="padding:0 20px 20px"></div>
+      </div>
+      <div class="section hidden" id="policy-signatures-section">
+        <div style="padding:16px 20px 0">
+          <button class="btn btn-ghost btn-sm" onclick="closePolicySignatures()">← All policies</button>
+        </div>
+        <div id="policy-signatures-title" style="padding:8px 20px 0;font-weight:700"></div>
+        <div class="tbl-wrap" style="padding:12px 20px 20px">
+          <table>
+            <thead><tr><th>Guard</th><th>Status</th></tr></thead>
+            <tbody id="policy-signatures-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -2246,6 +2231,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="abn-more-row" data-tab="reminders" onclick="showTab('reminders')"><span class="amr-icon">🔔</span><span class="amr-label">Reminders</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="botkb" onclick="showTab('botkb')"><span class="amr-icon">🤖</span><span class="amr-label">Bot Knowledge Base</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="ratings" onclick="showTab('ratings')"><span class="amr-icon">⭐</span><span class="amr-label">Guard Star Ratings</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="policies" onclick="showTab('policies')"><span class="amr-icon">📋</span><span class="amr-label">Policies</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="admins" onclick="showTab('admins')"><span class="amr-icon">👥</span><span class="amr-label">Admins</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="audit" onclick="showTab('audit')"><span class="amr-icon">📜</span><span class="amr-label">Audit Log</span><span class="amr-chev">›</span></button>
       </div>
@@ -2509,6 +2495,30 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="btn btn-ghost" onclick="closeOcrImportModal()">Cancel</button>
       <button class="btn btn-primary" id="ocr-extract-btn" onclick="runOcrExtraction()" disabled>Extract Shifts</button>
       <button class="btn btn-primary hidden" id="ocr-create-btn" onclick="submitOcrImport()">Create Shifts</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Policy (admin) -->
+<div id="policy-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="pm-title">Add Policy</span><button class="modal-close" onclick="closeModal('policy-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pm-id">
+      <div class="form-group"><label class="form-label">Title *</label><input id="pm-title-input" class="form-control" placeholder="e.g. Uniform &amp; Presentation Policy"></div>
+      <div class="form-group"><label class="form-label">Description</label><textarea id="pm-description" class="form-control" rows="3" placeholder="Shown to guards before they sign"></textarea></div>
+      <div class="form-group"><label class="form-label">Document (optional)</label>
+        <input type="file" id="pm-file" accept=".pdf,.doc,.docx,image/*" class="form-control">
+        <div id="pm-current-file" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="pm-mandatory" checked> Mandatory — must be signed before a guard's first clock-in
+      </label>
+      <div id="pm-err" style="color:var(--red);font-size:13px;display:none;margin-top:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('policy-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePolicy()">Save</button>
     </div>
   </div>
 </div>
@@ -2829,6 +2839,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div>
 
+<!-- Sign a policy (guard) -->
+<div id="sign-policy-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header"><span class="modal-title" id="spm-title">Sign Policy</span><button class="modal-close" onclick="closeModal('sign-policy-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="spm-policy-id">
+      <p id="spm-description" style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:10px"></p>
+      <a id="spm-file-link" href="#" target="_blank" rel="noopener" class="hidden" style="font-size:13px;display:inline-block;margin-bottom:14px">📄 View full document</a>
+      <label style="display:flex;align-items:flex-start;gap:9px;font-size:13px;line-height:1.4;margin-bottom:12px;cursor:pointer">
+        <input type="checkbox" id="spm-agree" style="margin-top:2px">
+        <span>I have read and agree to this policy.</span>
+      </label>
+      <div class="form-group">
+        <label class="form-label">Type your full name to sign *</label>
+        <input id="spm-name" class="form-control" placeholder="Full name">
+      </div>
+      <div id="spm-err" style="color:var(--red);font-size:13px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('sign-policy-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPolicySignature()">Sign</button>
+    </div>
+  </div>
+</div>
+
 <!-- Change password modal -->
 <div id="changepw-modal" class="modal-overlay hidden">
   <div class="modal">
@@ -2875,6 +2910,12 @@ const TRANSLATIONS = {
     id_present_btn: "Present badge", id_tap_close: "Tap to close",
     id_your_record: "Your record", id_streak: "On-time streak", id_patrols: "Patrols done", id_reports: "Reports filed",
     id_streak_nudge: "{n} more on-time starts and you beat your best streak.",
+    policies_section_title: "Policies", policy_signed_badge: "Signed", policy_sign_btn: "Sign now",
+    policy_required: "Required before your first shift", policy_optional: "Optional",
+    policy_signed_on: "Signed {date}",
+    policy_gate_title: "⚠ Signature required",
+    policy_gate_sub: "You must sign the following before you can clock in: {list}",
+    policy_gate_btn: "Go to Policies",
     home_checkpoints_lbl: "Checkpoints", home_fortnight_lbl: "This Fortnight",
     home_quick_incident: "Report incident", home_quick_availability: "My availability",
     home_quick_patrol: "Start patrol", home_quick_photo: "My photo",
@@ -3972,11 +4013,12 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='botkb')  loadBotKb();
   else if(name==='ratings') loadRatingsTab();
+  else if(name==='policies') loadPoliciesTab();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -4354,21 +4396,29 @@ function renderGuardHome(){
     </div>`;
     if(handoverEl) handoverEl.classList.add('hidden');
   } else if(state==='out'){
+    const pendingPolicies = guardPolicyData.filter(p => p.mandatory && !p.signed);
+    const gate = pendingPolicies.length ? `<div class="gid-policy-gate">
+        <div class="gid-policy-gate-title">${t('policy_gate_title')}</div>
+        <div class="gid-policy-gate-sub">${t('policy_gate_sub').replace('{list}', pendingPolicies.map(p=>escapeHtml(p.title)).join(', '))}</div>
+        <button class="btn btn-gold btn-sm" onclick="showGuardTab('id')">${t('policy_gate_btn')}</button>
+      </div>` : '';
     card.innerHTML = `<div id="gh-geo-pill" class="gid-geo hidden"></div>
       <div class="gid-eyebrow"><span dir="ltr">${t('home_next_shift_prefix')}${shift.start_time}</span></div>
       <div class="gh-out-site" style="font-family:var(--font-display);font-size:25px;font-weight:600;margin-top:6px">${escapeHtml(shift.site_name)}</div>
       <div class="gh-out-sub">${shift.position?escapeHtml(shift.position)+' · ':''}<span dir="ltr">${shift.start_time}–${shift.end_time||t('shift_required_label')}</span></div>
-      <div class="gid-slide" id="clockon-track">
+      ${gate || `<div class="gid-slide" id="clockon-track">
         <div class="gid-slide-lbl">${t('home_slide_to_clock_on')}</div>
         <div class="gid-slide-thumb">→</div>
       </div>
       <button class="gid-slide-fallback" onclick="if(confirm(t('home_clock_in_confirm'))) clockIn('${shift.id}')">${t('home_clock_in_tap_fallback')}</button>
-      <div style="font-size:11.5px;color:rgba(255,255,255,.4);text-align:center;margin-top:2px">${t('home_location_stamped')}</div>`;
-    wireSlideConfirm('#clockon-track', () => {
-      if(!guardGeoOk){ toast(t('geo_off_site_block'),'error'); return; }
-      clockIn(shift.id);
-    });
-    checkGuardGeofence(shift);
+      <div style="font-size:11.5px;color:rgba(255,255,255,.4);text-align:center;margin-top:2px">${t('home_location_stamped')}</div>`}`;
+    if(!pendingPolicies.length){
+      wireSlideConfirm('#clockon-track', () => {
+        if(!guardGeoOk){ toast(t('geo_off_site_block'),'error'); return; }
+        clockIn(shift.id);
+      });
+      checkGuardGeofence(shift);
+    }
     loadGuardHandover(shift);
   } else {
     const onBreak = !!shift.break_started_at;
@@ -4443,6 +4493,7 @@ let gidFlipped = false, gidData = null;
 async function loadGuardId(){
   try{ myShiftsData = await guardApiFetch('/api/guard/shifts'); }catch(e){}
   loadGuardHomeStats();
+  loadGuardPolicies();
   try{ gidData = await guardApiFetch('/api/guard/me'); }catch(e){ return; }
   const g = gidData || {};
   const hour = new Date().getHours();
@@ -4494,6 +4545,62 @@ async function loadGuardId(){
     nudge.innerHTML = `<span style="font-size:17px">⚡</span><span>${t('id_streak_nudge').replace('{n}', r.best_streak - r.on_time_streak + 1)}</span>`;
     nudge.classList.remove('hidden');
   } else nudge.classList.add('hidden');
+}
+
+// ── Policies (guard side) ────────────────────────────────────────────────
+// The real enforcement is server-side, in the clock-in endpoint — this is
+// just keeping the guard informed before they get there: a count on the ID
+// tab, a full list to sign from, and a gate on the Shift tab that blocks the
+// slide-to-clock-on control when something mandatory is still unsigned.
+let guardPolicyData = [];
+async function loadGuardPolicies(){
+  try{ guardPolicyData = await guardApiFetch('/api/guard/policies'); }
+  catch(e){ guardPolicyData = []; }
+  renderGuardPoliciesSection();
+  renderGuardHome();
+}
+function renderGuardPoliciesSection(){
+  const section = document.getElementById('gid-policies-section');
+  if(!guardPolicyData.length){ section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  const pending = guardPolicyData.filter(p => !p.signed);
+  document.getElementById('gid-policies-count').textContent = pending.length ? `(${pending.length} pending)` : '';
+  document.getElementById('gid-policies-list').innerHTML = guardPolicyData.map(p => `
+    <div class="gid-policy-row">
+      <div>
+        <div class="gid-policy-title">${escapeHtml(p.title)}${p.mandatory ? ' *' : ''}</div>
+        <div class="gid-policy-sub">${p.signed ? t('policy_signed_on').replace('{date}', fmtDate(p.signed_at)) : (p.mandatory ? t('policy_required') : t('policy_optional'))}</div>
+      </div>
+      ${p.signed ? `<span class="gid-policy-signed">✓ ${t('policy_signed_badge')}</span>`
+                 : `<button class="btn btn-gold btn-sm" onclick="openSignPolicyModal('${p.id}')">${t('policy_sign_btn')}</button>`}
+    </div>`).join('');
+}
+function openSignPolicyModal(policyId){
+  const p = guardPolicyData.find(x => x.id === policyId);
+  if(!p) return;
+  document.getElementById('spm-policy-id').value = p.id;
+  document.getElementById('spm-title').textContent = p.title;
+  document.getElementById('spm-description').textContent = p.description || '';
+  const link = document.getElementById('spm-file-link');
+  if(p.file_url){ link.href = p.file_url; link.classList.remove('hidden'); } else link.classList.add('hidden');
+  document.getElementById('spm-agree').checked = false;
+  document.getElementById('spm-name').value = (gidData && gidData.name) || '';
+  document.getElementById('spm-err').style.display = 'none';
+  openModal('sign-policy-modal');
+}
+async function submitPolicySignature(){
+  const policyId = document.getElementById('spm-policy-id').value;
+  const name = document.getElementById('spm-name').value.trim();
+  const agreed = document.getElementById('spm-agree').checked;
+  const err = document.getElementById('spm-err');
+  if(!agreed){ err.textContent = 'You must confirm you have read and agree to this policy'; err.style.display='block'; return; }
+  if(!name){ err.textContent = 'Type your full name to sign'; err.style.display='block'; return; }
+  try{
+    await guardApiFetch(`/api/guard/policies/${policyId}/sign`, {method:'POST', body: JSON.stringify({signed_name: name})});
+    closeModal('sign-policy-modal');
+    toast('Policy signed', 'success');
+    loadGuardPolicies();
+  }catch(e){ err.textContent = e.message; err.style.display='block'; }
 }
 
 function toggleIdCard(){
@@ -7530,6 +7637,109 @@ async function deleteRatingNote(id){
     openRatingDetail(currentRatingGuardId);
   }catch(e){ toast(e.message,'error'); }
 }
+
+// ── Policies (admin) ────────────────────────────────────────────────────────
+let policiesData = [];
+async function loadPoliciesTab(){
+  document.getElementById('policy-signatures-section').classList.add('hidden');
+  document.getElementById('policies-list-section').classList.remove('hidden');
+  try{
+    policiesData = await apiFetch('/api/policies');
+    renderPoliciesList();
+  }catch(e){ toast(e.message,'error'); }
+}
+function renderPoliciesList(){
+  const box = document.getElementById('policies-list');
+  if(!policiesData.length){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">No policies yet — add one above.</p>'; return; }
+  box.innerHTML = policiesData.map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;${p.active?'':'opacity:.55'}">
+      <div style="min-width:0;cursor:pointer" onclick="openPolicySignatures('${p.id}')">
+        <strong>${escapeHtml(p.title)}</strong>
+        ${p.mandatory?'<span class="badge badge-rejected" style="margin-left:6px">Mandatory</span>':'<span class="badge" style="margin-left:6px">Optional</span>'}
+        ${!p.active?'<span class="badge" style="margin-left:6px">Retired</span>':''}
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">
+          ${p.signed_count}/${p.total_guards} guards signed
+          ${p.file_url?` · <a href="${p.file_url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">View document</a>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-ghost btn-xs" onclick='openPolicyModal(${jsonAttr(p)})'>Edit</button>
+        ${p.active
+          ? `<button class="btn btn-ghost btn-xs" onclick="setPolicyActive('${p.id}',0)">Retire</button>`
+          : `<button class="btn btn-ghost btn-xs" onclick="setPolicyActive('${p.id}',1)">Reactivate</button>`}
+        <button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="deletePolicy('${p.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+function openPolicyModal(policy){
+  document.getElementById('pm-title').textContent = policy ? 'Edit Policy' : 'Add Policy';
+  document.getElementById('pm-id').value = policy ? policy.id : '';
+  document.getElementById('pm-title-input').value = policy ? policy.title : '';
+  document.getElementById('pm-description').value = policy ? (policy.description||'') : '';
+  document.getElementById('pm-mandatory').checked = policy ? !!policy.mandatory : true;
+  document.getElementById('pm-file').value = '';
+  document.getElementById('pm-current-file').textContent = policy && policy.file_url ? 'Current file on record — choose a new one to replace it' : '';
+  document.getElementById('pm-err').style.display = 'none';
+  openModal('policy-modal');
+}
+async function savePolicy(){
+  const id = document.getElementById('pm-id').value;
+  const title = document.getElementById('pm-title-input').value.trim();
+  const err = document.getElementById('pm-err');
+  if(!title){ err.textContent = 'Title required'; err.style.display='block'; return; }
+  const body = {
+    title, description: document.getElementById('pm-description').value.trim(),
+    mandatory: document.getElementById('pm-mandatory').checked,
+  };
+  const file = document.getElementById('pm-file').files[0];
+  const finish = async () => {
+    try{
+      if(id) await apiFetch(`/api/policies/${id}`, {method:'PUT', body: JSON.stringify(body)});
+      else   await apiFetch('/api/policies', {method:'POST', body: JSON.stringify(body)});
+      toast('Policy saved','success'); closeModal('policy-modal'); loadPoliciesTab();
+    }catch(e){ err.textContent = e.message; err.style.display='block'; }
+  };
+  if(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      body.file_b64 = reader.result.split(',')[1];
+      body.file_ext = file.name.split('.').pop();
+      finish();
+    };
+    reader.readAsDataURL(file);
+  } else {
+    finish();
+  }
+}
+async function setPolicyActive(id, active){
+  try{ await apiFetch(`/api/policies/${id}`, {method:'PUT', body: JSON.stringify({active: !!active})}); loadPoliciesTab(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function deletePolicy(id){
+  if(!confirm('Permanently delete this policy AND every guard\'s signature record for it? This cannot be undone — use Retire instead if you just want to stop new signatures.')) return;
+  try{ await apiFetch(`/api/policies/${id}`, {method:'DELETE'}); toast('Policy deleted','success'); loadPoliciesTab(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function openPolicySignatures(policyId){
+  const policy = policiesData.find(p => p.id === policyId);
+  document.getElementById('policies-list-section').classList.add('hidden');
+  document.getElementById('policy-signatures-section').classList.remove('hidden');
+  document.getElementById('policy-signatures-title').textContent = policy ? policy.title : '';
+  const tbody = document.getElementById('policy-signatures-tbody');
+  tbody.innerHTML = `<tr><td colspan="2">${skelBlock(3)}</td></tr>`;
+  try{
+    const rows = await apiFetch(`/api/policies/${policyId}/signatures`);
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td>${escapeHtml(r.name)}</td>
+      <td>${r.signed_at ? `✅ Signed ${fmtDate(r.signed_at)}` : '<span style="color:var(--red)">⚪ Not signed</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="2" style="color:var(--muted)">No guards on file.</td></tr>';
+  }catch(e){ tbody.innerHTML = `<tr><td colspan="2" style="color:var(--muted)">Could not load.</td></tr>`; }
+}
+function closePolicySignatures(){
+  document.getElementById('policy-signatures-section').classList.add('hidden');
+  document.getElementById('policies-list-section').classList.remove('hidden');
+}
+
 function renderSitesTable(){
   const q=(document.getElementById('si-search').value||'').toLowerCase();
   const af=document.getElementById('si-active').value;
