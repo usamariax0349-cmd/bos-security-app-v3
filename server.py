@@ -147,6 +147,26 @@ def save_uploaded_photo(data):
         f.write(base64.b64decode(data['photo_b64']))
     return photo
 
+ALLOWED_DOC_EXTS = {'pdf','doc','docx','png','jpg','jpeg','webp'}
+MAX_DOC_B64_CHARS = 20 * 1024 * 1024  # ~15MB decoded — generous for a scanned policy PDF
+
+def save_uploaded_document(data):
+    """Same validated-write pattern as save_uploaded_photo(), for policy
+    documents — a wider extension allowlist (PDF/Word, not just images) and a
+    larger size ceiling since these are scanned multi-page documents, not
+    phone-camera photos."""
+    if not data.get('file_b64') or not data.get('file_ext'):
+        return None
+    ext = str(data['file_ext']).lower().lstrip('.')
+    if ext not in ALLOWED_DOC_EXTS:
+        raise ValueError('Unsupported file type — use PDF, Word, or an image')
+    if len(data['file_b64']) > MAX_DOC_B64_CHARS:
+        raise ValueError('File is too large')
+    fname = f"{uuid.uuid4()}.{ext}"
+    with open(os.path.join(UPLOADS_PATH, fname), 'wb') as f:
+        f.write(base64.b64decode(data['file_b64']))
+    return fname
+
 # ─── Database backups ─────────────────────────────────────────────────────────
 # Rotating on-volume snapshots via sqlite3's own backup API (atomic and safe
 # even if a write is mid-transaction — unlike copying the file bytes directly).
@@ -934,6 +954,37 @@ def init_db():
             entry_date TEXT NOT NULL,
             created_by TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- A company policy document admins upload (a PDF/doc, or just a
+        -- description on its own). 'mandatory' policies must be signed by a
+        -- guard before their FIRST clock-in — enforced server-side in the
+        -- clock-in endpoint, not just hidden client-side. 'active=0' retires
+        -- a policy (e.g. superseded by a new version) without deleting the
+        -- signature audit trail of who signed the old one and when.
+        CREATE TABLE IF NOT EXISTS policies (
+            id            TEXT PRIMARY KEY,
+            title         TEXT NOT NULL,
+            description   TEXT DEFAULT '',
+            file_filename TEXT DEFAULT '',
+            mandatory     INTEGER DEFAULT 1,
+            active        INTEGER DEFAULT 1,
+            created_by    TEXT DEFAULT '',
+            created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- One row per guard who has signed a policy — a guard signs each
+        -- policy at most once (UNIQUE), by typing their name against an
+        -- explicit "I have read and agree" acknowledgement. Never deleted by
+        -- a guard; only an admin retiring the policy itself moves it out of
+        -- the way of new sign-ins.
+        CREATE TABLE IF NOT EXISTS policy_signatures (
+            id          TEXT PRIMARY KEY,
+            policy_id   TEXT NOT NULL,
+            guard_id    TEXT NOT NULL,
+            signed_name TEXT NOT NULL,
+            signed_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(policy_id, guard_id)
         );
 
         -- One row per (guard, licence-or-compliance-item, threshold) reminder
@@ -2252,7 +2303,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             fname = os.path.basename(path); fpath = os.path.join(UPLOADS_PATH,fname)
             ext = fname.rsplit('.',1)[-1].lower() if '.' in fname else 'jpg'
             ct  = {'jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png',
-                   'gif':'image/gif','webp':'image/webp'}.get(ext,'application/octet-stream')
+                   'gif':'image/gif','webp':'image/webp','pdf':'application/pdf',
+                   'doc':'application/msword',
+                   'docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                   }.get(ext,'application/octet-stream')
             self.serve_file(fpath, ct); return
         if path == '/logo':
             for ext in ['png','jpg','jpeg','gif','webp','svg']:
@@ -2604,6 +2658,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     },
                     'rows': rows,
                 }); return
+
+            # Active policies this guard can see, each flagged with whether
+            # they've already signed it — drives both the Policies list in
+            # the ID tab and the pre-clock-in gate on the Shift tab. The
+            # actual enforcement lives in the clock-in endpoint; this is just
+            # what the guard reads before they get there.
+            if path == '/api/guard/policies':
+                db = get_db()
+                rows = RL(db.execute('SELECT * FROM policies WHERE active=1 ORDER BY mandatory DESC, created_at').fetchall())
+                signed = {r['policy_id']: r['signed_at'] for r in db.execute(
+                    'SELECT policy_id,signed_at FROM policy_signatures WHERE guard_id=?',
+                    (gsx['guard_id'],)).fetchall()}
+                db.close()
+                for p in rows:
+                    p['signed'] = p['id'] in signed
+                    p['signed_at'] = signed.get(p['id'])
+                    p['file_url'] = f"/uploads/{p['file_filename']}" if p['file_filename'] else None
+                self.send_json(rows); return
 
             # Previous guard's clock-out notes for this shift's site — the app
             # already collects these (co-notes) but never surfaces them to
@@ -3095,6 +3167,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.close()
             self.send_json({'fields': [{'section':sec,'key':k,'label':lbl,'value':rows.get(k,'')}
                                         for sec,k,lbl in BOT_KB_FIELDS]}); return
+
+        # ── Policies (admins upload/manage; guards must sign mandatory ones
+        #    before their first clock-in) ────────────────────────────────────
+        if path == '/api/policies':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            total_guards = db.execute('SELECT COUNT(*) FROM guards WHERE active=1').fetchone()[0]
+            rows = RL(db.execute('SELECT * FROM policies ORDER BY active DESC, created_at DESC').fetchall())
+            for p in rows:
+                p['signed_count'] = db.execute(
+                    'SELECT COUNT(*) FROM policy_signatures WHERE policy_id=?', (p['id'],)).fetchone()[0]
+                p['total_guards'] = total_guards
+                p['file_url'] = f"/uploads/{p['file_filename']}" if p['file_filename'] else None
+            db.close(); self.send_json(rows); return
+
+        m = re.match(r'^/api/policies/([^/]+)/signatures$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            policy = R(db.execute('SELECT id FROM policies WHERE id=?', (m.group(1),)).fetchone())
+            if not policy: db.close(); self.err('Policy not found', 404); return
+            guards = RL(db.execute('SELECT id,name FROM guards WHERE active=1 ORDER BY name').fetchall())
+            signed = {r['guard_id']: r['signed_at'] for r in db.execute(
+                'SELECT guard_id,signed_at FROM policy_signatures WHERE policy_id=?', (m.group(1),)).fetchall()}
+            db.close()
+            self.send_json([{'guard_id': g['id'], 'name': g['name'], 'signed_at': signed.get(g['id'])}
+                             for g in guards]); return
 
         # ── Guard Star Ratings (admin-only; guards never see these) ──────────
         if path == '/api/ratings/guards':
@@ -3735,6 +3836,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if sh['guard_id'] != gsx['guard_id']: db.close(); self.err('This shift is not assigned to you', 403); return
             if sh['cancelled']: db.close(); self.err('This shift has been cancelled', 400); return
             if sh['clock_in_at']: db.close(); self.err('Already clocked in to this shift', 400); return
+            # A guard must sign every mandatory policy before their FIRST
+            # clock-in — checked here, not just hinted at client-side, since
+            # this is the actual commencement of a shift. Client UI (the
+            # Shift tab gate, the Policies list) exists to get a guard here
+            # informed, not to be the enforcement itself.
+            unsigned = RL(db.execute('''
+                SELECT p.title FROM policies p
+                WHERE p.active=1 AND p.mandatory=1
+                  AND NOT EXISTS (SELECT 1 FROM policy_signatures ps WHERE ps.policy_id=p.id AND ps.guard_id=?)
+            ''', (gsx['guard_id'],)).fetchall())
+            if unsigned:
+                db.close()
+                titles = ', '.join(p['title'] for p in unsigned)
+                self.err(f"Sign the following polic{'y' if len(unsigned)==1 else 'ies'} before you can clock in: {titles}", 403)
+                return
             lat = lng = dist = None
             verified = 0
             if sh['site_lat'] is not None and sh['site_lng'] is not None:
@@ -3836,6 +3952,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.commit()
             row = R(db.execute('SELECT break_started_at, break_seconds FROM shifts WHERE id=?', (shift_id,)).fetchone())
             db.close(); self.send_json(dict(row)); return
+
+        m_sign = re.match(r'^/api/guard/policies/([^/]+)/sign$', path)
+        if m_sign:
+            signed_name = (data.get('signed_name') or '').strip()
+            if not signed_name:
+                self.err('Type your full name to sign'); return
+            db = get_db()
+            policy = R(db.execute('SELECT id,title FROM policies WHERE id=? AND active=1', (m_sign.group(1),)).fetchone())
+            if not policy: db.close(); self.err('Policy not found', 404); return
+            existing = R(db.execute('SELECT * FROM policy_signatures WHERE policy_id=? AND guard_id=?',
+                                     (policy['id'], gsx['guard_id'])).fetchone())
+            if not existing:
+                db.execute('''INSERT INTO policy_signatures (id,policy_id,guard_id,signed_name)
+                              VALUES (?,?,?,?)''', (str(uuid.uuid4()), policy['id'], gsx['guard_id'], signed_name))
+                audit(db, {'admin_id':gsx['guard_id'],'name':gsx['name']}, 'POLICY_SIGNED', policy['title'])
+                db.commit()
+            row = R(db.execute('SELECT * FROM policy_signatures WHERE policy_id=? AND guard_id=?',
+                                (policy['id'], gsx['guard_id'])).fetchone())
+            db.close(); self.send_json(row, 201); return
 
         if guard_path:
             self.send_response(404); self.end_headers(); return
@@ -4287,6 +4422,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s2, 'BOT_KB_UPDATE', f"{len(fields)} field(s)"); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        if path == '/api/policies':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            title = (data.get('title') or '').strip()
+            if not title: self.err('title required'); return
+            db = get_db()
+            try:
+                file_filename = save_uploaded_document(data) or ''
+            except ValueError as e:
+                db.close(); self.err(str(e)); return
+            pid = str(uuid.uuid4())
+            db.execute('''INSERT INTO policies (id,title,description,file_filename,mandatory,created_by)
+                          VALUES (?,?,?,?,?,?)''',
+                       (pid, title, (data.get('description') or '').strip(), file_filename,
+                        1 if data.get('mandatory', True) else 0, s2['name']))
+            audit(db, s2, 'POLICY_CREATE', title); db.commit()
+            policy = R(db.execute('SELECT * FROM policies WHERE id=?', (pid,)).fetchone()); db.close()
+            self.send_json(policy, 201); return
+
         m = re.match(r'^/api/ratings/guards/([^/]+)/notes$', path)
         if m:
             s2 = self.require_admin('manager')
@@ -4636,6 +4790,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
             site = R(db.execute('SELECT * FROM sites WHERE id=?',(m.group(1),)).fetchone())
             db.close(); self.send_json(site); return
 
+        m = re.match(r'^/api/policies/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            if not R(db.execute('SELECT id FROM policies WHERE id=?', (m.group(1),)).fetchone()):
+                db.close(); self.err('Policy not found', 404); return
+            updates=[]; params=[]
+            for f in ('title','description'):
+                if f in data: updates.append(f'{f}=?'); params.append(data[f])
+            if 'mandatory' in data: updates.append('mandatory=?'); params.append(1 if data['mandatory'] else 0)
+            if 'active' in data: updates.append('active=?'); params.append(1 if data['active'] else 0)
+            if data.get('file_b64'):
+                try:
+                    file_filename = save_uploaded_document(data)
+                except ValueError as e:
+                    db.close(); self.err(str(e)); return
+                if file_filename: updates.append('file_filename=?'); params.append(file_filename)
+            if updates:
+                params.append(m.group(1))
+                db.execute(f"UPDATE policies SET {','.join(updates)} WHERE id=?", params)
+                audit(db, s2, 'POLICY_UPDATE', data.get('title','')); db.commit()
+            policy = R(db.execute('SELECT * FROM policies WHERE id=?', (m.group(1),)).fetchone())
+            db.close(); self.send_json(policy); return
+
         m = re.match(r'^/api/checkpoints/([^/]+)$', path)
         if m:
             s2 = self.require_admin('manager')
@@ -4799,6 +4978,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s, 'RATING_NOTE_DELETE', f"{RATING_NOTE_LABELS.get(row['category'],row['category'])}: {row['note'][:80]}")
             db.commit(); db.close()
             self.send_json({'ok':True}); return
+
+        # Hard delete — including its signature history. Retiring a policy
+        # (PUT active=0) is the everyday path that keeps the audit trail;
+        # this is only for a genuine mistake (wrong file, duplicate upload).
+        m = re.match(r'^/api/policies/([^/]+)$', path)
+        if m:
+            db = get_db()
+            row = R(db.execute('SELECT title FROM policies WHERE id=?', (m.group(1),)).fetchone())
+            if not row: db.close(); self.err('Policy not found', 404); return
+            db.execute('DELETE FROM policy_signatures WHERE policy_id=?', (m.group(1),))
+            db.execute('DELETE FROM policies WHERE id=?', (m.group(1),))
+            audit(db, s, 'POLICY_DELETE', row['title']); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
         m = re.match(r'^/api/leave/([^/]+)$', path)
         if m:
             db = get_db()
