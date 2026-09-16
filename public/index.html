@@ -659,6 +659,29 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .vfy-footer{margin-top:22px;font-size:11px;color:rgba(255,255,255,.35);text-align:center;max-width:340px;line-height:1.5}
 .vfy-error{color:rgba(255,255,255,.6);text-align:center;font-size:14px;margin-top:60px}
 
+/* Public job-application page (no login) */
+#apply-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1),var(--ink-2) 60%,var(--ink-3));
+  display:flex;flex-direction:column;align-items:center;padding:48px 20px calc(40px + env(safe-area-inset-bottom))}
+.apl-card{width:100%;max-width:460px;background:var(--glass);backdrop-filter:blur(18px) saturate(150%);
+  border:1px solid rgba(232,199,106,.24);border-radius:24px;padding:30px 24px;box-shadow:var(--sh-lg)}
+.apl-title{font-family:var(--font-display);font-size:26px;font-weight:600;color:#fff;text-align:center;letter-spacing:-.3px}
+.apl-sub{font-size:13px;color:rgba(255,255,255,.55);text-align:center;margin:8px 0 24px;line-height:1.5}
+#apply-page .form-label{color:rgba(255,255,255,.7)}
+#apply-page .form-control{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff}
+#apply-page .form-control::placeholder{color:rgba(255,255,255,.32)}
+#apply-page select.form-control option{color:#141b2b}
+.apl-check{display:flex;align-items:center;gap:9px;font-size:13.5px;color:rgba(255,255,255,.8);cursor:pointer;margin-bottom:14px}
+.apl-license-fields{display:none;grid-template-columns:1fr 1fr;gap:12px;margin:-4px 0 14px}
+.apl-license-fields.show{display:grid}
+.apl-submit{width:100%;height:52px;border-radius:13px;border:none;cursor:pointer;font-size:15px;font-weight:700;
+  background:var(--brass);color:#241d05;margin-top:6px}
+.apl-submit:disabled{opacity:.6;cursor:default}
+.apl-err{color:#fca5a5;font-size:13px;margin-top:10px;display:none;text-align:center}
+.apl-success{text-align:center;padding:20px 0}
+.apl-success-icon{font-size:44px;margin-bottom:14px}
+.apl-success-title{font-family:var(--font-display);font-size:22px;font-weight:600;color:#fff}
+.apl-success-sub{font-size:13.5px;color:rgba(255,255,255,.6);margin-top:8px;line-height:1.5}
+
 /* slide-to-confirm (clock-on + SOS) */
 .gid-slide{position:relative;height:68px;border-radius:18px;overflow:hidden;touch-action:none;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);margin-top:20px}
@@ -1584,6 +1607,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="tab-dropdown-item" data-tab="botkb" onclick="selectOrgTab('botkb')">🤖 Bot Knowledge Base</button>
         <button class="tab-dropdown-item" data-tab="ratings" onclick="selectOrgTab('ratings')">⭐ Guard Star Ratings</button>
         <button class="tab-dropdown-item" data-tab="policies" onclick="selectOrgTab('policies')">📋 Policies</button>
+        <button class="tab-dropdown-item" data-tab="applicants" onclick="selectOrgTab('applicants')">📥 Applicants</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1918,6 +1942,34 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       </div>
     </div>
 
+    <!-- APPLICANTS -->
+    <div id="tab-applicants" class="tab-content">
+      <div class="section" id="applicants-list-section">
+        <div class="section-head">
+          <span class="section-title">📥 Applicants</span>
+          <select id="app-status-filter" class="form-control" style="width:auto" onchange="renderApplicantsList()">
+            <option value="">All statuses</option>
+            <option value="new">New</option>
+            <option value="reviewing">Reviewing</option>
+            <option value="interview">Interview</option>
+            <option value="hired">Hired</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          Submissions from the public job-application page. Share this link on job ads:
+          <code id="apply-link-display" style="background:rgba(0,0,0,.04);padding:2px 6px;border-radius:4px"></code>
+        </p>
+        <div id="applicants-list" style="padding:0 20px 20px"></div>
+      </div>
+      <div class="section hidden" id="applicant-detail-section">
+        <div style="padding:16px 20px 0">
+          <button class="btn btn-ghost btn-sm" onclick="closeApplicantDetail()">← All applicants</button>
+        </div>
+        <div id="applicant-detail" style="padding:12px 20px 20px"></div>
+      </div>
+    </div>
+
     <!-- INVOICES (Submissions + Rates + Invoices, grouped under one tab) -->
     <div id="tab-invoices" class="tab-content">
       <div class="gd-subtabs" id="billing-subtabs">
@@ -2232,6 +2284,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="abn-more-row" data-tab="botkb" onclick="showTab('botkb')"><span class="amr-icon">🤖</span><span class="amr-label">Bot Knowledge Base</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="ratings" onclick="showTab('ratings')"><span class="amr-icon">⭐</span><span class="amr-label">Guard Star Ratings</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="policies" onclick="showTab('policies')"><span class="amr-icon">📋</span><span class="amr-label">Policies</span><span class="amr-chev">›</span></button>
+        <button class="abn-more-row" data-tab="applicants" onclick="showTab('applicants')"><span class="amr-icon">📥</span><span class="amr-label">Applicants</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="admins" onclick="showTab('admins')"><span class="amr-icon">👥</span><span class="amr-label">Admins</span><span class="amr-chev">›</span></button>
         <button class="abn-more-row" data-tab="audit" onclick="showTab('audit')"><span class="amr-icon">📜</span><span class="amr-label">Audit Log</span><span class="amr-chev">›</span></button>
       </div>
@@ -2371,6 +2424,53 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <span id="vfy-company">Brown Owl Security</span>
   </div>
   <div id="vfy-body"></div>
+</div>
+
+<!-- Public job-application page (no login) -->
+<div id="apply-page" class="hidden">
+  <div class="vfy-wordmark">
+    <svg viewBox="0 0 100 100" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 12 L80 12 Q86 12 86 18 L86 52 Q86 78 50 88 Q14 78 14 52 L14 18 Q14 12 20 12 Z"
+            fill="none" stroke="#e8c76a" stroke-width="6"/>
+    </svg>
+    <span id="apl-company">Brown Owl Security</span>
+  </div>
+  <div class="apl-card">
+    <div id="apl-form-view">
+      <div class="apl-title">Apply to Join Our Team</div>
+      <div class="apl-sub">Tell us a bit about yourself — someone from our office will be in touch.</div>
+      <div class="form-group"><label class="form-label">Full Name *</label><input id="apl-name" class="form-control" placeholder="Your full name"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Email *</label><input type="email" id="apl-email" class="form-control" placeholder="you@email.com"></div>
+        <div class="form-group"><label class="form-label">Phone *</label><input id="apl-phone" class="form-control" placeholder="Mobile number"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Position you're interested in</label>
+        <select id="apl-position" class="form-control">
+          <option value="">Select one</option>
+          <option>Static Guard</option>
+          <option>Mobile Patrol</option>
+          <option>Crowd Control</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <label class="apl-check"><input type="checkbox" id="apl-haslicense" onchange="toggleApplyLicenseFields()"> I hold a current security licence</label>
+      <div class="apl-license-fields" id="apl-license-fields">
+        <div class="form-group"><label class="form-label">Licence Number</label><input id="apl-licnum" class="form-control" placeholder="Licence #"></div>
+        <div class="form-group"><label class="form-label">Expiry Date</label><input type="date" id="apl-licexp" class="form-control"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Relevant experience</label><input id="apl-experience" class="form-control" placeholder="e.g. 2 years hospitality security"></div>
+      <div class="form-group"><label class="form-label">Availability</label><input id="apl-availability" class="form-control" placeholder="e.g. Weekends and evenings"></div>
+      <div class="form-group"><label class="form-label">Anything else you'd like us to know?</label><textarea id="apl-message" class="form-control" rows="3" placeholder="Optional cover note"></textarea></div>
+      <div class="form-group"><label class="form-label">Resume (optional)</label><input type="file" id="apl-resume" class="form-control" accept=".pdf,.doc,.docx,image/*"></div>
+      <button class="apl-submit" id="apl-submit-btn" onclick="submitJobApplication()">Submit Application</button>
+      <div class="apl-err" id="apl-err"></div>
+    </div>
+    <div id="apl-success-view" class="apl-success hidden">
+      <div class="apl-success-icon">✅</div>
+      <div class="apl-success-title">Application received</div>
+      <div class="apl-success-sub">Thanks for applying — someone from our office will review your application and be in touch.</div>
+    </div>
+  </div>
 </div>
 
 <!-- Client Portal: add/edit shift -->
@@ -3682,7 +3782,7 @@ setInterval(syncPendingActions, 30000);
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function hideAllPages(){
-  ['guard-page','login-page','admin-page','client-page','verify-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  ['guard-page','login-page','admin-page','client-page','verify-page','apply-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
 }
 function showGuard(){
   hideAllPages();
@@ -3761,6 +3861,63 @@ async function showVerifyPage(token){
     `;
   }catch(e){
     body.innerHTML = '<div class="vfy-error">This verification link isn\'t valid, or has been revoked.</div>';
+  }
+}
+function showApplyPage(){
+  hideAllPages();
+  document.getElementById('apply-page').classList.remove('hidden');
+  fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    document.getElementById('apl-company').textContent = cfg.company_name;
+    document.title = cfg.company_name + ' — Apply';
+  }).catch(()=>{});
+}
+function toggleApplyLicenseFields(){
+  document.getElementById('apl-license-fields').classList.toggle('show', document.getElementById('apl-haslicense').checked);
+}
+async function submitJobApplication(){
+  const err = document.getElementById('apl-err');
+  err.style.display = 'none';
+  const name = document.getElementById('apl-name').value.trim();
+  const email = document.getElementById('apl-email').value.trim();
+  const phone = document.getElementById('apl-phone').value.trim();
+  if(!name || !email || !phone){
+    err.textContent = 'Name, email and phone are required'; err.style.display='block'; return;
+  }
+  const body = {
+    name, email, phone,
+    position: document.getElementById('apl-position').value,
+    has_license: document.getElementById('apl-haslicense').checked,
+    license_number: document.getElementById('apl-licnum').value.trim(),
+    license_expiry: document.getElementById('apl-licexp').value || null,
+    experience: document.getElementById('apl-experience').value.trim(),
+    availability: document.getElementById('apl-availability').value.trim(),
+    message: document.getElementById('apl-message').value.trim(),
+  };
+  const btn = document.getElementById('apl-submit-btn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  const finish = async () => {
+    try{
+      const res = await fetch('/api/apply', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const d = await res.json();
+      if(!res.ok) throw new Error(d.error || 'Something went wrong');
+      document.getElementById('apl-form-view').classList.add('hidden');
+      document.getElementById('apl-success-view').classList.remove('hidden');
+    }catch(e){
+      err.textContent = e.message; err.style.display='block';
+      btn.disabled = false; btn.textContent = 'Submit Application';
+    }
+  };
+  const file = document.getElementById('apl-resume').files[0];
+  if(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      body.file_b64 = reader.result.split(',')[1];
+      body.file_ext = file.name.split('.').pop();
+      finish();
+    };
+    reader.readAsDataURL(file);
+  } else {
+    finish();
   }
 }
 function showClientTab(name){
@@ -4013,12 +4170,13 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies'||name==='applicants');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='botkb')  loadBotKb();
   else if(name==='ratings') loadRatingsTab();
   else if(name==='policies') loadPoliciesTab();
+  else if(name==='applicants') loadApplicantsTab();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -4044,6 +4202,7 @@ async function init(){
   // no i18n — skip the whole admin/guard/client boot sequence entirely.
   const vfyMatch = location.pathname.match(/^\/verify\/([^/]+)$/);
   if(vfyMatch){ showVerifyPage(vfyMatch[1]); return; }
+  if(location.pathname === '/apply'){ showApplyPage(); return; }
   applyTranslations();
   try{
     const cfg = await apiFetch('/api/config');
@@ -7291,10 +7450,15 @@ function gdCalShift(delta){ gdCalMonth = new Date(gdCalMonth.getFullYear(), gdCa
 function gdCalToday(){ gdCalMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1); renderGuardCalendarTab(); }
 
 // ── Add-guard modal (creation only — editing happens inline above) ─────────
-function openGuardModal(){
+function openGuardModal(presets={}){
   document.getElementById('guard-modal-title').textContent='Add Guard';
   ['gm-id','gm-name','gm-lic','gm-phone','gm-email','gm-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('gm-rate').value='0';
+  if(presets.name) document.getElementById('gm-name').value = presets.name;
+  if(presets.license_number) document.getElementById('gm-lic').value = presets.license_number;
+  if(presets.phone) document.getElementById('gm-phone').value = presets.phone;
+  if(presets.email) document.getElementById('gm-email').value = presets.email;
+  if(presets.notes) document.getElementById('gm-notes').value = presets.notes;
   openModal('guard-modal');
 }
 async function saveGuard(){
@@ -7738,6 +7902,89 @@ async function openPolicySignatures(policyId){
 function closePolicySignatures(){
   document.getElementById('policy-signatures-section').classList.add('hidden');
   document.getElementById('policies-list-section').classList.remove('hidden');
+}
+
+// ── Applicants (public /apply submissions) ──────────────────────────────────
+const APPLICANT_STATUS_LABEL = {new:'New', reviewing:'Reviewing', interview:'Interview', hired:'Hired', rejected:'Rejected'};
+const APPLICANT_STATUS_COLOR = {
+  new:{bg:'#1e40af',fg:'#fff'}, reviewing:{bg:'#b45309',fg:'#fff'}, interview:{bg:'#6d28d9',fg:'#fff'},
+  hired:{bg:'#065f46',fg:'#fff'}, rejected:{bg:'#6b7280',fg:'#fff'},
+};
+let applicantsData = [];
+async function loadApplicantsTab(){
+  document.getElementById('applicant-detail-section').classList.add('hidden');
+  document.getElementById('applicants-list-section').classList.remove('hidden');
+  document.getElementById('apply-link-display').textContent = `${location.origin}/apply`;
+  try{
+    applicantsData = await apiFetch('/api/applications');
+    renderApplicantsList();
+  }catch(e){ toast(e.message,'error'); }
+}
+function renderApplicantsList(){
+  const box = document.getElementById('applicants-list');
+  const filter = document.getElementById('app-status-filter').value;
+  const rows = filter ? applicantsData.filter(a=>a.status===filter) : applicantsData;
+  if(!rows.length){ box.innerHTML = '<p style="color:var(--muted);font-size:13px">No applications yet.</p>'; return; }
+  box.innerHTML = rows.map(a => {
+    const style = APPLICANT_STATUS_COLOR[a.status] || APPLICANT_STATUS_COLOR.new;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer" onclick="openApplicantDetail('${a.id}')">
+      <div style="min-width:0">
+        <strong>${escapeHtml(a.name)}</strong>${a.position?' · '+escapeHtml(a.position):''}
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">${escapeHtml(a.email)} · ${escapeHtml(a.phone)} · ${fmtDate(a.created_at)}</div>
+      </div>
+      <span style="background:${style.bg};color:${style.fg};font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;white-space:nowrap">${APPLICANT_STATUS_LABEL[a.status]||a.status}</span>
+    </div>`;
+  }).join('');
+}
+function openApplicantDetail(id){
+  const a = applicantsData.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('applicants-list-section').classList.add('hidden');
+  document.getElementById('applicant-detail-section').classList.remove('hidden');
+  const statusOpts = Object.keys(APPLICANT_STATUS_LABEL).map(k=>
+    `<option value="${k}" ${a.status===k?'selected':''}>${APPLICANT_STATUS_LABEL[k]}</option>`).join('');
+  document.getElementById('applicant-detail').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+      <h3 style="margin:0">${escapeHtml(a.name)}</h3>
+      <select class="form-control" style="width:auto" onchange="setApplicationStatus('${a.id}', this.value)">${statusOpts}</select>
+    </div>
+    <div class="tbl-wrap" style="margin-bottom:16px"><table><tbody>
+      <tr><td style="width:160px"><strong>Email</strong></td><td>${escapeHtml(a.email)}</td></tr>
+      <tr><td><strong>Phone</strong></td><td>${escapeHtml(a.phone)}</td></tr>
+      <tr><td><strong>Position</strong></td><td>${escapeHtml(a.position||'—')}</td></tr>
+      <tr><td><strong>Security licence</strong></td><td>${a.has_license ? `Yes — ${escapeHtml(a.license_number||'—')}${a.license_expiry?' (expires '+fmtDate(a.license_expiry)+')':''}` : 'No'}</td></tr>
+      <tr><td><strong>Experience</strong></td><td>${escapeHtml(a.experience||'—')}</td></tr>
+      <tr><td><strong>Availability</strong></td><td>${escapeHtml(a.availability||'—')}</td></tr>
+      <tr><td><strong>Message</strong></td><td>${escapeHtml(a.message||'—')}</td></tr>
+      <tr><td><strong>Resume</strong></td><td>${a.resume_url?`<a href="${a.resume_url}" target="_blank" rel="noopener">Download</a>`:'—'}</td></tr>
+      <tr><td><strong>Submitted</strong></td><td>${fmtDateTime(a.created_at)}</td></tr>
+    </tbody></table></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick='openGuardModal(${jsonAttr({name:a.name, phone:a.phone, email:a.email, license_number:a.license_number||'', notes:'Converted from job application'})})'>+ Add as Guard</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteApplication('${a.id}')">Delete</button>
+    </div>
+  `;
+}
+function closeApplicantDetail(){
+  document.getElementById('applicant-detail-section').classList.add('hidden');
+  document.getElementById('applicants-list-section').classList.remove('hidden');
+}
+async function setApplicationStatus(id, status){
+  try{
+    const row = await apiFetch(`/api/applications/${id}`, {method:'PUT', body: JSON.stringify({status})});
+    const idx = applicantsData.findIndex(a=>a.id===id);
+    if(idx>=0) applicantsData[idx] = {...applicantsData[idx], ...row};
+    toast('Status updated','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteApplication(id){
+  if(!confirm('Permanently delete this application?')) return;
+  try{
+    await apiFetch(`/api/applications/${id}`, {method:'DELETE'});
+    toast('Application deleted','success');
+    closeApplicantDetail();
+    loadApplicantsTab();
+  }catch(e){ toast(e.message,'error'); }
 }
 
 function renderSitesTable(){
