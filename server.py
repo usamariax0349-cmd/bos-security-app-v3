@@ -119,6 +119,22 @@ def record_login_failure(ip):
 def record_login_success(ip):
     _login_failures.pop(ip, None)
 
+# Same sliding-window shape as the login limiter, for the public (unauthenticated)
+# job-application form — a form anyone can reach without an account is the one
+# endpoint in this app most exposed to a scripted spam flood.
+APPLY_MAX_SUBMISSIONS = 5
+APPLY_WINDOW_SECONDS = 3600
+_apply_submissions = {}   # ip → [timestamps of recent submissions]
+
+def apply_rate_limited(ip):
+    now = time.time()
+    attempts = [t for t in _apply_submissions.get(ip, []) if now - t < APPLY_WINDOW_SECONDS]
+    _apply_submissions[ip] = attempts
+    return len(attempts) >= APPLY_MAX_SUBMISSIONS
+
+def record_apply_submission(ip):
+    _apply_submissions.setdefault(ip, []).append(time.time())
+
 # ─── Photo uploads ────────────────────────────────────────────────────────────
 ALLOWED_PHOTO_EXTS = {'jpg','jpeg','png','gif','webp'}
 MAX_PHOTO_B64_CHARS = 8 * 1024 * 1024  # ~6MB decoded — generous for a phone camera photo
@@ -985,6 +1001,27 @@ def init_db():
             signed_name TEXT NOT NULL,
             signed_at   TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(policy_id, guard_id)
+        );
+
+        -- One row per submission of the public /apply job-application form.
+        -- Deliberately separate from the guards table — an applicant is not
+        -- a guard until an admin reviews them and explicitly creates one
+        -- (Applicants tab: "Add as Guard", pre-filled from this record).
+        CREATE TABLE IF NOT EXISTS job_applications (
+            id              TEXT PRIMARY KEY,
+            name            TEXT NOT NULL,
+            email           TEXT NOT NULL,
+            phone           TEXT NOT NULL,
+            position        TEXT DEFAULT '',
+            has_license     INTEGER DEFAULT 0,
+            license_number  TEXT DEFAULT '',
+            license_expiry  TEXT,
+            experience      TEXT DEFAULT '',
+            availability    TEXT DEFAULT '',
+            message         TEXT DEFAULT '',
+            resume_filename TEXT DEFAULT '',
+            status          TEXT DEFAULT 'new',
+            created_at      TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
         -- One row per (guard, licence-or-compliance-item, threshold) reminder
@@ -2274,6 +2311,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # on a guard's badge opens for office staff or a compliance officer.
         if re.match(r'^/verify/[^/]+$', path):
             self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
+        # Public job-application page — same SPA shell, no auth. Anyone with
+        # this link (shared on a job ad) can apply; nothing here requires an
+        # account or reveals anything about the roster.
+        if path == '/apply':
+            self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
         if path == '/manifest.json':
             self.serve_file(os.path.join(PUBLIC_PATH,'manifest.json'),'application/manifest+json'); return
         if path == '/sw.js':
@@ -3170,6 +3212,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         # ── Policies (admins upload/manage; guards must sign mandatory ones
         #    before their first clock-in) ────────────────────────────────────
+        if path == '/api/applications':
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            rows = RL(db.execute('SELECT * FROM job_applications ORDER BY created_at DESC').fetchall())
+            for a in rows:
+                a['resume_url'] = f"/uploads/{a['resume_filename']}" if a['resume_filename'] else None
+            db.close(); self.send_json(rows); return
+
         if path == '/api/policies':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -3369,6 +3420,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         data = self.read_json()
+
+        # Public job-application submission — no auth, reachable by anyone
+        # with the /apply link. Rate-limited by IP since it's the one write
+        # endpoint in this app open to the public internet.
+        if path == '/api/apply':
+            ip = self.client_ip()
+            if apply_rate_limited(ip):
+                self.err('Too many submissions from this device. Please try again later.', 429); return
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip()
+            phone = (data.get('phone') or '').strip()
+            if not name or not email or not phone:
+                self.err('Name, email and phone are required'); return
+            if len(name) > 200 or len(email) > 200 or len(phone) > 60:
+                self.err('One of the fields is too long'); return
+            try:
+                resume_filename = save_uploaded_document(data) or ''
+            except ValueError as e:
+                self.err(str(e)); return
+            db = get_db()
+            aid = str(uuid.uuid4())
+            db.execute('''INSERT INTO job_applications
+                (id,name,email,phone,position,has_license,license_number,license_expiry,
+                 experience,availability,message,resume_filename)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (aid, name, email, phone, (data.get('position') or '').strip()[:100],
+                 1 if data.get('has_license') else 0, (data.get('license_number') or '').strip()[:100],
+                 (data.get('license_expiry') or None), (data.get('experience') or '').strip()[:200],
+                 (data.get('availability') or '').strip()[:500], (data.get('message') or '').strip()[:3000],
+                 resume_filename))
+            db.commit(); db.close()
+            record_apply_submission(ip)
+            self.send_json({'ok': True}, 201); return
 
         if path == '/api/login':
             ip = self.client_ip()
@@ -4790,6 +4874,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             site = R(db.execute('SELECT * FROM sites WHERE id=?',(m.group(1),)).fetchone())
             db.close(); self.send_json(site); return
 
+        m = re.match(r'^/api/applications/([^/]+)$', path)
+        if m:
+            s2 = self.require_admin('manager')
+            if not s2: return
+            db = get_db()
+            if not R(db.execute('SELECT id FROM job_applications WHERE id=?', (m.group(1),)).fetchone()):
+                db.close(); self.err('Application not found', 404); return
+            status = data.get('status')
+            if status not in ('new','reviewing','interview','hired','rejected'):
+                db.close(); self.err('Invalid status'); return
+            db.execute('UPDATE job_applications SET status=? WHERE id=?', (status, m.group(1)))
+            audit(db, s2, 'APPLICATION_STATUS', status); db.commit()
+            row = R(db.execute('SELECT * FROM job_applications WHERE id=?', (m.group(1),)).fetchone())
+            db.close(); self.send_json(row); return
+
         m = re.match(r'^/api/policies/([^/]+)$', path)
         if m:
             s2 = self.require_admin('manager')
@@ -4990,6 +5089,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.execute('DELETE FROM policy_signatures WHERE policy_id=?', (m.group(1),))
             db.execute('DELETE FROM policies WHERE id=?', (m.group(1),))
             audit(db, s, 'POLICY_DELETE', row['title']); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        m = re.match(r'^/api/applications/([^/]+)$', path)
+        if m:
+            db = get_db()
+            row = R(db.execute('SELECT name FROM job_applications WHERE id=?', (m.group(1),)).fetchone())
+            if not row: db.close(); self.err('Application not found', 404); return
+            db.execute('DELETE FROM job_applications WHERE id=?', (m.group(1),))
+            audit(db, s, 'APPLICATION_DELETE', row['name']); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
         m = re.match(r'^/api/leave/([^/]+)$', path)
