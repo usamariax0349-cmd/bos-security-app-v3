@@ -1831,6 +1831,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
               <span>🔍</span>
               <input type="text" id="g-search" placeholder="Search..." oninput="renderGuardsList()">
             </div>
+            <button class="btn btn-ghost btn-sm" onclick="openBulkAddGuardsModal()">📋 Bulk Add</button>
             <button class="btn btn-gold btn-sm" onclick="openGuardModal()">+ Add new</button>
           </div>
           <div class="gd-status-toggle">
@@ -2667,6 +2668,39 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('guard-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveGuard()">Save Guard</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Add Guards — paste a list of names, check against the real live
+     roster for duplicates before creating anything. -->
+<div id="bulk-add-guards-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header"><span class="modal-title">📋 Bulk Add Guards</span><button class="modal-close" onclick="closeModal('bulk-add-guards-modal')">✕</button></div>
+    <div class="modal-body">
+      <div id="bag-step-paste">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Paste one full name per line.</p>
+        <textarea id="bag-textarea" class="form-control" rows="12" placeholder="Aaliyan Mehmood&#10;Abdullah Sajjad&#10;Abhishek Singla&#10;..."></textarea>
+      </div>
+      <div id="bag-step-review" class="hidden">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+          Checked against your current guard list. Exact matches are unchecked and marked "Already exists" —
+          close matches are flagged for you to review, but left up to you. Uncheck anything you don't want created.
+        </p>
+        <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+          <table>
+            <thead><tr><th style="width:34px"></th><th>Name</th><th>Status</th></tr></thead>
+            <tbody id="bag-review-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="bag-back-btn" onclick="bagBackToPaste()">Back</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('bulk-add-guards-modal')">Cancel</button>
+      <button class="btn btn-primary" id="bag-check-btn" onclick="checkBulkAddGuards()">Check Names</button>
+      <button class="btn btn-primary hidden" id="bag-create-btn" onclick="submitBulkAddGuards()">Add Guards</button>
     </div>
   </div>
 </div>
@@ -7476,6 +7510,83 @@ async function saveGuard(){
     selectGuard(g.id);
   }catch(e){ toast(e.message,'error'); }
 }
+
+// ── Bulk Add Guards ──────────────────────────────────────────────────────────
+// Paste a list of names and check them against the REAL, current guard list
+// (fetched fresh, not a cached snapshot) before creating anything — an exact
+// match is unchecked and marked "Already exists"; a close-but-not-exact match
+// (typo, missing middle name) is flagged but left for a human to decide,
+// since a false "duplicate" would silently drop someone who should be added.
+let bagRows = [];
+function openBulkAddGuardsModal(){
+  document.getElementById('bag-textarea').value = '';
+  bagBackToPaste();
+  openModal('bulk-add-guards-modal');
+}
+function bagBackToPaste(){
+  document.getElementById('bag-step-paste').classList.remove('hidden');
+  document.getElementById('bag-step-review').classList.add('hidden');
+  document.getElementById('bag-back-btn').classList.add('hidden');
+  document.getElementById('bag-check-btn').classList.remove('hidden');
+  document.getElementById('bag-create-btn').classList.add('hidden');
+}
+async function checkBulkAddGuards(){
+  const lines = document.getElementById('bag-textarea').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Paste at least one name','error'); return; }
+  const btn = document.getElementById('bag-check-btn');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){ toast('Could not load current guard list','error'); btn.disabled=false; btn.textContent='Check Names'; return; }
+  btn.disabled = false; btn.textContent = 'Check Names';
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const seen = new Set();
+  bagRows = [];
+  for(const name of lines){
+    const key = norm(name);
+    if(!key || seen.has(key)) continue; // de-dupe the pasted list itself too
+    seen.add(key);
+    const match = fuzzyMatchRecord(name, allGuardsAdmin);
+    const exact = match ? norm(match.name) === key : false;
+    bagRows.push({name, match, exact});
+  }
+  renderBulkAddReview();
+  document.getElementById('bag-step-paste').classList.add('hidden');
+  document.getElementById('bag-step-review').classList.remove('hidden');
+  document.getElementById('bag-back-btn').classList.remove('hidden');
+  document.getElementById('bag-check-btn').classList.add('hidden');
+  document.getElementById('bag-create-btn').classList.remove('hidden');
+}
+function renderBulkAddReview(){
+  document.getElementById('bag-review-tbody').innerHTML = bagRows.map((r,i) => {
+    let status, checked;
+    if(r.match && r.exact){ status = `<span style="color:var(--muted)">Already exists as "${escapeHtml(r.match.name)}"</span>`; checked = false; }
+    else if(r.match){ status = `<span style="color:#b45309">⚠ Possible duplicate of "${escapeHtml(r.match.name)}"</span>`; checked = false; }
+    else { status = `<span style="color:var(--green)">New</span>`; checked = true; }
+    return `<tr>
+      <td><input type="checkbox" id="bag-inc-${i}" ${checked?'checked':''}></td>
+      <td>${escapeHtml(r.name)}</td>
+      <td style="font-size:12.5px">${status}</td>
+    </tr>`;
+  }).join('');
+}
+async function submitBulkAddGuards(){
+  const toCreate = bagRows.filter((r,i) => document.getElementById(`bag-inc-${i}`).checked);
+  if(!toCreate.length){ toast('No names checked','error'); return; }
+  const btn = document.getElementById('bag-create-btn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+  let ok = 0, fail = 0;
+  for(const r of toCreate){
+    try{ await apiFetch('/api/guards', {method:'POST', body: JSON.stringify({name: r.name})}); ok++; }
+    catch(e){ fail++; }
+  }
+  btn.disabled = false; btn.textContent = 'Add Guards';
+  toast(`${ok} guard${ok===1?'':'s'} added${fail?`, ${fail} failed`:''}`, fail ? 'error' : 'success');
+  if(ok){
+    closeModal('bulk-add-guards-modal');
+    allGuardsAdmin = await apiFetch('/api/guards');
+    loadGuardsAdmin();
+  }
+}
+
 async function toggleGuardActive(id, current){
   try{
     await apiFetch(`/api/guards/${id}`,{method:'PUT',body:JSON.stringify({active:current?0:1})});
