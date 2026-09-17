@@ -1776,6 +1776,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             </label>
             <span style="flex:1"></span>
             <button class="btn btn-ghost btn-sm" onclick="openOcrImportModal()">📷 Import Screenshot</button>
+            <button class="btn btn-ghost btn-sm" onclick="openBulkAddShiftsModal()">📝 Bulk Add Shifts</button>
             <button class="btn btn-primary btn-sm" onclick="openShiftModal()">+ Add Shift</button>
           </div>
           <div class="sched-grid-wrap">
@@ -2596,6 +2597,44 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <button class="btn btn-ghost" onclick="closeOcrImportModal()">Cancel</button>
       <button class="btn btn-primary" id="ocr-extract-btn" onclick="runOcrExtraction()" disabled>Extract Shifts</button>
       <button class="btn btn-primary hidden" id="ocr-create-btn" onclick="submitOcrImport()">Create Shifts</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Add Shifts — paste structured shift lines (e.g. transcribed from a
+     roster in another system) instead of relying on OCR, and check every
+     site/guard against the live lists before creating anything. -->
+<div id="bulk-add-shifts-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header"><span class="modal-title">📝 Bulk Add Shifts</span><button class="modal-close" onclick="closeModal('bulk-add-shifts-modal')">✕</button></div>
+    <div class="modal-body">
+      <div id="bas-step-paste">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:8px">One shift per line, pipe-separated:</p>
+        <p style="font-size:12.5px;color:var(--muted);background:rgba(0,0,0,.03);padding:8px 10px;border-radius:6px;margin-bottom:10px;font-family:monospace">
+          Site Name | YYYY-MM-DD | Start (HH:MM) | End (HH:MM, blank = Required) | Guard Name
+        </p>
+        <textarea id="bas-textarea" class="form-control" rows="14" style="font-family:monospace;font-size:12.5px"
+          placeholder="Eureka Hotel | 2026-09-25 | 20:00 | | Amir Javed&#10;Eureka Hotel | 2026-09-25 | 20:00 | | Mudassar Habib&#10;Wharf Hotel | 2026-09-26 | 14:00 | 18:00 | Darooj Karmani"></textarea>
+      </div>
+      <div id="bas-step-review" class="hidden">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">
+          Site and guard are matched against your current lists — pick from the dropdown wherever there's no
+          confident match. Rows are unchecked unless both site and guard matched confidently.
+        </p>
+        <div class="tbl-wrap" style="max-height:420px;overflow-y:auto">
+          <table>
+            <thead><tr><th style="width:30px"></th><th>Site</th><th>Date</th><th>Start</th><th>End</th><th>Guard</th></tr></thead>
+            <tbody id="bas-review-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="bas-back-btn" onclick="basBackToPaste()">Back</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="closeModal('bulk-add-shifts-modal')">Cancel</button>
+      <button class="btn btn-primary" id="bas-check-btn" onclick="checkBulkAddShifts()">Check Shifts</button>
+      <button class="btn btn-primary hidden" id="bas-create-btn" onclick="submitBulkAddShifts()">Add Shifts</button>
     </div>
   </div>
 </div>
@@ -6440,6 +6479,99 @@ async function submitOcrImport(){
   toast(`${ok} shift${ok===1?'':'s'} created${fail?`, ${fail} failed`:''}`, fail ? 'error' : 'success');
   if(ok){ closeOcrImportModal(); refreshScheduleViews(); }
 }
+
+// ── Bulk Add Shifts (paste structured text — not OCR) ───────────────────────
+// For rosters that don't fit the OCR importer's mobile-app-list shape (a
+// multi-site, multi-date grid transcribed by hand, or copy-pasted from
+// another system). Same review-before-create discipline as every other
+// bulk-import tool in this app: site/guard are fuzzy-matched against the
+// live lists, a row only auto-checks when both matched confidently, and
+// nothing is created until "Add Shifts" is clicked.
+let basRows = [];
+async function openBulkAddShiftsModal(){
+  if(!allGuardsAdmin.length){ try{ allGuardsAdmin = await apiFetch('/api/guards'); }catch(e){} }
+  if(!allSitesAdmin.length){ try{ allSitesAdmin = await apiFetch('/api/sites'); }catch(e){} }
+  document.getElementById('bas-textarea').value = '';
+  basBackToPaste();
+  openModal('bulk-add-shifts-modal');
+}
+function basBackToPaste(){
+  document.getElementById('bas-step-paste').classList.remove('hidden');
+  document.getElementById('bas-step-review').classList.add('hidden');
+  document.getElementById('bas-back-btn').classList.add('hidden');
+  document.getElementById('bas-check-btn').classList.remove('hidden');
+  document.getElementById('bas-create-btn').classList.add('hidden');
+}
+async function checkBulkAddShifts(){
+  const lines = document.getElementById('bas-textarea').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Paste at least one shift line','error'); return; }
+  try{
+    allSitesAdmin = await apiFetch('/api/sites');
+    allGuardsAdmin = await apiFetch('/api/guards');
+  }catch(e){ toast('Could not load current sites/guards','error'); return; }
+  basRows = [];
+  const errs = [];
+  lines.forEach((line, idx) => {
+    const parts = line.split('|').map(p=>p.trim());
+    if(parts.length < 5){ errs.push(`Line ${idx+1}: expected 5 fields separated by "|"`); return; }
+    const [siteRaw, date, start, end, guardRaw] = parts;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ errs.push(`Line ${idx+1}: date "${date}" must be YYYY-MM-DD`); return; }
+    if(!/^\d{1,2}:\d{2}$/.test(start)){ errs.push(`Line ${idx+1}: start time "${start}" must be HH:MM`); return; }
+    const siteMatch = fuzzyMatchRecord(siteRaw, allSitesAdmin);
+    const guardMatch = fuzzyMatchRecord(guardRaw, allGuardsAdmin);
+    basRows.push({siteRaw, date, start, end: /^\d{1,2}:\d{2}$/.test(end) ? end : '', guardRaw, siteMatch, guardMatch});
+  });
+  if(errs.length){ toast(errs[0] + (errs.length>1 ? ` (+${errs.length-1} more)` : ''), 'error'); if(!basRows.length) return; }
+  renderBulkAddShiftsReview();
+  document.getElementById('bas-step-paste').classList.add('hidden');
+  document.getElementById('bas-step-review').classList.remove('hidden');
+  document.getElementById('bas-back-btn').classList.remove('hidden');
+  document.getElementById('bas-check-btn').classList.add('hidden');
+  document.getElementById('bas-create-btn').classList.remove('hidden');
+}
+function renderBulkAddShiftsReview(){
+  const siteOptsFor = sel => `<option value="">— Select site —</option>` + allSitesAdmin.map(s =>
+    `<option value="${s.id}" ${sel===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
+  const guardOptsFor = sel => `<option value="">— Select guard —</option>` + allGuardsAdmin.map(g =>
+    `<option value="${g.id}" ${sel===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('');
+  document.getElementById('bas-review-tbody').innerHTML = basRows.map((r,i) => {
+    const confident = r.siteMatch && r.guardMatch;
+    return `<tr>
+      <td><input type="checkbox" id="bas-inc-${i}" ${confident?'checked':''}></td>
+      <td><select id="bas-site-${i}" class="form-control" style="font-size:12px">${siteOptsFor(r.siteMatch?r.siteMatch.id:'')}</select>
+        ${!r.siteMatch?`<div style="font-size:10px;color:#b45309">⚠ "${escapeHtml(r.siteRaw)}"</div>`:''}</td>
+      <td style="font-size:12px">${escapeHtml(r.date)}</td>
+      <td><input type="time" id="bas-start-${i}" class="form-control" style="font-size:12px" value="${r.start}"></td>
+      <td><input type="time" id="bas-end-${i}" class="form-control" style="font-size:12px" value="${r.end}"></td>
+      <td><select id="bas-guard-${i}" class="form-control" style="font-size:12px">${guardOptsFor(r.guardMatch?r.guardMatch.id:'')}</select>
+        ${!r.guardMatch?`<div style="font-size:10px;color:#b45309">⚠ "${escapeHtml(r.guardRaw)}"</div>`:''}</td>
+    </tr>`;
+  }).join('');
+}
+async function submitBulkAddShifts(){
+  const toCreate = [];
+  basRows.forEach((r,i) => {
+    if(!document.getElementById(`bas-inc-${i}`).checked) return;
+    const guard_id = document.getElementById(`bas-guard-${i}`).value;
+    const site_id = document.getElementById(`bas-site-${i}`).value;
+    const start_time = document.getElementById(`bas-start-${i}`).value;
+    const end_time = document.getElementById(`bas-end-${i}`).value;
+    if(!guard_id || !site_id || !start_time) return;
+    toCreate.push({guard_id, site_id, shift_date: r.date, start_time, end_time});
+  });
+  if(!toCreate.length){ toast('No rows are ready — pick a site and guard for at least one checked row', 'error'); return; }
+  const btn = document.getElementById('bas-create-btn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  let ok = 0, fail = 0;
+  for(const body of toCreate){
+    try{ await apiFetch('/api/shifts', {method:'POST', body: JSON.stringify(body)}); ok++; }
+    catch(e){ fail++; }
+  }
+  btn.disabled = false; btn.textContent = 'Add Shifts';
+  toast(`${ok} shift${ok===1?'':'s'} created${fail?`, ${fail} failed`:''}`, fail ? 'error' : 'success');
+  if(ok){ closeModal('bulk-add-shifts-modal'); refreshScheduleViews(); }
+}
+
 async function cancelShift(id){
   if(!confirm('Cancel this shift? The guard will no longer see it on their roster.')) return;
   try{
