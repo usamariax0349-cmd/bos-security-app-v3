@@ -958,6 +958,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .avail-mini:hover{background:var(--navy);color:#fff;transform:scale(1.15)}
 .sched-totals-row .sched-row-label{background:var(--navy);color:#fff}
 .sched-totals-cell{border-right:1px solid var(--border);border-top:1px solid var(--border);padding:8px 10px;text-align:center;font-weight:700;color:var(--navy);background:var(--bg);font-size:13px}
+/* Site/guard names must stay on screen while scrolling right to reach Sat/Sun
+   — otherwise there's no way to tell whose shift is whose once you get there.
+   Both cells already carry an opaque background, so pinning them left just
+   works without extra styling. */
+.sched-sticky-col{position:sticky;left:0;z-index:2;box-shadow:2px 0 4px rgba(0,0,0,.08)}
 @media(max-width:900px){
   .sched-layout{grid-template-columns:minmax(0,1fr)}
 }
@@ -6075,7 +6080,7 @@ function renderScheduleGrid(){
   else if(onlyBooked) rows = rows.filter(rowHasShifts);
   const hiddenCount = beforeFilter - rows.length;
 
-  let html = `<div class="sched-head-cell"></div>` + days.map((d,i)=>
+  let html = `<div class="sched-head-cell sched-sticky-col"></div>` + days.map((d,i)=>
     `<div class="sched-head-cell${dayISO[i]===fmtISO(new Date())?' is-today':''}">${SCHED_DAY_NAMES[i]}<div class="shd">${d.toLocaleDateString('en-AU',{day:'2-digit',month:'short'})}</div></div>`
   ).join('');
 
@@ -6085,7 +6090,7 @@ function renderScheduleGrid(){
           : `Nothing rostered this week${customer?' for this customer':''}`}</div>`;
   }
   rows.forEach(row=>{
-    html += `<div class="sched-row-label">${escapeHtml(row.name)}</div>`;
+    html += `<div class="sched-row-label sched-sticky-col">${escapeHtml(row.name)}</div>`;
     dayISO.forEach(dISO=>{
       const shifts = cellShifts(row.id, dISO);
       html += `<div class="sched-cell">
@@ -6102,7 +6107,7 @@ function renderScheduleGrid(){
     });
   });
 
-  html += `<div class="sched-row-label" style="background:var(--navy);color:#fff">Total</div>`;
+  html += `<div class="sched-row-label sched-sticky-col" style="background:var(--navy);color:#fff">Total</div>`;
   dayISO.forEach(dISO=>{
     const hrs = scheduleData.filter(sh=>sh.shift_date===dISO).reduce((sum,sh)=>sum+shiftHours(sh.start_time,sh.end_time),0);
     html += `<div class="sched-totals-cell">${hrs?hrs.toFixed(2):'0'} hrs</div>`;
