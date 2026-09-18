@@ -6348,7 +6348,11 @@ const OCR_CHROME_LINES = [
 const OCR_MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 
 function isOcrChromeLine(line){
-  const l = line.toLowerCase().trim();
+  // Strip a leading "+", bullet, or other stray symbol first — a UI element
+  // like "+ Add Day Note" OCRs with that leading "+" as literal text, and
+  // startsWith('add day note') would otherwise miss it entirely, letting it
+  // slip through as a "site name" that then sticks to every shift after it.
+  const l = line.toLowerCase().trim().replace(/^[^a-z0-9]+/, '');
   if(!l) return true;
   if(OCR_CHROME_LINES.some(c => l === c || l.startsWith(c))) return true;
   if(/^\(?\d+\)?$/.test(l)) return true;          // stray counters like "(0)"
@@ -6364,8 +6368,13 @@ function isOcrChromeLine(line){
 // mis-reads of the "|" separator (I, l, !, or it being dropped entirely).
 function parseGuardhouseText(text){
   const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
-  const shiftRe = /^(\d{1,2}[:.]\d{2})\s*[-–—~]\s*(\d{1,2}[:.]\d{2})\s*(.*)$/;
-  const dateRe = /^([A-Za-z]{3,9})\s+(\d{1,2})\s+([A-Za-z]{3,9})$/;
+  // No leading ^ — a stray OCR'd character (e.g. a "|" column divider) can
+  // land before the start time, and anchoring there would make the whole
+  // garbled line get treated as a new site header instead of a shift row.
+  const shiftRe = /(\d{1,2}[:.]\d{2})\s*[-–—~]\s*(\d{1,2}[:.]\d{2})\s*(.*)$/;
+  // No trailing $ — the date often shares a toolbar row with buttons in the
+  // same OCR'd line, e.g. "Sat 26 Sep Add Shift Publish".
+  const dateRe = /^([A-Za-z]{3,9})\s+(\d{1,2})\s+([A-Za-z]{3,9})\b/;
   let currentSite = null;
   const rows = [];
   let parsedDate = null;
@@ -6395,6 +6404,41 @@ function parseGuardhouseText(text){
   return {rows, parsedDate};
 }
 
+// Grayscale + boost contrast around the image's own mean brightness (same
+// transform as PIL's ImageEnhance.Contrast(img).enhance(factor)) so faint,
+// low-contrast text — like GuardHouse's gray site-header sub-labels, which
+// Tesseract otherwise misses entirely rather than just misreading — becomes
+// legible. Using the image's own computed mean as the pivot (not a fixed
+// 128) is what makes this generalize across screenshots of different
+// average brightness.
+function contrastBoostImage(dataUrl, factor){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imgData.data;
+      const gray = new Uint8ClampedArray(d.length / 4);
+      let sum = 0;
+      for(let i = 0, j = 0; i < d.length; i += 4, j++){
+        const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+        gray[j] = g; sum += g;
+      }
+      const mean = sum / gray.length;
+      for(let i = 0, j = 0; i < d.length; i += 4, j++){
+        const v = mean + (gray[j] - mean) * factor;
+        d[i] = d[i+1] = d[i+2] = v < 0 ? 0 : (v > 255 ? 255 : v);
+      }
+      ctx.putImageData(imgData, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Could not process image for OCR'));
+    img.src = dataUrl;
+  });
+}
 async function runOcrExtraction(){
   if(!ocrImageDataUrl){ toast('Choose or paste an image first','error'); return; }
   const progress = document.getElementById('ocr-progress');
@@ -6402,10 +6446,11 @@ async function runOcrExtraction(){
   document.getElementById('ocr-extract-btn').disabled = true;
   try{
     if(typeof Tesseract === 'undefined') throw new Error('OCR library failed to load — check your connection and try again');
+    const boosted = await contrastBoostImage(ocrImageDataUrl, 2.5);
     const worker = await Tesseract.createWorker('eng', 1, {
       logger: m => { if(m.status && m.progress != null) progress.textContent = `${m.status}… ${Math.round(m.progress*100)}%`; }
     });
-    const { data: { text } } = await worker.recognize(ocrImageDataUrl);
+    const { data: { text } } = await worker.recognize(boosted);
     await worker.terminate();
     document.getElementById('ocr-raw-text').textContent = text;
     const { rows, parsedDate } = parseGuardhouseText(text);
