@@ -2801,6 +2801,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 rows = {r['key']: r['value'] for r in db.execute('SELECT key,value FROM bot_knowledge_base').fetchall()}
                 db.close(); self.send_json(rows); return
 
+            # Guard-facing FAQ browser — same table the admin FAQ screen and the
+            # reactive keyword auto-reply on POST /api/guard/messages both use,
+            # but here a guard can search/browse every answer directly instead
+            # of only getting one when their own wording happens to match a
+            # keyword.
+            if path == '/api/guard/faqs':
+                db = get_db()
+                rows = RL(db.execute(
+                    'SELECT id,question,answer FROM faqs WHERE active=1 ORDER BY sort_order').fetchall())
+                db.close(); self.send_json(rows); return
+
             if path == '/api/guard/compliance':
                 db = get_db()
                 rows = RL(db.execute('''
