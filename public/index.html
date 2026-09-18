@@ -784,6 +784,35 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .msg-thread-item.active{background:rgba(201,168,76,.12)}
 .msg-thread-item .mti-name{font-size:13px}
 .msg-thread-item .mti-preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+/* Guard-facing Help & FAQ — self-serve so a guard can find their answer
+   before ever writing a message, instead of only getting help if their own
+   wording happens to match the reactive auto-reply keywords. */
+.msg-help-btn{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;margin-bottom:14px;border-radius:12px;border:1.5px solid rgba(201,168,76,.35);background:rgba(201,168,76,.1);color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:all var(--dur-fast) var(--ease-out);text-align:left}
+.msg-help-btn:hover{background:rgba(201,168,76,.18);border-color:var(--gold)}
+.msg-help-btn .mhb-icon{font-size:18px;flex-shrink:0}
+.msg-help-btn .mhb-sub{display:block;font-size:11px;font-weight:500;color:rgba(255,255,255,.6);margin-top:1px}
+.msg-cat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.msg-cat-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:16px 8px;border-radius:12px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#fff;font-size:12px;font-weight:600;text-align:center;cursor:pointer;transition:all var(--dur-fast) var(--ease-out);min-height:76px}
+.msg-cat-card:hover{border-color:var(--gold);background:rgba(201,168,76,.1)}
+.msg-cat-card .mcc-icon{font-size:22px}
+.gfaq-search{position:relative;margin-bottom:12px}
+.gfaq-search input{width:100%;padding:10px 14px 10px 34px;border-radius:10px;border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;font-size:13px}
+.gfaq-search input::placeholder{color:rgba(255,255,255,.4)}
+.gfaq-search .gfaq-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.5;font-size:13px;pointer-events:none}
+.gfaq-item{border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);margin-bottom:8px;overflow:hidden}
+.gfaq-q{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;font-size:13px;font-weight:600;color:#fff;cursor:pointer}
+.gfaq-q .gfaq-chevron{transition:transform var(--dur-fast) var(--ease-out);opacity:.6;flex-shrink:0}
+.gfaq-item.open .gfaq-q .gfaq-chevron{transform:rotate(180deg)}
+.gfaq-a{max-height:0;overflow:hidden;transition:max-height var(--dur-fast) var(--ease-out)}
+.gfaq-item.open .gfaq-a{max-height:320px}
+.gfaq-a-inner{padding:0 14px 14px;font-size:12px;color:rgba(255,255,255,.75);line-height:1.5}
+.gfaq-empty{text-align:center;padding:24px 10px;color:rgba(255,255,255,.5);font-size:13px}
+.gfaq-cta{display:block;width:100%;text-align:center;padding:12px;margin-top:6px;border-radius:10px;border:1.5px dashed rgba(255,255,255,.2);color:rgba(255,255,255,.7);font-size:12px;font-weight:600;cursor:pointer;background:transparent}
+.gfaq-cta:hover{border-color:var(--gold);color:#fff}
+.msg-day-sep{text-align:center;font-size:11px;font-weight:700;color:rgba(255,255,255,.4);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.04em}
+#msg-admin-thread .msg-day-sep{color:var(--muted)}
+#msg-thread .msg-bubble.theirs.bot{background:rgba(64,145,255,.16);border:1px solid rgba(64,145,255,.35)}
+#msg-admin-thread .msg-bubble.theirs.bot{background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.25);color:var(--text)}
 .faq-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .faq-row:last-child{border-bottom:none}
 .faq-row.inactive{opacity:.5}
@@ -1456,10 +1485,27 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="guard-card hidden" id="step-messages">
       <div class="step-title" data-i18n="messages_title">💬 Messages</div>
 
+      <!-- Self-serve Help & FAQ browser — reachable from every step so a guard
+           can find their answer without ever writing a message. -->
+      <div id="msg-faq-view" class="hidden">
+        <div style="margin-bottom:14px;font-size:15px;font-weight:600;color:#fff" data-i18n="faq_view_title">❓ Help &amp; FAQ</div>
+        <div class="gfaq-search">
+          <span class="gfaq-search-icon">🔍</span>
+          <input type="text" id="gfaq-search-input" data-i18n-placeholder="faq_search_placeholder" placeholder="Search for an answer..." oninput="renderGuardFaqList(this.value)">
+        </div>
+        <div id="gfaq-list"></div>
+        <button class="gfaq-cta" id="gfaq-cta-btn" data-i18n="faq_cant_find" onclick="msgFaqStartQuery()">Can't find your answer? Start a new query →</button>
+        <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:14px" onclick="closeMsgFaqView()">← Back</button>
+      </div>
+
       <!-- New-query wizard, step 1: pick a category -->
       <div id="msg-wizard-categories" class="hidden">
         <div id="msg-wizard-greeting" style="margin-bottom:14px;font-size:15px;font-weight:600;color:#fff"></div>
-        <div id="msg-wizard-cat-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        <button class="msg-help-btn" onclick="showMsgFaqView('categories')">
+          <span class="mhb-icon">❓</span>
+          <span><span data-i18n="faq_entry_title">Help &amp; FAQ</span><span class="mhb-sub" data-i18n="faq_entry_sub">Quick answers to common questions — no need to wait for a reply</span></span>
+        </button>
+        <div id="msg-wizard-cat-list" class="msg-cat-grid"></div>
       </div>
 
       <!-- New-query wizard, step 2: describe the issue -->
@@ -1471,6 +1517,9 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <div style="font-size:11px;color:var(--muted);margin-top:6px" data-i18n="quick_info_hint">Didn't answer your question? Describe it below and we'll get back to you.</div>
         </div>
         <button id="pay-discrepancy-btn" class="btn btn-ghost hidden" data-i18n="pay_discrepancy_btn" style="width:100%;margin-bottom:12px;justify-content:center" onclick="openPayCalc()">🧮 Report a pay discrepancy instead</button>
+        <button class="btn btn-ghost" style="width:100%;margin-bottom:12px;justify-content:center" onclick="showMsgFaqView('details')">
+          <span data-i18n="faq_browse_link">❓ Browse Help &amp; FAQ first</span>
+        </button>
         <div id="msg-wizard-escalation" class="hidden" style="background:#dc2626;color:#fff;border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13px;font-weight:600" data-i18n="escalation_banner_text"></div>
         <div class="form-group">
           <textarea id="msg-wizard-textarea" class="form-control" rows="5" oninput="checkEscalation(this.value,'msg-wizard-escalation')"></textarea>
@@ -1511,6 +1560,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
             <div id="msg-status-ticket" class="hidden" style="font-size:11px;opacity:.85;margin-bottom:2px"></div>
             <span id="msg-status-text" style="font-size:13px;font-weight:600"></span>
           </div>
+          <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="showMsgFaqView('thread')" data-i18n="faq_link_short">❓ Help &amp; FAQ</button>
           <button class="btn btn-ghost btn-sm" style="font-size:12px" onclick="clearGuardChat()">
             <span id="msg-status-clear-label" data-i18n="clear_chat_btn">Clear Chat</span>
           </button>
@@ -3228,6 +3278,13 @@ const TRANSLATIONS = {
     pay_calc_result_expected: "Expected pay: ", pay_calc_result_diff_short: "You appear to be short by ",
     pay_calc_result_diff_over: "This looks like an overpayment of ", pay_calc_result_match: "This matches — no discrepancy detected.",
     escalation_banner_text: "This sounds serious. Please tap the 🆘 Emergency button above, or call the office directly, instead of waiting for a reply here.",
+    faq_view_title: "❓ Help & FAQ", faq_search_placeholder: "Search for an answer...",
+    faq_cant_find: "Can't find your answer? Start a new query →",
+    faq_entry_title: "Help & FAQ", faq_entry_sub: "Quick answers to common questions — no need to wait for a reply",
+    faq_browse_link: "❓ Browse Help & FAQ first", faq_link_short: "❓ Help & FAQ",
+    faq_no_results: "No results — try a different search, or start a new query below",
+    faq_none_yet: "No FAQs available yet — start a new query and the office will help",
+    today_label: "Today", yesterday_label: "Yesterday",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -3340,6 +3397,13 @@ const TRANSLATIONS = {
     pay_calc_result_expected: "अपेक्षित वेतन: ", pay_calc_result_diff_short: "आपको इतनी कम राशि मिली प्रतीत होती है: ",
     pay_calc_result_diff_over: "यह अधिक भुगतान जैसा लगता है: ", pay_calc_result_match: "यह मेल खाता है — कोई विसंगति नहीं मिली।",
     escalation_banner_text: "यह गंभीर लगता है। कृपया ऊपर 🆘 आपातकाल बटन दबाएं, या सीधे कार्यालय को कॉल करें, यहां जवाब का इंतजार करने के बजाय।",
+    faq_view_title: "❓ सहायता और सामान्य प्रश्न", faq_search_placeholder: "उत्तर खोजें...",
+    faq_cant_find: "अपना उत्तर नहीं मिला? नई क्वेरी शुरू करें →",
+    faq_entry_title: "सहायता और सामान्य प्रश्न", faq_entry_sub: "सामान्य प्रश्नों के त्वरित उत्तर — जवाब का इंतजार करने की जरूरत नहीं",
+    faq_browse_link: "❓ पहले सहायता और सामान्य प्रश्न देखें", faq_link_short: "❓ सहायता और सामान्य प्रश्न",
+    faq_no_results: "कोई परिणाम नहीं मिला — कुछ और खोजें, या नीचे नई क्वेरी शुरू करें",
+    faq_none_yet: "अभी तक कोई सामान्य प्रश्न उपलब्ध नहीं है — नई क्वेरी शुरू करें, कार्यालय मदद करेगा",
+    today_label: "आज", yesterday_label: "कल",
   },
   ur: {
     login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
@@ -3452,6 +3516,13 @@ const TRANSLATIONS = {
     pay_calc_result_expected: "متوقع تنخواہ: ", pay_calc_result_diff_short: "آپ کو اتنی کم رقم ملی لگتی ہے: ",
     pay_calc_result_diff_over: "یہ زیادہ ادائیگی لگتی ہے: ", pay_calc_result_match: "یہ میل کھاتا ہے — کوئی فرق نہیں ملا۔",
     escalation_banner_text: "یہ سنگین لگتا ہے۔ براہ کرم اوپر 🆘 ایمرجنسی بٹن دبائیں، یا براہ راست دفتر کو کال کریں، یہاں جواب کا انتظار کرنے کے بجائے۔",
+    faq_view_title: "❓ مدد اور عمومی سوالات", faq_search_placeholder: "جواب تلاش کریں...",
+    faq_cant_find: "اپنا جواب نہیں ملا؟ نئی کوئری شروع کریں ←",
+    faq_entry_title: "مدد اور عمومی سوالات", faq_entry_sub: "عام سوالات کے فوری جوابات — جواب کا انتظار کرنے کی ضرورت نہیں",
+    faq_browse_link: "❓ پہلے مدد اور عمومی سوالات دیکھیں", faq_link_short: "❓ مدد اور عمومی سوالات",
+    faq_no_results: "کوئی نتیجہ نہیں ملا — کچھ اور تلاش کریں، یا نیچے نئی کوئری شروع کریں",
+    faq_none_yet: "ابھی تک کوئی عمومی سوالات دستیاب نہیں ہیں — نئی کوئری شروع کریں، دفتر مدد کرے گا",
+    today_label: "آج", yesterday_label: "کل",
   },
   ar: {
     login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
@@ -3564,6 +3635,13 @@ const TRANSLATIONS = {
     pay_calc_result_expected: "الراتب المتوقع: ", pay_calc_result_diff_short: "يبدو أنك حصلت على مبلغ أقل بـ: ",
     pay_calc_result_diff_over: "يبدو هذا دفعًا زائدًا بمقدار: ", pay_calc_result_match: "هذا متطابق — لم يتم العثور على أي خطأ.",
     escalation_banner_text: "يبدو هذا خطيرًا. يرجى الضغط على زر 🆘 الطوارئ أعلاه، أو الاتصال بالمكتب مباشرة، بدلاً من انتظار الرد هنا.",
+    faq_view_title: "❓ المساعدة والأسئلة الشائعة", faq_search_placeholder: "ابحث عن إجابة...",
+    faq_cant_find: "لم تجد إجابتك؟ ابدأ استفسارًا جديدًا ←",
+    faq_entry_title: "المساعدة والأسئلة الشائعة", faq_entry_sub: "إجابات سريعة للأسئلة الشائعة — لا حاجة لانتظار الرد",
+    faq_browse_link: "❓ تصفح المساعدة والأسئلة الشائعة أولاً", faq_link_short: "❓ المساعدة والأسئلة الشائعة",
+    faq_no_results: "لا توجد نتائج — جرّب بحثًا مختلفًا، أو ابدأ استفسارًا جديدًا أدناه",
+    faq_none_yet: "لا توجد أسئلة شائعة متاحة بعد — ابدأ استفسارًا جديدًا وسيساعدك المكتب",
+    today_label: "اليوم", yesterday_label: "أمس",
   },
 };
 const RTL_LANGS = new Set(['ur','ar']);
@@ -5410,16 +5488,34 @@ function escapeHtml(s){
 function jsonAttr(obj){
   return JSON.stringify(obj).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+function fmtDaySeparator(d){
+  if(!d) return '';
+  try{
+    const date = new Date(d), now = new Date();
+    const dKey = date.toDateString(), todayKey = now.toDateString();
+    const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+    if(dKey===todayKey) return t('today_label');
+    if(dKey===yesterday.toDateString()) return t('yesterday_label');
+    return date.toLocaleDateString('en-AU',{weekday:'long',day:'2-digit',month:'short'});
+  }catch{ return ''; }
+}
 function renderMsgThread(box, rows, viewerRole){
   if(!rows.length){
     box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${viewerRole==='guard'?t('no_messages_yet'):'No messages yet. Say hello 👋'}</p>`;
     return;
   }
+  let lastDayKey = null;
   box.innerHTML = rows.map(m=>{
     const mine = m.sender===viewerRole;
     const isAuto = m.sender_name==='FAQ Auto-Reply';
     const who = m.sender==='admin' ? (m.sender_name||(viewerRole==='guard'?t('office_label'):'Office')) : (m.sender_name||(viewerRole==='guard'?t('guard_label'):'Guard'));
-    return `<div class="msg-bubble ${mine?'mine':'theirs'}">
+    let sep = '';
+    const dayKey = m.created_at ? new Date(m.created_at).toDateString() : null;
+    if(dayKey && dayKey!==lastDayKey){
+      sep = `<div class="msg-day-sep">${escapeHtml(fmtDaySeparator(m.created_at))}</div>`;
+      lastDayKey = dayKey;
+    }
+    return `${sep}<div class="msg-bubble ${mine?'mine':'theirs'}${isAuto?' bot':''}">
       <div>${isAuto?'🤖 ':''}${escapeHtml(m.body)}</div>
       <div class="msg-meta">${mine?'':escapeHtml(who)+' · '}<span dir="ltr" style="unicode-bidi:isolate">${fmtDateTime(m.created_at)}</span></div>
     </div>`;
@@ -5463,8 +5559,58 @@ function showMsgWizardCategories(){
   const firstName = ((identity && identity.name) || '').split(' ')[0] || '';
   document.getElementById('msg-wizard-greeting').textContent = `${t('wizard_greeting_prefix')}${firstName}${t('wizard_greeting_suffix')}`;
   document.getElementById('msg-wizard-cat-list').innerHTML = TICKET_CATEGORIES.map(c=>
-    `<button class="btn btn-ghost" style="text-align:left;justify-content:flex-start;padding:12px 14px;display:flex;align-items:center;gap:10px" onclick="selectTicketCategory('${c.key}')"><span>${c.icon}</span><span>${t('cat_'+c.key)}</span></button>`
+    `<button class="msg-cat-card" onclick="selectTicketCategory('${c.key}')"><span class="mcc-icon">${c.icon}</span><span>${t('cat_'+c.key)}</span></button>`
   ).join('');
+}
+// ── Self-serve Help & FAQ browser ───────────────────────────────────────────
+// Same `faqs` table the admin's "FAQ Auto-Replies" screen manages and the
+// reactive keyword-matcher on message send already uses — this just gives a
+// guard a way to search/browse every answer directly, instead of only
+// getting help if their own wording happens to match a keyword.
+let _guardFaqCache = null, _faqReturnView = 'categories';
+async function getGuardFaqs(){
+  if(_guardFaqCache) return _guardFaqCache;
+  try{ _guardFaqCache = await guardApiFetch('/api/guard/faqs'); }catch(e){ _guardFaqCache = []; }
+  return _guardFaqCache;
+}
+async function showMsgFaqView(returnTo){
+  _faqReturnView = returnTo || 'categories';
+  ['msg-wizard-categories','msg-wizard-details','msg-wizard-payflow','msg-thread-view'].forEach(id=>
+    document.getElementById(id).classList.add('hidden'));
+  document.getElementById('msg-faq-view').classList.remove('hidden');
+  document.getElementById('gfaq-search-input').value = '';
+  document.getElementById('gfaq-list').innerHTML = skelBlock(4, true);
+  await getGuardFaqs();
+  renderGuardFaqList('');
+}
+function closeMsgFaqView(){
+  document.getElementById('msg-faq-view').classList.add('hidden');
+  const back = {categories:'msg-wizard-categories', details:'msg-wizard-details', thread:'msg-thread-view'}[_faqReturnView] || 'msg-wizard-categories';
+  document.getElementById(back).classList.remove('hidden');
+}
+function msgFaqStartQuery(){
+  document.getElementById('msg-faq-view').classList.add('hidden');
+  if(_faqReturnView==='details'){ document.getElementById('msg-wizard-details').classList.remove('hidden'); return; }
+  showMsgWizardCategories();
+}
+let _openFaqId = null;
+function renderGuardFaqList(filterText){
+  const box = document.getElementById('gfaq-list');
+  const q = (filterText||'').trim().toLowerCase();
+  const rows = (_guardFaqCache||[]).filter(f => !q || f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q));
+  if(!rows.length){
+    box.innerHTML = `<div class="gfaq-empty">${q ? t('faq_no_results') : t('faq_none_yet')}</div>`;
+    return;
+  }
+  box.innerHTML = rows.map(f => `
+    <div class="gfaq-item${_openFaqId===f.id?' open':''}" id="gfaq-item-${f.id}">
+      <div class="gfaq-q" onclick="toggleGuardFaqItem('${f.id}')"><span>${escapeHtml(f.question)}</span><span class="gfaq-chevron">▾</span></div>
+      <div class="gfaq-a"><div class="gfaq-a-inner">${escapeHtml(f.answer)}</div></div>
+    </div>`).join('');
+}
+function toggleGuardFaqItem(id){
+  _openFaqId = _openFaqId===id ? null : id;
+  document.querySelectorAll('.gfaq-item').forEach(el=>el.classList.toggle('open', el.id===`gfaq-item-${_openFaqId}`));
 }
 function showMsgThreadView(){
   document.getElementById('msg-wizard-categories').classList.add('hidden');
