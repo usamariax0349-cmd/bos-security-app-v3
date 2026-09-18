@@ -81,7 +81,69 @@ def live_session(store, token):
         store.pop(token, None)
         return None
     s['last_seen'] = now
+    # Throttled write-through: persisting on every single request would put
+    # real, unnecessary load on the DB for a timestamp that barely changes.
+    # Once every 5 minutes is often enough that a restart loses at most a
+    # few minutes of "how recently was this session active", never enough to
+    # evict someone who was genuinely still using it.
+    if now - s.get('_persisted_at', 0) > 300:
+        persist_session(store, token, s)
     return s
+
+def persist_session(store, token, sess):
+    kind = 'guard' if store is guard_sessions else 'admin'
+    sess['_persisted_at'] = time.time()
+    try:
+        db = get_db()
+        db.execute('''INSERT INTO sessions_store (token,kind,data,created_at,last_seen)
+                      VALUES (?,?,?,?,?)
+                      ON CONFLICT(token) DO UPDATE SET data=excluded.data, last_seen=excluded.last_seen''',
+                   (token, kind, json.dumps(sess), sess.get('created_at', time.time()), sess.get('last_seen', time.time())))
+        db.commit(); db.close()
+    except Exception as e:
+        print(f'  SESSION PERSIST: failed to save {kind} session: {e}')
+
+def drop_persisted_session(token):
+    try:
+        db = get_db()
+        db.execute('DELETE FROM sessions_store WHERE token=?', (token,))
+        db.commit(); db.close()
+    except Exception as e:
+        print(f'  SESSION PERSIST: failed to drop session: {e}')
+
+def restore_sessions():
+    """Reload every not-yet-expired session from disk into the in-memory
+    stores on startup — called once, before the server starts accepting
+    requests, so a deploy doesn't sign everyone out."""
+    try:
+        db = get_db()
+        rows = db.execute('SELECT token,kind,data,created_at,last_seen FROM sessions_store').fetchall()
+        db.close()
+    except Exception as e:
+        print(f'  SESSION PERSIST: restore failed: {e}'); return
+    now = time.time()
+    restored_admin = restored_guard = 0
+    stale_tokens = []
+    for token, kind, data, created_at, last_seen in rows:
+        if now - last_seen > SESSION_IDLE_TIMEOUT or now - created_at > SESSION_ABSOLUTE_TIMEOUT:
+            stale_tokens.append(token); continue
+        try:
+            sess = json.loads(data)
+        except Exception:
+            stale_tokens.append(token); continue
+        if kind == 'guard':
+            guard_sessions[token] = sess; restored_guard += 1
+        else:
+            sessions[token] = sess; restored_admin += 1
+    if stale_tokens:
+        try:
+            db = get_db()
+            db.executemany('DELETE FROM sessions_store WHERE token=?', [(t,) for t in stale_tokens])
+            db.commit(); db.close()
+        except Exception as e:
+            print(f'  SESSION PERSIST: cleanup failed: {e}')
+    if restored_admin or restored_guard:
+        print(f'  SESSIONS: restored {restored_admin} admin/client and {restored_guard} guard session(s) from disk')
 
 # ─── Login rate limiting ──────────────────────────────────────────────────────
 # In-memory and per-IP (via X-Forwarded-For, since Railway's proxy means
@@ -868,6 +930,19 @@ def init_db():
             action     TEXT NOT NULL,
             details    TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Sessions live in the `sessions`/`guard_sessions` in-memory dicts for
+        -- speed (a DB round-trip on every request would be wasteful), but are
+        -- mirrored here so a deploy or crash doesn't silently sign every admin,
+        -- client and guard out at once — restore_sessions() reloads whatever
+        -- hasn't expired back into memory on startup.
+        CREATE TABLE IF NOT EXISTS sessions_store (
+            token      TEXT PRIMARY KEY,
+            kind       TEXT NOT NULL,
+            data       TEXT NOT NULL,
+            created_at REAL NOT NULL,
+            last_seen  REAL NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS checkpoints (
@@ -3551,6 +3626,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 'email':row['email'],'role':row['role'],
                                 'must_change_password': must_change, 'mfa_pending': False,
                                 'created_at': now, 'last_seen': now}
+            persist_session(sessions, token, sessions[token])
             # First-time login: force password change before granting full access
             if must_change:
                 self.send_json({'force_password_change': True, 'token': token,
@@ -3559,6 +3635,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # /api/mfa/login-verify is the only route a pending session can reach.
             if mfa_on:
                 sessions[token]['mfa_pending'] = True
+                persist_session(sessions, token, sessions[token])
                 self.send_json({'mfa_required': True, 'token': token}); return
             db = get_db()
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
@@ -3568,8 +3645,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'token':token,'id':row['id'],'name':row['name'],'role':row['role'],'company':COMPANY_NAME}); return
 
         if path == '/api/logout':
-            s = sessions.pop(self.headers.get('X-Auth-Token',''), None)
+            token = self.headers.get('X-Auth-Token','')
+            s = sessions.pop(token, None)
             if s:
+                drop_persisted_session(token)
                 db = get_db(); audit(db, s, 'LOGOUT'); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
@@ -3593,6 +3672,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             guard_sessions[token] = {'guard_id':row['id'],'name':row['name'],'email':row['email'],
                                       'must_change_password': must_change,
                                       'created_at': now, 'last_seen': now}
+            persist_session(guard_sessions, token, guard_sessions[token])
             if must_change:
                 self.send_json({'force_password_change': True, 'token': token,
                                 'name': row['name']}); return
@@ -3604,7 +3684,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'token':token,'id':row['id'],'name':row['name'],'company':COMPANY_NAME}); return
 
         if path == '/api/guard/logout':
-            guard_sessions.pop(self.headers.get('X-Auth-Token',''), None)
+            token = self.headers.get('X-Auth-Token','')
+            if guard_sessions.pop(token, None) is not None:
+                drop_persisted_session(token)
             self.send_json({'ok':True}); return
 
         # First-time / forced password setup — mirrors /api/setup-password but
@@ -3626,6 +3708,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                           WHERE id=?''', (h, salt, datetime.now().isoformat(), gs0['guard_id']))
             db.commit(); db.close()
             gs0['must_change_password'] = False
+            persist_session(guard_sessions, self.headers.get('X-Auth-Token',''), gs0)
             self.send_json({'token': self.headers.get('X-Auth-Token',''),
                             'id': gs0['guard_id'], 'name': gs0['name'], 'company': COMPANY_NAME}); return
 
@@ -4161,7 +4244,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s['must_change_password'] = False
             if mfa_on:
                 s['mfa_pending'] = True
+                persist_session(sessions, self.headers.get('X-Auth-Token',''), s)
                 self.send_json({'mfa_required': True, 'token': self.headers.get('X-Auth-Token','')}); return
+            persist_session(sessions, self.headers.get('X-Auth-Token',''), s)
             db = get_db()
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), s['admin_id']))
@@ -4204,6 +4289,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 db.close(); self.err('Invalid code', 401); return
             record_login_success(ip)
             s['mfa_pending'] = False
+            persist_session(sessions, self.headers.get('X-Auth-Token',''), s)
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), s['admin_id']))
             audit(db, s, 'LOGIN' + (' (backup code used)' if used_backup else ''))
@@ -5325,6 +5411,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     init_db()
+    restore_sessions()
     try:
         run_db_backup()
     except Exception as e:
