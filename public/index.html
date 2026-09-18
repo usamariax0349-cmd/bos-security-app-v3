@@ -1637,6 +1637,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <span class="tb-icon">🖼</span><span class="tb-label">Logo</span><input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this)">
       </label>
       <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="showChangePw()" title="Change password"><span class="tb-icon">🔑</span></button>
+      <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="openMfaModal()" title="Two-factor authentication"><span class="tb-icon">🛡</span></button>
       <button class="btn btn-ghost btn-sm topbar-icon-btn" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15)" onclick="doLogout()" title="Logout"><span class="tb-icon">⎋</span><span class="tb-label">Logout</span></button>
     </div>
   </div>
@@ -3108,6 +3109,92 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
   </div>
 </div>
 
+<!-- Two-factor authentication — self-service enroll/disable for the logged-in
+     admin's own account. Four sub-views inside one modal (status, QR
+     enrollment, one-time backup-code reveal, password-confirm for the
+     sensitive actions) rather than four modals, since only one is ever
+     relevant at a time and they share the same "manage my 2FA" context. -->
+<div id="mfa-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">🛡 Two-Factor Authentication</span><button class="modal-close" onclick="closeModal('mfa-modal')">✕</button></div>
+    <div class="modal-body">
+      <div id="mfa-step-status">
+        <div id="mfa-status-off">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+            Add a second step to your login using an authenticator app (Google Authenticator, Authy, 1Password, etc.) —
+            even if your password is compromised, your account stays protected.
+          </p>
+          <button class="btn btn-primary" style="width:100%" onclick="startMfaEnroll()">Enable Two-Factor Authentication</button>
+        </div>
+        <div id="mfa-status-on" class="hidden">
+          <p style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:14px">✓ Two-factor authentication is ON for your account.</p>
+          <button class="btn btn-ghost" style="width:100%;margin-bottom:8px" onclick="openMfaRegenModal()">Regenerate Backup Codes</button>
+          <button class="btn btn-ghost" style="width:100%;color:var(--red)" onclick="openMfaDisableModal()">Disable Two-Factor Authentication</button>
+        </div>
+      </div>
+      <div id="mfa-step-enroll" class="hidden">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:10px">Scan this code with your authenticator app, or enter the key manually.</p>
+        <div style="display:flex;justify-content:center;margin-bottom:12px"><canvas id="mfa-qr-canvas"></canvas></div>
+        <div style="text-align:center;font-family:monospace;font-size:13px;background:var(--bg);padding:8px 10px;border-radius:6px;margin-bottom:14px;word-break:break-all" id="mfa-manual-secret"></div>
+        <div class="form-group"><label class="form-label">Enter the 6-digit code from your app</label>
+          <input type="text" id="mfa-enroll-code" class="form-control" maxlength="6" inputmode="numeric" placeholder="000000" style="text-align:center;font-size:18px;letter-spacing:3px" onkeydown="if(event.key==='Enter')confirmMfaEnroll()">
+        </div>
+        <div id="mfa-enroll-err" style="color:var(--red);font-size:13px;display:none;margin-bottom:10px"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="confirmMfaEnroll()">Verify &amp; Enable</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="showMfaStep('status')">Cancel</button>
+      </div>
+      <div id="mfa-step-backup" class="hidden">
+        <p style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:8px">
+          ⚠ Save these backup codes now — they won't be shown again. Each one lets you log in once if you lose access to your authenticator app.
+        </p>
+        <div id="mfa-backup-codes-list" style="font-family:monospace;font-size:14px;background:var(--bg);padding:14px;border-radius:8px;line-height:2;text-align:center"></div>
+        <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="finishMfaEnroll()">Done — I've saved these</button>
+      </div>
+      <div id="mfa-step-confirmpw" class="hidden">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:12px" id="mfa-confirmpw-desc"></p>
+        <div class="form-group"><label class="form-label">Current Password</label>
+          <input type="password" id="mfa-confirmpw-input" class="form-control" onkeydown="if(event.key==='Enter')submitMfaConfirmPw()">
+        </div>
+        <div id="mfa-confirmpw-err" style="color:var(--red);font-size:13px;display:none;margin-bottom:10px"></div>
+        <button class="btn btn-primary" style="width:100%" id="mfa-confirmpw-btn" onclick="submitMfaConfirmPw()">Confirm</button>
+        <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="showMfaStep('status')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Two-factor verification at login time — shown after a correct password
+     when the account has 2FA on. No close button, matching how the forced
+     first-password-change modal is styled: this is a mandatory step, not a
+     dismissible one. "Sign out instead" is the one safety valve, for an
+     admin who's lost both their authenticator and their backup codes. -->
+<div id="mfa-login-modal" class="modal-overlay hidden" style="z-index:9999">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header" style="background:var(--navy);color:#fff;border-radius:12px 12px 0 0">
+      <span class="modal-title" style="color:#fff">🛡 Two-Factor Verification</span>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Enter the 6-digit code from your authenticator app.</p>
+      <div class="form-group">
+        <input type="text" id="mfa-login-code" class="form-control" maxlength="6" inputmode="numeric" placeholder="000000"
+               style="text-align:center;font-size:20px;letter-spacing:4px" onkeydown="if(event.key==='Enter')submitMfaLogin()">
+      </div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:10px" onclick="toggleMfaBackupInput()">
+        <span id="mfa-backup-toggle-label">Use a backup code instead</span>
+      </button>
+      <div class="form-group hidden" id="mfa-login-backup-group">
+        <label class="form-label">Backup Code</label>
+        <input type="text" id="mfa-login-backup" class="form-control" placeholder="xxxx-xxxx" onkeydown="if(event.key==='Enter')submitMfaLogin()">
+      </div>
+      <div id="mfa-login-err" style="color:var(--red);font-size:13px;display:none;margin-bottom:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cancelMfaLogin()">Sign out instead</button>
+      <button class="btn btn-primary" onclick="submitMfaLogin()">Verify</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Guard Portal translations ────────────────────────────────────────────────
 // Scoped to the Guard Portal only — admin stays English. Covers fixed UI
@@ -4387,6 +4474,18 @@ async function init(){
         ['fp-new','fp-confirm'].forEach(id=>document.getElementById(id).value='');
         showGuard(); // stay on guard view (not logged in yet)
         openModal('firstpw-modal');
+        return;
+      }
+      // Reload mid-2FA-prompt (or a stale pending token from a previous tab) —
+      // resume the verification step rather than silently granting nothing.
+      if(me.mfa_pending){
+        document.getElementById('mfa-login-err').style.display='none';
+        document.getElementById('mfa-login-code').value=''; document.getElementById('mfa-login-backup').value='';
+        document.getElementById('mfa-login-backup-group').classList.add('hidden');
+        document.getElementById('mfa-login-code').closest('.form-group').classList.remove('hidden');
+        document.getElementById('mfa-backup-toggle-label').textContent='Use a backup code instead';
+        showGuard();
+        openModal('mfa-login-modal');
         return;
       }
       currentRole = me.role; window._myAdminId = me.id||'';
@@ -5812,6 +5911,16 @@ async function doLogin(){
       openModal('firstpw-modal');
       return;
     }
+    // Password correct, but this account has 2FA on — one more step
+    if(d.mfa_required){
+      document.getElementById('mfa-login-err').style.display='none';
+      document.getElementById('mfa-login-code').value=''; document.getElementById('mfa-login-backup').value='';
+      document.getElementById('mfa-login-backup-group').classList.add('hidden');
+      document.getElementById('mfa-login-code').closest('.form-group').classList.remove('hidden');
+      document.getElementById('mfa-backup-toggle-label').textContent='Use a backup code instead';
+      openModal('mfa-login-modal');
+      return;
+    }
     currentRole=d.role; window._myAdminId=d.id||'';
     document.getElementById('login-email').value='';
     toast(`Welcome back, ${d.name}!`,'success');
@@ -5961,6 +6070,120 @@ async function changePassword(){
     closeModal('changepw-modal');
     ['cp-current','cp-new','cp-confirm'].forEach(id=>document.getElementById(id).value='');
   }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Two-factor authentication (settings) ────────────────────────────────────
+async function openMfaModal(){
+  openModal('mfa-modal');
+  showMfaStep('status');
+  await loadMfaStatus();
+}
+async function loadMfaStatus(){
+  try{
+    const d = await apiFetch('/api/mfa/status');
+    document.getElementById('mfa-status-off').classList.toggle('hidden', d.enabled);
+    document.getElementById('mfa-status-on').classList.toggle('hidden', !d.enabled);
+  }catch(e){ toast(e.message,'error'); }
+}
+function showMfaStep(name){
+  ['status','enroll','backup','confirmpw'].forEach(s=>document.getElementById('mfa-step-'+s).classList.toggle('hidden', s!==name));
+}
+async function startMfaEnroll(){
+  try{
+    const d = await apiFetch('/api/mfa/setup', {method:'POST'});
+    document.getElementById('mfa-manual-secret').textContent = d.secret;
+    document.getElementById('mfa-enroll-code').value = '';
+    document.getElementById('mfa-enroll-err').style.display = 'none';
+    showMfaStep('enroll');
+    setTimeout(()=>{
+      const canvas = document.getElementById('mfa-qr-canvas');
+      if(window.QRCode && canvas) QRCode.toCanvas(canvas, d.otpauth_url, {width:180, margin:1}, err=>{ if(err) console.error(err); });
+    }, 30);
+  }catch(e){ toast(e.message,'error'); }
+}
+async function confirmMfaEnroll(){
+  const code = document.getElementById('mfa-enroll-code').value.trim();
+  const errEl = document.getElementById('mfa-enroll-err');
+  errEl.style.display = 'none';
+  if(!/^\d{6}$/.test(code)){ errEl.textContent = 'Enter the 6-digit code from your app'; errEl.style.display = 'block'; return; }
+  try{
+    const d = await apiFetch('/api/mfa/confirm', {method:'POST', body: JSON.stringify({code})});
+    renderMfaBackupCodes(d.backup_codes);
+    showMfaStep('backup');
+  }catch(e){ errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+function renderMfaBackupCodes(codes){
+  document.getElementById('mfa-backup-codes-list').innerHTML = codes.map(c=>escapeHtml(c)).join('<br>');
+}
+async function finishMfaEnroll(){
+  toast('Two-factor authentication enabled','success');
+  await loadMfaStatus();
+  showMfaStep('status');
+}
+let _mfaConfirmAction = null; // 'disable' | 'regenerate'
+function openMfaDisableModal(){
+  _mfaConfirmAction = 'disable';
+  document.getElementById('mfa-confirmpw-desc').textContent = 'Enter your password to disable two-factor authentication.';
+  document.getElementById('mfa-confirmpw-btn').textContent = 'Disable 2FA';
+  document.getElementById('mfa-confirmpw-input').value = '';
+  document.getElementById('mfa-confirmpw-err').style.display = 'none';
+  showMfaStep('confirmpw');
+}
+function openMfaRegenModal(){
+  _mfaConfirmAction = 'regenerate';
+  document.getElementById('mfa-confirmpw-desc').textContent = 'Enter your password to generate new backup codes. Your old codes will stop working.';
+  document.getElementById('mfa-confirmpw-btn').textContent = 'Regenerate Codes';
+  document.getElementById('mfa-confirmpw-input').value = '';
+  document.getElementById('mfa-confirmpw-err').style.display = 'none';
+  showMfaStep('confirmpw');
+}
+async function submitMfaConfirmPw(){
+  const pw = document.getElementById('mfa-confirmpw-input').value;
+  const errEl = document.getElementById('mfa-confirmpw-err');
+  errEl.style.display = 'none';
+  if(!pw){ errEl.textContent = 'Password required'; errEl.style.display = 'block'; return; }
+  try{
+    if(_mfaConfirmAction === 'disable'){
+      await apiFetch('/api/mfa/disable', {method:'POST', body: JSON.stringify({password:pw})});
+      toast('Two-factor authentication disabled','success');
+      await loadMfaStatus();
+      showMfaStep('status');
+    } else {
+      const d = await apiFetch('/api/mfa/regenerate-backup-codes', {method:'POST', body: JSON.stringify({password:pw})});
+      renderMfaBackupCodes(d.backup_codes);
+      showMfaStep('backup');
+    }
+  }catch(e){ errEl.textContent = e.message; errEl.style.display = 'block'; }
+}
+// ── Two-factor verification at login time ───────────────────────────────────
+function toggleMfaBackupInput(){
+  const grp = document.getElementById('mfa-login-backup-group');
+  const showing = grp.classList.toggle('hidden') === false;
+  document.getElementById('mfa-backup-toggle-label').textContent = showing ? 'Use my authenticator code instead' : 'Use a backup code instead';
+  document.getElementById('mfa-login-code').closest('.form-group').classList.toggle('hidden', showing);
+}
+function cancelMfaLogin(){
+  authToken = null; localStorage.removeItem('sg_token');
+  closeModal('mfa-login-modal');
+  location.reload();
+}
+async function submitMfaLogin(){
+  const code = document.getElementById('mfa-login-code').value.trim();
+  const backup_code = document.getElementById('mfa-login-backup').value.trim();
+  const errEl = document.getElementById('mfa-login-err');
+  errEl.style.display = 'none';
+  try{
+    const d = await apiFetch('/api/mfa/login-verify', {method:'POST', body: JSON.stringify({code, backup_code})});
+    closeModal('mfa-login-modal');
+    currentRole = d.role; window._myAdminId = d.id || '';
+    document.getElementById('login-email').value = '';
+    toast(`Welcome back, ${d.name}!`,'success');
+    if(d.role === 'client'){ showClientPortal(); return; }
+    const roleLabel = {'superadmin':'Super Admin','administrator':'Administrator','manager':'Manager','viewer':'Viewer'}[d.role] || d.role;
+    document.getElementById('topbar-user-info').textContent = `${d.name} · ${roleLabel}`;
+    applyRoleRestrictions(d.role);
+    showAdmin();
+  }catch(e){ errEl.textContent = e.message; errEl.style.display = 'block'; }
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────

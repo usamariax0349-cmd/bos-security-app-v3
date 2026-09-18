@@ -5,11 +5,11 @@ Production | Multi-Admin | Roles | Audit Log | v3.0
 Run:  py server.py  →  http://localhost:5000
 """
 
-import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time, threading
+import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time, threading, hmac, struct
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 try:
     from openpyxl import Workbook
@@ -226,6 +226,45 @@ def hash_password(password, salt=None):
 def verify_password(password, stored_hash, salt):
     h, _ = hash_password(password, salt)
     return h == stored_hash
+
+# ─── TOTP two-factor auth (RFC 6238) — stdlib only, no dependency ──────────────
+def totp_new_secret():
+    return base64.b32encode(secrets.token_bytes(20)).decode('ascii').rstrip('=')
+
+def totp_code(secret, for_time=None, step=30, digits=6):
+    if for_time is None: for_time = time.time()
+    padded = secret.upper() + '=' * ((8 - len(secret) % 8) % 8)
+    key = base64.b32decode(padded)
+    counter = int(for_time // step)
+    msg = struct.pack('>Q', counter)
+    h = hmac.new(key, msg, hashlib.sha1).digest()
+    offset = h[-1] & 0x0f
+    truncated = (struct.unpack('>I', h[offset:offset + 4])[0] & 0x7fffffff) % (10 ** digits)
+    return str(truncated).zfill(digits)
+
+def totp_verify(secret, code, window=1, step=30, digits=6):
+    """Accepts a code from one step before/after now, so a slightly-off phone
+    clock or the seconds it takes to type the code doesn't fail a real login."""
+    code = (code or '').strip()
+    if not re.fullmatch(r'\d{6}', code): return False
+    now = time.time()
+    for w in range(-window, window + 1):
+        if hmac.compare_digest(totp_code(secret, now + w * step, step, digits), code):
+            return True
+    return False
+
+def generate_backup_codes(n=8):
+    """Returns (plaintext_codes, stored_records) — plaintext is shown to the
+    admin exactly once and never persisted; stored_records holds only the
+    hash+salt (same pbkdf2 scheme as account passwords) so a leaked DB can't
+    be used to log in with them."""
+    plaintext, stored = [], []
+    for _ in range(n):
+        code = f"{secrets.token_hex(3)}-{secrets.token_hex(3)}"
+        h, salt = hash_password(code)
+        plaintext.append(code)
+        stored.append({'hash': h, 'salt': salt, 'used': False})
+    return plaintext, stored
 
 # ─── Geolocation ──────────────────────────────────────────────────────────────
 def haversine_m(lat1, lng1, lat2, lng2):
@@ -1309,6 +1348,14 @@ def init_db():
         # id, so it can be rotated (badge lost/compromised) without touching
         # the guard's real internal id used everywhere else.
         ("guards", "public_verify_token", "ALTER TABLE guards ADD COLUMN public_verify_token TEXT"),
+        # admins table — two-factor auth (TOTP). mfa_pending_secret holds a
+        # freshly-generated secret during enrollment only; it's never treated
+        # as active until the admin proves possession with a real code, so a
+        # half-finished "Enable 2FA" click can never lock anyone out.
+        ("admins", "mfa_secret",         "ALTER TABLE admins ADD COLUMN mfa_secret TEXT DEFAULT ''"),
+        ("admins", "mfa_pending_secret", "ALTER TABLE admins ADD COLUMN mfa_pending_secret TEXT DEFAULT ''"),
+        ("admins", "mfa_enabled",        "ALTER TABLE admins ADD COLUMN mfa_enabled INTEGER DEFAULT 0"),
+        ("admins", "mfa_backup_codes",   "ALTER TABLE admins ADD COLUMN mfa_backup_codes TEXT DEFAULT ''"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -2249,6 +2296,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def require_admin(self, min_role=None):
         s = self.get_session()
         if not s: self.err('Unauthorized', 401); return None
+        # A session pending its second factor can't touch anything else —
+        # checked here, once, so every admin route is covered by construction
+        # rather than needing this repeated at each call site.
+        if s.get('mfa_pending'):
+            self.err('Please complete two-factor verification before continuing', 403); return None
         # Client accounts are read-only, site-scoped, and never fall through to admin routes
         if s.get('role') == 'client':
             self.err('Insufficient permissions', 403); return None
@@ -2264,6 +2316,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.err('Insufficient permissions', 403); return None
         if s.get('must_change_password'):
             self.err('Please set your password before continuing', 403); return None
+        if s.get('mfa_pending'):
+            self.err('Please complete two-factor verification before continuing', 403); return None
         return s
 
     def get_guard_session(self):
@@ -2545,7 +2599,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             s0 = self.get_session()
             if not s0: self.err('Unauthorized', 401); return
             self.send_json({'id':s0['admin_id'],'name':s0['name'],'email':s0['email'],'role':s0['role'],
-                            'must_change_password': s0.get('must_change_password', False)}); return
+                            'must_change_password': s0.get('must_change_password', False),
+                            'mfa_pending': s0.get('mfa_pending', False)}); return
 
         # Available even mid-forced-password-change, like /api/me for admins.
         # Doubles as the Digital ID card's one-call data source: licence/
@@ -2846,6 +2901,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # Block must_change_password sessions from all other admin GET endpoints
         if s.get('must_change_password'):
             self.err('Please set your password before continuing', 403); return
+
+        if path == '/api/mfa/status':
+            db = get_db()
+            row = R(db.execute('SELECT mfa_enabled FROM admins WHERE id=?', (s['admin_id'],)).fetchone())
+            db.close(); self.send_json({'enabled': bool(row and row.get('mfa_enabled'))}); return
 
         if path == '/api/guards/all':
             db = get_db()
@@ -3485,15 +3545,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             record_login_success(ip)
             token = str(uuid.uuid4())
             must_change = bool(row.get('must_change_password', 0))
+            mfa_on = bool(row.get('mfa_enabled', 0))
             now = time.time()
             sessions[token] = {'admin_id':row['id'],'name':row['name'],
                                 'email':row['email'],'role':row['role'],
-                                'must_change_password': must_change,
+                                'must_change_password': must_change, 'mfa_pending': False,
                                 'created_at': now, 'last_seen': now}
             # First-time login: force password change before granting full access
             if must_change:
                 self.send_json({'force_password_change': True, 'token': token,
                                 'name': row['name']}); return
+            # Second factor required before this session can touch anything —
+            # /api/mfa/login-verify is the only route a pending session can reach.
+            if mfa_on:
+                sessions[token]['mfa_pending'] = True
+                self.send_json({'mfa_required': True, 'token': token}); return
             db = get_db()
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), row['id']))
@@ -4086,9 +4152,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db = get_db()
             db.execute('UPDATE admins SET password_hash=?, salt=?, must_change_password=0 WHERE id=?',
                        (h, salt, s['admin_id']))
-            audit(db, s, 'PASSWORD_SETUP_COMPLETE'); db.commit(); db.close()
-            # Upgrade session to full access
+            audit(db, s, 'PASSWORD_SETUP_COMPLETE')
+            mfa_on = bool(R(db.execute('SELECT mfa_enabled FROM admins WHERE id=?', (s['admin_id'],)).fetchone()).get('mfa_enabled', 0))
+            db.commit(); db.close()
+            # Upgrade session to full access — unless this account also has 2FA
+            # on (e.g. a password reset didn't touch it), in which case a fresh
+            # password still isn't enough on its own.
             s['must_change_password'] = False
+            if mfa_on:
+                s['mfa_pending'] = True
+                self.send_json({'mfa_required': True, 'token': self.headers.get('X-Auth-Token','')}); return
             db = get_db()
             db.execute('UPDATE admins SET last_login=? WHERE id=?',
                        (datetime.now().isoformat(), s['admin_id']))
@@ -4097,9 +4170,103 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             'id': s['admin_id'], 'name': s['name'],
                             'role': s['role'], 'company': COMPANY_NAME}); return
 
+        # ── Second factor — completes a login that came back mfa_required ───────
+        # Uses get_session() directly, not require_admin(), for the same reason
+        # /api/setup-password does: this IS the endpoint that clears the pending
+        # flag, so it has to be reachable by a session still carrying it.
+        if path == '/api/mfa/login-verify':
+            s = self.get_session()
+            if not s: self.err('Unauthorized', 401); return
+            if not s.get('mfa_pending'):
+                self.err('No two-factor verification required for this session', 400); return
+            ip = self.client_ip()
+            if login_rate_limited(ip):
+                self.err('Too many failed attempts. Please try again in a few minutes.', 429); return
+            db = get_db()
+            row = R(db.execute('SELECT mfa_secret, mfa_backup_codes FROM admins WHERE id=?',
+                                (s['admin_id'],)).fetchone())
+            ok = False
+            used_backup = False
+            code = (data.get('code') or '').strip()
+            backup_code = (data.get('backup_code') or '').strip()
+            if code and row and totp_verify(row['mfa_secret'], code):
+                ok = True
+            elif backup_code:
+                codes = json.loads(row['mfa_backup_codes'] or '[]') if row else []
+                for c in codes:
+                    if not c.get('used') and verify_password(backup_code, c['hash'], c['salt']):
+                        c['used'] = True; ok = True; used_backup = True; break
+                if ok:
+                    db.execute('UPDATE admins SET mfa_backup_codes=? WHERE id=?',
+                               (json.dumps(codes), s['admin_id']))
+            if not ok:
+                record_login_failure(ip)
+                db.close(); self.err('Invalid code', 401); return
+            record_login_success(ip)
+            s['mfa_pending'] = False
+            db.execute('UPDATE admins SET last_login=? WHERE id=?',
+                       (datetime.now().isoformat(), s['admin_id']))
+            audit(db, s, 'LOGIN' + (' (backup code used)' if used_backup else ''))
+            db.commit(); db.close()
+            self.send_json({'token': self.headers.get('X-Auth-Token',''),
+                            'id': s['admin_id'], 'name': s['name'],
+                            'role': s['role'], 'company': COMPANY_NAME}); return
+
         # ── Admin-only below ──
         s = self.require_admin()
         if s is None: return
+
+        # Two-factor auth: self-service enroll / confirm / disable / regenerate.
+        # All scoped to the caller's own account — an admin manages their own
+        # 2FA here, never someone else's (there's no "set up 2FA for another
+        # admin" path, by design).
+        if path == '/api/mfa/setup':
+            secret = totp_new_secret()
+            db = get_db()
+            db.execute('UPDATE admins SET mfa_pending_secret=? WHERE id=?', (secret, s['admin_id']))
+            db.commit(); db.close()
+            label = quote(f"{COMPANY_NAME}:{s['email']}")
+            issuer = quote(COMPANY_NAME)
+            otpauth_url = f"otpauth://totp/{label}?secret={secret}&issuer={issuer}&digits=6&period=30"
+            self.send_json({'secret': secret, 'otpauth_url': otpauth_url}); return
+
+        if path == '/api/mfa/confirm':
+            db = get_db()
+            row = R(db.execute('SELECT mfa_pending_secret FROM admins WHERE id=?', (s['admin_id'],)).fetchone())
+            pending_secret = row.get('mfa_pending_secret') if row else ''
+            if not pending_secret:
+                db.close(); self.err('No two-factor setup in progress — start again', 400); return
+            if not totp_verify(pending_secret, data.get('code', '')):
+                db.close(); self.err('Invalid code — check the time on your device and try again', 400); return
+            plaintext, stored = generate_backup_codes()
+            db.execute('''UPDATE admins SET mfa_secret=?, mfa_enabled=1, mfa_pending_secret='',
+                          mfa_backup_codes=? WHERE id=?''',
+                       (pending_secret, json.dumps(stored), s['admin_id']))
+            audit(db, s, 'MFA_ENABLED'); db.commit(); db.close()
+            self.send_json({'ok': True, 'backup_codes': plaintext}); return
+
+        if path == '/api/mfa/disable':
+            db = get_db()
+            row = R(db.execute('SELECT password_hash, salt FROM admins WHERE id=?', (s['admin_id'],)).fetchone())
+            if not row or not verify_password(data.get('password', ''), row['password_hash'], row['salt']):
+                db.close(); self.err('Incorrect password', 401); return
+            db.execute('''UPDATE admins SET mfa_enabled=0, mfa_secret='', mfa_pending_secret='',
+                          mfa_backup_codes='' WHERE id=?''', (s['admin_id'],))
+            audit(db, s, 'MFA_DISABLED'); db.commit(); db.close()
+            self.send_json({'ok': True}); return
+
+        if path == '/api/mfa/regenerate-backup-codes':
+            db = get_db()
+            row = R(db.execute('SELECT password_hash, salt, mfa_enabled FROM admins WHERE id=?',
+                                (s['admin_id'],)).fetchone())
+            if not row or not verify_password(data.get('password', ''), row['password_hash'], row['salt']):
+                db.close(); self.err('Incorrect password', 401); return
+            if not row.get('mfa_enabled'):
+                db.close(); self.err('Two-factor authentication is not enabled', 400); return
+            plaintext, stored = generate_backup_codes()
+            db.execute('UPDATE admins SET mfa_backup_codes=? WHERE id=?', (json.dumps(stored), s['admin_id']))
+            audit(db, s, 'MFA_BACKUP_CODES_REGENERATED'); db.commit(); db.close()
+            self.send_json({'ok': True, 'backup_codes': plaintext}); return
 
         # Block must_change_password sessions from all other admin POST endpoints
         if s.get('must_change_password'):
