@@ -660,12 +660,15 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
 .vfy-error{color:rgba(255,255,255,.6);text-align:center;font-size:14px;margin-top:60px}
 
 /* Public job-application page (no login) */
-#apply-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1),var(--ink-2) 60%,var(--ink-3));
+#apply-page,#privacy-page{min-height:100vh;background:linear-gradient(168deg,var(--ink-1),var(--ink-2) 60%,var(--ink-3));
   display:flex;flex-direction:column;align-items:center;padding:48px 20px calc(40px + env(safe-area-inset-bottom))}
 .apl-card{width:100%;max-width:460px;background:var(--glass);backdrop-filter:blur(18px) saturate(150%);
   border:1px solid rgba(232,199,106,.24);border-radius:24px;padding:30px 24px;box-shadow:var(--sh-lg)}
 .apl-title{font-family:var(--font-display);font-size:26px;font-weight:600;color:#fff;text-align:center;letter-spacing:-.3px}
 .apl-sub{font-size:13px;color:rgba(255,255,255,.55);text-align:center;margin:8px 0 24px;line-height:1.5}
+#privacy-page h3{color:#fff;font-size:15px;margin:20px 0 6px}
+#privacy-page h3:first-of-type{margin-top:8px}
+#privacy-page p{color:rgba(255,255,255,.75);font-size:13px;margin:0 0 4px}
 #apply-page .form-label{color:rgba(255,255,255,.7)}
 #apply-page .form-control{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff}
 #apply-page .form-control::placeholder{color:rgba(255,255,255,.32)}
@@ -1495,6 +1498,10 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         </div>
         <div id="gfaq-list"></div>
         <button class="gfaq-cta" id="gfaq-cta-btn" data-i18n="faq_cant_find" onclick="msgFaqStartQuery()">Can't find your answer? Start a new query →</button>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="gfaq-cta" style="flex:1" onclick="downloadMyData()" data-i18n="download_my_data">📥 Download my data</button>
+          <a class="gfaq-cta" style="flex:1;display:block;text-decoration:none;box-sizing:border-box" href="/privacy" target="_blank" data-i18n="privacy_policy_link">🔒 Privacy Policy</a>
+        </div>
         <button class="nav-btn nav-back" data-i18n="back_btn" style="width:100%;margin-top:14px" onclick="closeMsgFaqView()">← Back</button>
       </div>
 
@@ -1664,6 +1671,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="tab-dropdown-item" data-tab="ratings" onclick="selectOrgTab('ratings')">⭐ Guard Star Ratings</button>
         <button class="tab-dropdown-item" data-tab="policies" onclick="selectOrgTab('policies')">📋 Policies</button>
         <button class="tab-dropdown-item" data-tab="applicants" onclick="selectOrgTab('applicants')">📥 Applicants</button>
+        <button class="tab-dropdown-item" data-tab="retention" onclick="selectOrgTab('retention')">🔒 Data Retention</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1940,6 +1948,30 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
           <a href="#" onclick="selectOrgTab('sites');return false">Sites</a>.
         </p>
         <div id="botkb-form" style="padding:0 20px 20px"></div>
+      </div>
+    </div>
+
+    <!-- DATA RETENTION (Privacy Act 1988 APP 11.2 / Health Records Act 2001 (Vic)) -->
+    <div id="tab-retention" class="tab-content">
+      <div class="section">
+        <div class="section-head"><span class="section-title">🔒 Data Retention</span></div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          Under the <em>Fair Work Act 2009</em>, shift and pay records must be kept for at least 7 years — so
+          this only lists guards who are <strong>inactive</strong> and whose most recent shift is at least
+          <span id="ret-years">7</span> years old. De-identifying clears their name, contact details, licence
+          number, health information (blood type) and next of kin from active records, while keeping
+          de-identified shift/pay history for financial records. <strong>This cannot be undone.</strong>
+          A guard's own Privacy Policy is at <a href="/privacy" target="_blank" style="color:var(--blue)">/privacy</a>.
+        </p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Employee #</th><th>Last Activity</th><th></th></tr></thead>
+            <tbody id="ret-tbody"></tbody>
+          </table>
+        </div>
+        <p id="ret-empty" class="hidden" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">
+          No guards are currently eligible for data retention review.
+        </p>
       </div>
     </div>
 
@@ -2520,6 +2552,11 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div class="form-group"><label class="form-label">Availability</label><input id="apl-availability" class="form-control" placeholder="e.g. Weekends and evenings"></div>
       <div class="form-group"><label class="form-label">Anything else you'd like us to know?</label><textarea id="apl-message" class="form-control" rows="3" placeholder="Optional cover note"></textarea></div>
       <div class="form-group"><label class="form-label">Resume (optional)</label><input type="file" id="apl-resume" class="form-control" accept=".pdf,.doc,.docx,image/*"></div>
+      <p style="font-size:11px;color:rgba(255,255,255,.55);line-height:1.5;margin:2px 0 12px">
+        By submitting, you agree we can use these details to assess your application and contact you about it.
+        We keep applications for up to 12 months unless you ask us to delete them sooner.
+        See our <a href="/privacy" target="_blank" style="color:var(--gold-l)">Privacy Policy</a> for how we handle your information.
+      </p>
       <button class="apl-submit" id="apl-submit-btn" onclick="submitJobApplication()">Submit Application</button>
       <div class="apl-err" id="apl-err"></div>
     </div>
@@ -2528,6 +2565,71 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
       <div class="apl-success-title">Application received</div>
       <div class="apl-success-sub">Thanks for applying — someone from our office will review your application and be in touch.</div>
     </div>
+  </div>
+</div>
+
+<!-- Public Privacy Policy — no auth, linked from the /apply collection
+     notice and the Guard Portal. Reflects this app's actual data handling;
+     update it if what's collected or how it's stored ever changes. -->
+<div id="privacy-page" class="hidden">
+  <div class="vfy-wordmark">
+    <svg viewBox="0 0 100 100" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+      <path d="M20 12 L80 12 Q86 12 86 18 L86 52 Q86 78 50 88 Q14 78 14 52 L14 18 Q14 12 20 12 Z"
+            fill="none" stroke="#e8c76a" stroke-width="6"/>
+    </svg>
+    <span id="pvp-company">Brown Owl Security</span>
+  </div>
+  <div class="apl-card" style="max-width:720px;text-align:left;line-height:1.6">
+    <div class="apl-title">Privacy Policy</div>
+    <p style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:16px">Last updated: 19 September 2026</p>
+
+    <h3>What we collect</h3>
+    <p><strong>Guards:</strong> name, contact details, security licence details, employee number, next of kin,
+    and — where relevant to your role — health information such as blood type. We also record shift, attendance,
+    clock-in/out location, incident reports (which may include photos and GPS location), leave requests, and
+    messages you send us through the app.</p>
+    <p><strong>Job applicants:</strong> name, contact details, licence details, work experience, availability,
+    and your resume if you provide one.</p>
+    <p><strong>Clients:</strong> site contact name and phone number.</p>
+
+    <h3>Why we collect it</h3>
+    <p>To roster and pay guards, meet security-licensing and workplace-safety obligations, respond to and
+    investigate incidents, assess job applications, and communicate with guards and clients about their work
+    with us.</p>
+
+    <h3>How your information is protected</h3>
+    <p>Admin accounts can be protected with two-factor authentication, access is role-restricted, and the
+    database is backed up on a rotating schedule. Some of our hosting and data-processing infrastructure is
+    located outside Australia (our cloud hosting provider), which may involve your information being handled
+    overseas.</p>
+
+    <h3>How long we keep it</h3>
+    <p>Employment-related records (pay, hours, leave) are kept for at least 7 years, as required by the
+    <em>Fair Work Act 2009</em> (Cth). Once a guard has left and that 7-year period has passed, we remove or
+    de-identify their personal details (name, contact details, licence number, health information, next of
+    kin) from our active systems, while keeping de-identified shift and pay records for our own financial and
+    compliance records. Job applications that don't lead to employment are kept for up to 12 months.</p>
+
+    <h3>Health information</h3>
+    <p>Any health information we hold (such as blood type, collected for emergency-response purposes) is
+    handled in accordance with the <em>Health Records Act 2001</em> (Vic) and its Health Privacy Principles.
+    You can ask to see or correct this information at any time.</p>
+
+    <h3>Your rights</h3>
+    <p>You can ask us what personal information we hold about you, ask us to correct it, or ask us to delete
+    it (subject to our legal retention obligations above). Guards can also download a copy of their own
+    information directly from the Guard Portal's Inbox → Help &amp; FAQ area. To make a request, contact the
+    office directly.</p>
+
+    <h3>Complaints</h3>
+    <p>If you're unhappy with how we've handled your personal information, please raise it with us directly
+    first. Unresolved privacy complaints can be made to the
+    <a href="https://www.oaic.gov.au" target="_blank" style="color:var(--gold-l)">Office of the Australian
+    Information Commissioner</a>; complaints specifically about health information held in Victoria can be
+    made to the <a href="https://hcc.vic.gov.au" target="_blank" style="color:var(--gold-l)">Health Complaints
+    Commissioner</a>.</p>
+
+    <p style="margin-top:20px"><a href="/" style="color:var(--gold-l)">← Back to login</a></p>
   </div>
 </div>
 
@@ -3372,6 +3474,7 @@ const TRANSLATIONS = {
     faq_no_results: "No results — try a different search, or start a new query below",
     faq_none_yet: "No FAQs available yet — start a new query and the office will help",
     today_label: "Today", yesterday_label: "Yesterday",
+    download_my_data: "📥 Download my data", privacy_policy_link: "🔒 Privacy Policy",
   },
   hi: {
     login_title: "गार्ड लॉगिन", login_email_label: "ईमेल पता", login_password_label: "पासवर्ड",
@@ -3491,6 +3594,7 @@ const TRANSLATIONS = {
     faq_no_results: "कोई परिणाम नहीं मिला — कुछ और खोजें, या नीचे नई क्वेरी शुरू करें",
     faq_none_yet: "अभी तक कोई सामान्य प्रश्न उपलब्ध नहीं है — नई क्वेरी शुरू करें, कार्यालय मदद करेगा",
     today_label: "आज", yesterday_label: "कल",
+    download_my_data: "📥 मेरा डेटा डाउनलोड करें", privacy_policy_link: "🔒 गोपनीयता नीति",
   },
   ur: {
     login_title: "گارڈ لاگ ان", login_email_label: "ای میل ایڈریس", login_password_label: "پاس ورڈ",
@@ -3610,6 +3714,7 @@ const TRANSLATIONS = {
     faq_no_results: "کوئی نتیجہ نہیں ملا — کچھ اور تلاش کریں، یا نیچے نئی کوئری شروع کریں",
     faq_none_yet: "ابھی تک کوئی عمومی سوالات دستیاب نہیں ہیں — نئی کوئری شروع کریں، دفتر مدد کرے گا",
     today_label: "آج", yesterday_label: "کل",
+    download_my_data: "📥 میرا ڈیٹا ڈاؤن لوڈ کریں", privacy_policy_link: "🔒 پرائیویسی پالیسی",
   },
   ar: {
     login_title: "تسجيل دخول الحارس", login_email_label: "البريد الإلكتروني", login_password_label: "كلمة المرور",
@@ -3729,6 +3834,7 @@ const TRANSLATIONS = {
     faq_no_results: "لا توجد نتائج — جرّب بحثًا مختلفًا، أو ابدأ استفسارًا جديدًا أدناه",
     faq_none_yet: "لا توجد أسئلة شائعة متاحة بعد — ابدأ استفسارًا جديدًا وسيساعدك المكتب",
     today_label: "اليوم", yesterday_label: "أمس",
+    download_my_data: "📥 تنزيل بياناتي", privacy_policy_link: "🔒 سياسة الخصوصية",
   },
 };
 const RTL_LANGS = new Set(['ur','ar']);
@@ -4025,7 +4131,7 @@ setInterval(syncPendingActions, 30000);
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
 function hideAllPages(){
-  ['guard-page','login-page','admin-page','client-page','verify-page','apply-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  ['guard-page','login-page','admin-page','client-page','verify-page','apply-page','privacy-page'].forEach(id=>document.getElementById(id).classList.add('hidden'));
 }
 function showGuard(){
   hideAllPages();
@@ -4112,6 +4218,14 @@ function showApplyPage(){
   fetch('/api/config').then(r=>r.json()).then(cfg=>{
     document.getElementById('apl-company').textContent = cfg.company_name;
     document.title = cfg.company_name + ' — Apply';
+  }).catch(()=>{});
+}
+function showPrivacyPage(){
+  hideAllPages();
+  document.getElementById('privacy-page').classList.remove('hidden');
+  fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    document.getElementById('pvp-company').textContent = cfg.company_name;
+    document.title = cfg.company_name + ' — Privacy Policy';
   }).catch(()=>{});
 }
 function toggleApplyLicenseFields(){
@@ -4413,13 +4527,14 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies'||name==='applicants');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies'||name==='applicants'||name==='retention');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='botkb')  loadBotKb();
   else if(name==='ratings') loadRatingsTab();
   else if(name==='policies') loadPoliciesTab();
   else if(name==='applicants') loadApplicantsTab();
+  else if(name==='retention') loadRetentionTab();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -4446,6 +4561,7 @@ async function init(){
   const vfyMatch = location.pathname.match(/^\/verify\/([^/]+)$/);
   if(vfyMatch){ showVerifyPage(vfyMatch[1]); return; }
   if(location.pathname === '/apply'){ showApplyPage(); return; }
+  if(location.pathname === '/privacy'){ showPrivacyPage(); return; }
   applyTranslations();
   try{
     const cfg = await apiFetch('/api/config');
@@ -5711,6 +5827,20 @@ function toggleGuardFaqItem(id){
   _openFaqId = _openFaqId===id ? null : id;
   document.querySelectorAll('.gfaq-item').forEach(el=>el.classList.toggle('open', el.id===`gfaq-item-${_openFaqId}`));
 }
+// ── Privacy: self-service access to your own data (Privacy Act APP 12 /
+// Health Records Act 2001 (Vic) individual access right) ───────────────────
+async function downloadMyData(){
+  try{
+    const res = await fetch('/api/guard/my-data', {headers:{'X-Auth-Token':guardAuthToken}});
+    if(!res.ok){ const e = await res.json().catch(()=>({error:'Could not fetch your data'})); toast(e.error,'error'); return; }
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `my-data-${fmtISO(new Date())}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Your data has been downloaded','success');
+  }catch(e){ toast('Could not download your data','error'); }
+}
 function showMsgThreadView(){
   document.getElementById('msg-wizard-categories').classList.add('hidden');
   document.getElementById('msg-wizard-details').classList.add('hidden');
@@ -5972,23 +6102,26 @@ function applyRoleRestrictions(role){
   const showBillTabs = ()=>{ billRatesBtn?.classList.remove('hidden'); billInvoicesBtn?.classList.remove('hidden'); };
   const hideBillTabs = ()=>{ billRatesBtn?.classList.add('hidden'); billInvoicesBtn?.classList.add('hidden'); billingSubtab='submissions'; };
   // Reset all tabs (and the Organization dropdown / billing sub-tabs) to visible first
-  ['dashboard','schedule','guards','sites','botkb','ratings','invoices','reminders','messages','incidents','admins','audit']
+  ['dashboard','schedule','guards','sites','botkb','ratings','invoices','reminders','messages','incidents','admins','audit','retention']
     .forEach(show);
   if(orgDropdown) orgDropdown.style.display = '';
   showBillTabs();
   if(role==='superadmin') return; // full access — nothing hidden
-  if(role==='administrator') return; // same nav as superadmin, restrictions enforced server-side
+  // Data retention (permanently de-identifying a guard's records) is one
+  // notch more sensitive than everything else "administrator" can already
+  // do, so it stays superadmin-only even though the rest of this nav matches.
+  if(role==='administrator'){ hide('retention'); return; }
   if(role==='manager'){
     // Manager: dashboard + submissions only (Rates/Invoices sub-tabs hidden within Invoices)
     hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
-    hide('reminders'); hide('messages'); hide('admins'); hide('audit');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only, Rates/Invoices sub-tabs hidden within Invoices)
     hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
-    hide('reminders'); hide('messages'); hide('admins'); hide('audit');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
@@ -8461,6 +8594,32 @@ async function deleteRatingNote(id){
   try{
     await apiFetch(`/api/ratings/notes/${id}`, {method:'DELETE'});
     openRatingDetail(currentRatingGuardId);
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Data Retention (admin, superadmin only) ─────────────────────────────────
+async function loadRetentionTab(){
+  const tbody = document.getElementById('ret-tbody');
+  tbody.innerHTML = skelRows(4, 2);
+  try{
+    const d = await apiFetch('/api/retention/candidates');
+    document.getElementById('ret-years').textContent = d.retention_years;
+    const rows = d.candidates || [];
+    document.getElementById('ret-empty').classList.toggle('hidden', rows.length > 0);
+    tbody.innerHTML = rows.map(g => `<tr>
+      <td>${escapeHtml(g.name)}</td>
+      <td>${escapeHtml(g.employee_no || '—')}</td>
+      <td>${fmtDate(g.last_activity)}</td>
+      <td><button class="btn btn-red btn-sm" onclick="anonymizeGuardData('${g.id}','${escapeHtml(g.name).replace(/'/g,"\\'")}')">De-identify</button></td>
+    </tr>`).join('');
+  }catch(e){ toast(e.message,'error'); tbody.innerHTML=''; }
+}
+async function anonymizeGuardData(id, name){
+  if(!confirm(`Permanently de-identify ${name}'s personal information?\n\nThis clears their name, contact details, licence number, health information and next of kin from active records. Shift and pay history is kept for financial records, but will no longer be linked to an identifiable person.\n\nThis CANNOT be undone.`)) return;
+  try{
+    await apiFetch(`/api/guards/${id}/anonymize`, {method:'POST'});
+    toast('Guard record de-identified','success');
+    loadRetentionTab();
   }catch(e){ toast(e.message,'error'); }
 }
 

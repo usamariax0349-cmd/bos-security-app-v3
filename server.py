@@ -257,6 +257,14 @@ os.makedirs(BACKUPS_PATH, exist_ok=True)
 BACKUP_INTERVAL_SECONDS = 12 * 3600
 BACKUP_KEEP = 14
 
+# ─── Data retention (Privacy Act 1988 APP 11.2) ────────────────────────────────
+# 7 years matches the Fair Work Act 2009 (Cth) s535 record-keeping requirement
+# for employee pay/hours/leave records — the actual law that determines how
+# long this data must be kept, so it's also the earliest point APP 11.2 lets
+# it be de-identified once a guard is no longer active. This constant is the
+# single source of truth for that threshold.
+RETENTION_YEARS = 7
+
 def run_db_backup():
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     dest = os.path.join(BACKUPS_PATH, f'security_{stamp}.db')
@@ -1431,6 +1439,10 @@ def init_db():
         ("admins", "mfa_pending_secret", "ALTER TABLE admins ADD COLUMN mfa_pending_secret TEXT DEFAULT ''"),
         ("admins", "mfa_enabled",        "ALTER TABLE admins ADD COLUMN mfa_enabled INTEGER DEFAULT 0"),
         ("admins", "mfa_backup_codes",   "ALTER TABLE admins ADD COLUMN mfa_backup_codes TEXT DEFAULT ''"),
+        # Data retention (Privacy Act 1988 APP 11.2 / Health Records Act 2001
+        # (Vic)) — marks a guard record as already de-identified, so the
+        # retention tool never re-processes it and admins can see it's done.
+        ("guards", "anonymized_at", "ALTER TABLE guards ADD COLUMN anonymized_at TEXT"),
     ]
     existing_cols = {}
     newly_added = set()
@@ -2445,6 +2457,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # account or reveals anything about the roster.
         if path == '/apply':
             self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
+        # Public Privacy Policy — same SPA shell, no auth, linked from the
+        # /apply collection notice and the Guard Portal.
+        if path == '/privacy':
+            self.serve_file(os.path.join(PUBLIC_PATH,'index.html'),'text/html'); return
         if path == '/manifest.json':
             self.serve_file(os.path.join(PUBLIC_PATH,'manifest.json'),'application/manifest+json'); return
         if path == '/sw.js':
@@ -2941,6 +2957,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 rows = RL(db.execute(
                     'SELECT id,question,answer FROM faqs WHERE active=1 ORDER BY sort_order').fetchall())
                 db.close(); self.send_json(rows); return
+
+            # Self-service access to every personal record this app holds about
+            # the requesting guard — the Privacy Act's APP 12 access right, and
+            # (for the health-adjacent fields like blood_type) the Health
+            # Records Act 2001 (Vic) individual right of access, both apply
+            # regardless of the employee-records exemption that covers most of
+            # the rest of this data. No admin approval needed: it's their own
+            # data, about themselves.
+            if path == '/api/guard/my-data':
+                gid = gsx['guard_id']
+                db = get_db()
+                profile = no_secrets(R(db.execute('SELECT * FROM guards WHERE id=?', (gid,)).fetchone()))
+                data = {
+                    'profile': profile,
+                    'shifts': RL(db.execute('''SELECT site_id,shift_date,start_time,end_time,position,
+                        clock_in_at,clock_in_lat,clock_in_lng,clock_out_at,clock_out_lat,clock_out_lng,cancelled
+                        FROM shifts WHERE guard_id=?''', (gid,)).fetchall()),
+                    'submissions': RL(db.execute(
+                        'SELECT site_id,shift_date,start_time,end_time,total_hours,notes,lat,lng,location_verified,status,submitted_at FROM submissions WHERE guard_id=?', (gid,)).fetchall()),
+                    'incidents': RL(db.execute(
+                        'SELECT site_id,type,description,lat,lng,status,occurred_at FROM incidents WHERE guard_id=?', (gid,)).fetchall()),
+                    'leave': RL(db.execute(
+                        'SELECT leave_type,start_date,end_date,notes FROM guard_leave WHERE guard_id=?', (gid,)).fetchall()),
+                    'policy_signatures': RL(db.execute(
+                        'SELECT policy_id,signed_name,signed_at FROM policy_signatures WHERE guard_id=?', (gid,)).fetchall()),
+                    'messages': RL(db.execute(
+                        'SELECT sender,body,created_at FROM messages WHERE guard_id=?', (gid,)).fetchall()),
+                    'compliance': RL(db.execute(
+                        'SELECT item_id,checked,reference_no,expiry_date FROM guard_compliance WHERE guard_id=?', (gid,)).fetchall()),
+                    # Internal performance/conduct notes are deliberately excluded —
+                    # never guard-visible anywhere else in this app either, per
+                    # the rating system's own design (a rating is a management
+                    # tool, not something shown to the person it's about).
+                }
+                db.close()
+                self.send_json(data); return
 
             if path == '/api/guard/compliance':
                 db = get_db()
@@ -3470,6 +3522,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s, 'BACKUP_DOWNLOAD'); db.commit(); db.close()
             stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             self.send_download(data, 'application/octet-stream', f'bos_backup_{stamp}.db'); return
+
+        # Data retention (Privacy Act 1988 APP 11.2) — inactive guards whose
+        # last real activity (their most recent shift, or account creation if
+        # they never had one) is past RETENTION_YEARS and haven't already been
+        # de-identified. Superadmin only: this is a review queue for a
+        # deliberate, one-way action, not something a manager stumbles into.
+        if path == '/api/retention/candidates':
+            s2 = self.require_admin('superadmin')
+            if not s2: return
+            db = get_db()
+            rows = RL(db.execute('''
+                SELECT g.id, g.name, g.employee_no, g.created_at,
+                       (SELECT MAX(shift_date) FROM shifts WHERE guard_id=g.id) as last_shift_date
+                FROM guards g WHERE g.active=0 AND g.anonymized_at IS NULL
+            ''').fetchall())
+            db.close()
+            cutoff = (datetime.now() - timedelta(days=365*RETENTION_YEARS)).strftime('%Y-%m-%d')
+            candidates = []
+            for r in rows:
+                last_activity = r['last_shift_date'] or (r['created_at'] or '')[:10]
+                if last_activity and last_activity < cutoff:
+                    candidates.append({'id': r['id'], 'name': r['name'], 'employee_no': r['employee_no'],
+                                        'last_activity': last_activity})
+            self.send_json({'retention_years': RETENTION_YEARS, 'candidates': candidates}); return
 
         if path == '/api/incidents':
             db = get_db(); where=[]; params=[]
@@ -4434,6 +4510,54 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     f"— {COMPANY_NAME}"
                 )
             self.send_json({'ok':True,'temp_password':temp_pw,'emailed':emailed}); return
+
+        # Data retention (Privacy Act 1988 APP 11.2 / Health Records Act 2001
+        # (Vic)) — de-identifies a departed guard's personal and health
+        # information once it's genuinely no longer needed. Shift/submission
+        # rows are kept (Fair Work Act s535 requires pay/hours records for 7
+        # years regardless), but they stop being linked to an identifiable
+        # person: name becomes a generic label, every other personal field —
+        # contact details, licence number, blood type, next of kin, photo —
+        # is cleared. Re-checks eligibility server-side rather than trusting
+        # the candidate list the client saw, since the guard's status could
+        # have changed since that page loaded. One-way: there is no undo.
+        m = re.match(r'^/api/guards/([^/]+)/anonymize$', path)
+        if m:
+            s2 = self.require_admin('superadmin')
+            if not s2: return
+            db = get_db()
+            guard = R(db.execute('SELECT * FROM guards WHERE id=?', (m.group(1),)).fetchone())
+            if not guard: db.close(); self.err('Guard not found', 404); return
+            if guard.get('active'):
+                db.close(); self.err('Guard is still active — deactivate them first', 400); return
+            if guard.get('anonymized_at'):
+                db.close(); self.err('This guard has already been de-identified', 400); return
+            last_shift = R(db.execute(
+                'SELECT MAX(shift_date) as d FROM shifts WHERE guard_id=?', (guard['id'],)).fetchone())
+            last_activity = (last_shift['d'] if last_shift else None) or (guard.get('created_at') or '')[:10]
+            cutoff = (datetime.now() - timedelta(days=365*RETENTION_YEARS)).strftime('%Y-%m-%d')
+            if not last_activity or last_activity >= cutoff:
+                db.close()
+                self.err(f'Not yet eligible — records must be at least {RETENTION_YEARS} years old '
+                         f'(last activity: {last_activity or "unknown"})', 400); return
+            original_name = guard['name']
+            if guard.get('photo_filename'):
+                try: os.remove(os.path.join(UPLOADS_PATH, guard['photo_filename']))
+                except OSError: pass
+            if guard.get('license_file'):
+                try: os.remove(os.path.join(UPLOADS_PATH, guard['license_file']))
+                except OSError: pass
+            label = f"Former Guard ({guard.get('employee_no') or guard['id'][:8]})"
+            db.execute('''UPDATE guards SET
+                name=?, license_number='', phone='', email='', notes='', blood_type='',
+                next_of_kin_name='', next_of_kin_phone='', license_state='', license_class='',
+                license_file=NULL, photo_filename=NULL, public_verify_token=NULL,
+                password_hash='', salt='', anonymized_at=?
+                WHERE id=?''', (label, datetime.now().isoformat(), guard['id']))
+            audit(db, s2, 'DATA_RETENTION_ANONYMIZED',
+                  f"{original_name} (last activity {last_activity}, {RETENTION_YEARS}+ years ago)")
+            db.commit(); db.close()
+            self.send_json({'ok': True}); return
 
         # Records that an admin manually checked this guard's licence against
         # LARS (Victoria Police's register) — there's no public API for it, so
