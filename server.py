@@ -1271,6 +1271,19 @@ def init_db():
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_by TEXT
         );
+
+        -- Feature flags for gradual rollout: a flag is either fully off, fully
+        -- on, or on for a deterministic percentage of subjects (rollout_pct),
+        -- so a given admin/guard consistently lands on the same side of a
+        -- rollout instead of flipping on every request. See flag_enabled().
+        CREATE TABLE IF NOT EXISTS feature_flags (
+            key          TEXT PRIMARY KEY,
+            enabled      INTEGER NOT NULL DEFAULT 0,
+            rollout_pct  INTEGER NOT NULL DEFAULT 100,
+            description  TEXT NOT NULL DEFAULT '',
+            updated_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_by   TEXT
+        );
     ''')
     conn.commit()
 
@@ -1740,6 +1753,28 @@ def audit(conn, session, action, details=''):
     conn.execute('INSERT INTO audit_log (id,admin_id,admin_name,action,details) VALUES (?,?,?,?,?)',
                  (str(uuid.uuid4()), session.get('admin_id',''), session.get('name',''),
                   action, details))
+
+def flag_enabled(db, key, subject_id=None):
+    """Is this feature flag on for this subject (a guard_id/admin_id)?
+
+    A disabled flag or an unknown key is always False. An enabled flag at
+    rollout_pct=100 is True for everyone; at 0 it's False for everyone.
+    Anywhere in between, a subject's bucket is a stable hash of key+subject_id
+    (0-99) rather than random per-call, so the same guard/admin always lands
+    on the same side of a given rollout instead of flickering on reload.
+    A partial rollout with no subject_id to bucket on is False — there's no
+    stable way to decide, and False is the safer default.
+    """
+    row = db.execute('SELECT enabled, rollout_pct FROM feature_flags WHERE key=?', (key,)).fetchone()
+    if not row or not row['enabled']:
+        return False
+    pct = row['rollout_pct']
+    if pct >= 100:
+        return True
+    if pct <= 0 or not subject_id:
+        return False
+    bucket = int(hashlib.sha256(f'{key}:{subject_id}'.encode()).hexdigest(), 16) % 100
+    return bucket < pct
 
 DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 
@@ -2870,6 +2905,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             db.close()
             self.send_json(resp); return
 
+        # Any logged-in admin, client or guard can read which flags are on
+        # for THEM — this is what frontend code calls to decide whether to
+        # render a feature that's mid-rollout, without needing a new
+        # backend endpoint per flag. Deliberately ahead of both the guard
+        # block and the "Admin-only below" gate further down, since it must
+        # serve either kind of session, not just one.
+        if path == '/api/feature-flags/mine':
+            s = self.get_session() or self.get_guard_session()
+            if not s: self.err('Unauthorized', 401); return
+            subject_id = s.get('admin_id') or s.get('guard_id')
+            db = get_db()
+            keys = [r['key'] for r in db.execute('SELECT key FROM feature_flags').fetchall()]
+            flags = {k: flag_enabled(db, k, subject_id) for k in keys}
+            db.close()
+            self.send_json(flags); return
+
         # ── Guard-authenticated: every /api/guard/* GET route lives inside this
         # block so a request for anything else (admin routes included) skips
         # it entirely rather than being incorrectly gated by require_guard() ──
@@ -3636,6 +3687,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     candidates.append({'id': r['id'], 'name': r['name'], 'employee_no': r['employee_no'],
                                         'last_activity': last_activity})
             self.send_json({'retention_years': RETENTION_YEARS, 'candidates': candidates}); return
+
+        # Feature flags — superadmin manages them (Organization > Feature
+        # Flags); this list view is the management screen's data source.
+        if path == '/api/feature-flags':
+            s2 = self.require_admin('superadmin')
+            if not s2: return
+            db = get_db()
+            rows = RL(db.execute('SELECT * FROM feature_flags ORDER BY key').fetchall())
+            db.close()
+            self.send_json(rows); return
 
         if path == '/api/incidents':
             db = get_db(); where=[]; params=[]
@@ -4986,6 +5047,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
             audit(db, s2, 'BOT_KB_UPDATE', f"{len(fields)} field(s)"); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
+        if path == '/api/feature-flags':
+            # Superadmin only — this gates real production behavior for
+            # real users, not a config value a manager should be able to
+            # flip. Upsert by key: posting an existing key updates it in
+            # place rather than erroring, so the admin UI can just always
+            # POST the whole edited row.
+            s2 = self.require_admin('superadmin')
+            if not s2: return
+            key = (data.get('key') or '').strip()
+            if not key: self.err('key required'); return
+            if not re.fullmatch(r'[a-z][a-z0-9_]*', key):
+                self.err('key must be lowercase snake_case (e.g. new_dashboard)'); return
+            try:
+                rollout_pct = int(data.get('rollout_pct', 100))
+            except (TypeError, ValueError):
+                self.err('rollout_pct must be a number'); return
+            if not 0 <= rollout_pct <= 100:
+                self.err('rollout_pct must be between 0 and 100'); return
+            enabled = 1 if data.get('enabled') else 0
+            description = (data.get('description') or '').strip()
+            db = get_db()
+            db.execute('''INSERT INTO feature_flags (key,enabled,rollout_pct,description,updated_at,updated_by)
+                          VALUES (?,?,?,?,?,?)
+                          ON CONFLICT(key) DO UPDATE SET enabled=excluded.enabled,
+                              rollout_pct=excluded.rollout_pct, description=excluded.description,
+                              updated_at=excluded.updated_at, updated_by=excluded.updated_by''',
+                       (key, enabled, rollout_pct, description, datetime.now().isoformat(), s2['name']))
+            audit(db, s2, 'FEATURE_FLAG_SET', f"{key}: enabled={bool(enabled)} rollout={rollout_pct}%")
+            db.commit(); db.close()
+            self.send_json({'ok': True}); return
+
         if path == '/api/policies':
             s2 = self.require_admin('manager')
             if not s2: return
@@ -5536,6 +5628,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 db.close(); self.err('Admin not found', 404); return
             db.execute('DELETE FROM admins WHERE id=?', (m.group(1),))
             audit(db, s, 'ADMIN_DELETE', target.get('name',m.group(1))); db.commit(); db.close()
+            self.send_json({'ok':True}); return
+
+        m = re.match(r'^/api/feature-flags/([^/]+)$', path)
+        if m:
+            s = self.require_admin('superadmin')
+            if s is None: return
+            db = get_db()
+            db.execute('DELETE FROM feature_flags WHERE key=?', (m.group(1),))
+            audit(db, s, 'FEATURE_FLAG_DELETE', m.group(1)); db.commit(); db.close()
             self.send_json({'ok':True}); return
 
         s = self.require_admin('manager')

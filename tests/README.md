@@ -63,6 +63,12 @@ with each other even though they share one server and one DB.
   the internal keyword-matching fields), submitting a support ticket, and
   the reactive auto-reply that matches a free-text message against a FAQ
   keyword.
+- **`test_feature_flags.py`** — superadmin-only CRUD on feature flags (a
+  guard token gets 401, a manager gets 403), key-format and rollout-percent
+  validation, a disabled flag reading as off for everyone, 100%/0% rollout
+  being all-or-nothing, a partial rollout landing the same guard on the same
+  side of it across five repeated calls (not a coin flip per request), and a
+  deleted flag no longer appearing.
 
 ## What's deliberately not covered
 
