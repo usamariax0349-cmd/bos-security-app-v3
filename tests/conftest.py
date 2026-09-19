@@ -4,6 +4,7 @@ set a guard's password directly (bypassing the invite-email step, which is
 its own concern — these tests are about what the app does once someone is
 logged in, not the invite flow).
 """
+import collections
 import json
 import os
 import shutil
@@ -11,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -33,6 +35,19 @@ def _free_port():
     port = s.getsockname()[1]
     s.close()
     return port
+
+
+def _drain_stdout(proc, buf):
+    """server.py logs structured JSON on every request now — if nothing
+    reads its stdout pipe, the OS pipe buffer fills up and the server
+    deadlocks the moment a request handler blocks on a write() call that
+    never drains. Keeps only the last `buf.maxlen` lines, just enough for a
+    startup-failure error message; nothing here is asserted on."""
+    try:
+        for line in proc.stdout:
+            buf.append(line.decode(errors="replace"))
+    except Exception:
+        pass
 
 
 class Api:
@@ -79,6 +94,8 @@ def server_info():
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
+    output_buf = collections.deque(maxlen=500)
+    threading.Thread(target=_drain_stdout, args=(proc, output_buf), daemon=True).start()
     base_url = f"http://localhost:{port}"
     up = False
     for _ in range(60):
@@ -91,9 +108,8 @@ def server_info():
         except Exception:
             time.sleep(0.5)
     if not up:
-        out = proc.stdout.read().decode(errors="replace") if proc.stdout else ""
         proc.terminate()
-        raise RuntimeError(f"server.py did not start on {base_url}:\n{out}")
+        raise RuntimeError(f"server.py did not start on {base_url}:\n{''.join(output_buf)}")
 
     yield ServerInfo(base_url, data_dir)
 

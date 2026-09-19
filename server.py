@@ -6,6 +6,7 @@ Run:  py server.py  →  http://localhost:5000
 """
 
 import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secrets, math, time, threading, hmac, struct
+import logging, sys
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
@@ -32,6 +33,37 @@ try:
     PYWEBPUSH_OK = True
 except ImportError:
     PYWEBPUSH_OK = False
+
+# ─── Structured logging ─────────────────────────────────────────────────────────
+# One JSON object per line on stdout — Railway (and any other log collector)
+# ingests stdout as-is, so this is the cheapest way to get filterable,
+# machine-parseable logs (by level, by path, by status) without standing up
+# a separate logging service. Every HTTP request gets one line from
+# Handler._handle_request(); operational events (backup, push, email,
+# session persistence, escalation) log through this same logger instead of
+# print(), so they carry a level and a timestamp instead of just text.
+class JsonLogFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {
+            'ts': datetime.utcfromtimestamp(record.created).isoformat(timespec='milliseconds') + 'Z',
+            'level': record.levelname,
+            'logger': record.name,
+            'message': record.getMessage(),
+        }
+        extra = getattr(record, 'extra_fields', None)
+        if extra:
+            payload.update(extra)
+        if record.exc_info:
+            payload['exception'] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+logger = logging.getLogger('bos')
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _log_handler = logging.StreamHandler(sys.stdout)
+    _log_handler.setFormatter(JsonLogFormatter())
+    logger.addHandler(_log_handler)
+    logger.propagate = False
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 PORT         = int(os.environ.get('PORT', 5000))
@@ -101,7 +133,7 @@ def persist_session(store, token, sess):
                    (token, kind, json.dumps(sess), sess.get('created_at', time.time()), sess.get('last_seen', time.time())))
         db.commit(); db.close()
     except Exception as e:
-        print(f'  SESSION PERSIST: failed to save {kind} session: {e}')
+        logger.error(f'session persist: failed to save {kind} session', extra={'extra_fields': {'event': 'session_persist_save_failed', 'kind': kind, 'error': str(e)}})
 
 def drop_persisted_session(token):
     try:
@@ -109,7 +141,7 @@ def drop_persisted_session(token):
         db.execute('DELETE FROM sessions_store WHERE token=?', (token,))
         db.commit(); db.close()
     except Exception as e:
-        print(f'  SESSION PERSIST: failed to drop session: {e}')
+        logger.error('session persist: failed to drop session', extra={'extra_fields': {'event': 'session_persist_drop_failed', 'error': str(e)}})
 
 def restore_sessions():
     """Reload every not-yet-expired session from disk into the in-memory
@@ -120,7 +152,7 @@ def restore_sessions():
         rows = db.execute('SELECT token,kind,data,created_at,last_seen FROM sessions_store').fetchall()
         db.close()
     except Exception as e:
-        print(f'  SESSION PERSIST: restore failed: {e}'); return
+        logger.error('session persist: restore failed', extra={'extra_fields': {'event': 'session_persist_restore_failed', 'error': str(e)}}); return
     now = time.time()
     restored_admin = restored_guard = 0
     stale_tokens = []
@@ -141,9 +173,10 @@ def restore_sessions():
             db.executemany('DELETE FROM sessions_store WHERE token=?', [(t,) for t in stale_tokens])
             db.commit(); db.close()
         except Exception as e:
-            print(f'  SESSION PERSIST: cleanup failed: {e}')
+            logger.error('session persist: cleanup failed', extra={'extra_fields': {'event': 'session_persist_cleanup_failed', 'error': str(e)}})
     if restored_admin or restored_guard:
-        print(f'  SESSIONS: restored {restored_admin} admin/client and {restored_guard} guard session(s) from disk')
+        logger.info(f'sessions: restored {restored_admin} admin/client and {restored_guard} guard session(s) from disk',
+                    extra={'extra_fields': {'event': 'sessions_restored', 'restored_admin': restored_admin, 'restored_guard': restored_guard}})
 
 # ─── Login rate limiting ──────────────────────────────────────────────────────
 # In-memory and per-IP (via X-Forwarded-For, since Railway's proxy means
@@ -284,7 +317,7 @@ def _backup_loop():
     while True:
         time.sleep(BACKUP_INTERVAL_SECONDS)
         try: run_db_backup()
-        except Exception as e: print(f'  BACKUP: snapshot failed: {e}')
+        except Exception as e: logger.error('backup: snapshot failed', extra={'extra_fields': {'event': 'backup_failed', 'error': str(e)}})
 
 # ─── Password Hashing ─────────────────────────────────────────────────────────
 def hash_password(password, salt=None):
@@ -376,7 +409,7 @@ def with_shift_status(rows):
 def send_email(to_email, subject, body_text):
     """Send a plain-text email via SMTP. Silently skips if SMTP is not configured."""
     if not SMTP_HOST or not SMTP_USER:
-        print(f"  EMAIL: SMTP not configured — skipping notification to {to_email}")
+        logger.info('email: SMTP not configured — skipping notification', extra={'extra_fields': {'event': 'email_skipped_no_smtp', 'to': to_email}})
         return False
     try:
         msg = MIMEText(body_text, 'plain')
@@ -388,10 +421,10 @@ def send_email(to_email, subject, body_text):
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)
-        print(f"  EMAIL: Sent '{subject}' to {to_email}")
+        logger.info(f"email: sent '{subject}'", extra={'extra_fields': {'event': 'email_sent', 'to': to_email, 'subject': subject}})
         return True
     except Exception as e:
-        print(f"  EMAIL: Failed to send to {to_email}: {e}")
+        logger.error(f'email: failed to send to {to_email}', extra={'extra_fields': {'event': 'email_send_failed', 'to': to_email, 'error': str(e)}})
         return False
 
 # ─── Web Push ─────────────────────────────────────────────────────────────────
@@ -438,9 +471,9 @@ def send_push(guard_id, title, body, url='/'):
             if status in (404, 410):
                 db.execute('DELETE FROM push_subscriptions WHERE id=?', (sub['id'],))
             else:
-                print(f'  PUSH: failed for guard {guard_id}: {e}')
+                logger.error(f'push: failed for guard {guard_id}', extra={'extra_fields': {'event': 'push_failed', 'guard_id': guard_id, 'status': status, 'error': str(e)}})
         except Exception as e:
-            print(f'  PUSH: unexpected error for guard {guard_id}: {e}')
+            logger.error(f'push: unexpected error for guard {guard_id}', extra={'extra_fields': {'event': 'push_error', 'guard_id': guard_id, 'error': str(e)}})
     db.commit(); db.close()
 
 QUERY_STATUS_LABELS = {
@@ -1453,7 +1486,7 @@ def init_db():
             conn.execute(sql)
             existing_cols[table].add(col)
             newly_added.add((table, col))
-            print(f'  Migrated: added {table}.{col}')
+            logger.info(f'migration: added {table}.{col}', extra={'extra_fields': {'event': 'schema_migrated', 'table': table, 'column': col}})
     conn.commit()
 
     # Backfill: on the deploy that introduces missed-clock-in alerts, treat
@@ -1463,7 +1496,8 @@ def init_db():
     if ('shifts', 'missed_alert_sent_at') in newly_added:
         conn.execute("UPDATE shifts SET missed_alert_sent_at=CURRENT_TIMESTAMP WHERE missed_alert_sent_at IS NULL")
         conn.commit()
-        print('  Missed-clock-in alerts: backfilled existing shifts — only new misses will notify')
+        logger.info('missed-clock-in alerts: backfilled existing shifts — only new misses will notify',
+                    extra={'extra_fields': {'event': 'missed_alert_backfill'}})
 
     # ── Roster seed for the week of 31 Aug – 6 Sep 2026 ──────────────────────
     # seed_data.py (run by the Procfile before this script, on every startup)
@@ -1572,7 +1606,8 @@ def init_db():
     for guard_name, site_name, d, st, et in SEED_SHIFTS + [(g, s, d, st, '') for g, s, d, st in SEED_SHIFTS_OPEN_ENDED]:
         gid, sid = _resolve_guard_id(guard_name), _resolve_site_id(site_name)
         if not gid or not sid:
-            print(f'  WARNING: could not seed shift for {guard_name} @ {site_name} — guard or site not found')
+            logger.warning(f'could not seed shift for {guard_name} @ {site_name} — guard or site not found',
+                           extra={'extra_fields': {'event': 'shift_seed_skipped', 'guard_name': guard_name, 'site_name': site_name}})
             continue
         if not conn.execute('''SELECT 1 FROM shifts WHERE guard_id=? AND site_id=?
                                 AND shift_date=? AND start_time=?''', (gid, sid, d, st)).fetchone():
@@ -1582,7 +1617,8 @@ def init_db():
                             VALUES (?,?,?,?,?,?,1)''', (str(uuid.uuid4()), gid, sid, d, st, et))
             seeded_shifts += 1
     conn.commit()
-    print(f'  Roster seed: {added_guards} new guards, {added_sites} new sites, {seeded_shifts} shifts added')
+    logger.info(f'roster seed: {added_guards} new guards, {added_sites} new sites, {seeded_shifts} shifts added',
+                extra={'extra_fields': {'event': 'roster_seeded', 'added_guards': added_guards, 'added_sites': added_sites, 'seeded_shifts': seeded_shifts}})
 
     # Always ensure the superadmin from env vars exists with correct password
     h, salt = hash_password(DEFAULT_ADMIN_PASSWORD)
@@ -1591,12 +1627,12 @@ def init_db():
     if existing:
         conn.execute('''UPDATE admins SET password_hash=?, salt=?, role='superadmin', active=1
                         WHERE email=?''', (h, salt, DEFAULT_ADMIN_EMAIL.lower()))
-        print(f'  Superadmin password synced: {DEFAULT_ADMIN_EMAIL}')
+        logger.info(f'superadmin password synced: {DEFAULT_ADMIN_EMAIL}', extra={'extra_fields': {'event': 'superadmin_synced'}})
     else:
         conn.execute('''INSERT INTO admins (id,name,email,password_hash,salt,role)
                         VALUES (?,?,?,?,?,'superadmin')''',
                      (str(uuid.uuid4()), DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL.lower(), h, salt))
-        print(f'  Superadmin created: {DEFAULT_ADMIN_EMAIL}')
+        logger.info(f'superadmin created: {DEFAULT_ADMIN_EMAIL}', extra={'extra_fields': {'event': 'superadmin_created'}})
     conn.commit()
 
     # Case-insensitive unique email per guard, like admins_email — but only
@@ -1611,7 +1647,8 @@ def init_db():
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS guards_email ON guards(lower(email)) WHERE email != ''")
         conn.commit()
     except sqlite3.IntegrityError as e:
-        print(f'  WARNING: guards_email unique index not created — duplicate guard emails exist: {e}')
+        logger.warning('guards_email unique index not created — duplicate guard emails exist',
+                       extra={'extra_fields': {'event': 'guards_email_index_skipped', 'error': str(e)}})
 
     # Offline checkpoint-scan replay dedup — see the migrations list above.
     conn.execute('''CREATE UNIQUE INDEX IF NOT EXISTS checkpoint_scans_client_scan_id
@@ -1630,9 +1667,10 @@ def init_db():
             conn.execute('INSERT INTO push_config (id, private_key, public_key) VALUES (1, ?, ?)',
                         (priv_b64, pub_b64))
             conn.commit()
-            print('  Push notifications: generated VAPID keypair')
+            logger.info('push notifications: generated VAPID keypair', extra={'extra_fields': {'event': 'vapid_keypair_generated'}})
         except Exception as e:
-            print(f'  WARNING: could not generate VAPID keys — push notifications disabled: {e}')
+            logger.warning('could not generate VAPID keys — push notifications disabled',
+                           extra={'extra_fields': {'event': 'vapid_keypair_failed', 'error': str(e)}})
 
     # One-time bootstrap: every guard predates password logins, so give each
     # active one without a password a random temp password now rather than
@@ -1663,7 +1701,8 @@ def init_db():
             conn.execute('UPDATE guards SET public_verify_token=? WHERE id=?',
                          (secrets.token_urlsafe(24), gid))
         conn.commit()
-        print(f'  Generated public verification tokens for {len(needs_verify_token)} guard(s)')
+        logger.info(f'generated public verification tokens for {len(needs_verify_token)} guard(s)',
+                    extra={'extra_fields': {'event': 'verify_tokens_generated', 'count': len(needs_verify_token)}})
 
     conn.close()
 
@@ -1673,7 +1712,8 @@ def init_db():
     # get_db() connection instead, after the migration/seed work is committed.
     db = get_db()
     sent = check_expiry_reminders(db)
-    if sent: print(f'  Expiry check: {sent} new licence/compliance reminder(s) sent')
+    if sent: logger.info(f'expiry check: {sent} new licence/compliance reminder(s) sent',
+                         extra={'extra_fields': {'event': 'expiry_reminders_sent', 'count': sent}})
     db.close()
 
 def get_db():
@@ -1862,7 +1902,7 @@ def _escalation_loop():
             check_missed_clockins(db)
             db.close()
         except Exception as e:
-            print(f'  ESCALATION: missed clock-in check failed: {e}')
+            logger.error('escalation: missed clock-in check failed', extra={'extra_fields': {'event': 'escalation_check_failed', 'error': str(e)}})
 
 AVAIL_STALE_DAYS = 14  # matches the threshold the admin board already uses for its freshness flag
 
@@ -2341,7 +2381,55 @@ class Server(http.server.ThreadingHTTPServer):
 
 # ─── Handler ──────────────────────────────────────────────────────────────────
 class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *a): pass
+    def log_request(self, code='-', size='-'):
+        # BaseHTTPRequestHandler calls this from send_response() on every
+        # request — a no-op here since _dispatch below already logs every
+        # request once, structured, with the real status/duration/ip. Without
+        # this override that line would double up on every single request.
+        pass
+
+    def log_message(self, format, *args):
+        # Still reached for protocol-level failures that never make it to
+        # do_GET/do_POST at all (a malformed request line, a client that
+        # hangs up mid-header) — those go through log_error(), not
+        # log_request(), so they'd otherwise vanish with no trace.
+        try:
+            logger.warning('http protocol error', extra={'extra_fields': {
+                'event': 'http_protocol_error', 'message': format % args}})
+        except Exception:
+            pass
+
+    def send_response(self, code, message=None):
+        # Recorded so _dispatch can log the real status of every request,
+        # and so it knows whether a response already started before an
+        # unhandled exception hit — writing a second one would corrupt the
+        # connection.
+        self._response_status = code
+        super().send_response(code, message)
+
+    def _dispatch(self, method, route_fn):
+        self._response_status = None
+        start = time.time()
+        path = urlparse(self.path).path
+        try:
+            route_fn()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass  # client disconnected mid-response — not a server error
+        except Exception:
+            logger.error(f'unhandled exception handling {method} {path}', exc_info=True,
+                         extra={'extra_fields': {'event': 'unhandled_exception', 'method': method, 'path': path}})
+            if self._response_status is None:
+                try:
+                    self.send_json({'error': 'Internal server error'}, 500)
+                except Exception:
+                    pass
+        finally:
+            logger.info('request', extra={'extra_fields': {
+                'event': 'http_request', 'method': method, 'path': path,
+                'status': self._response_status,
+                'duration_ms': round((time.time() - start) * 1000, 1),
+                'ip': self.client_ip(),
+            }})
 
     def security_headers(self):
         # Cheap defense-in-depth that costs nothing functionally: this app has
@@ -2439,8 +2527,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.security_headers()
         self.end_headers(); self.wfile.write(data)
 
+    def do_GET(self): self._dispatch('GET', self._route_GET)
+
     # ── GET ────────────────────────────────────────────────────────────────────
-    def do_GET(self):
+    def _route_GET(self):
         p = urlparse(self.path); path = p.path; qs = parse_qs(p.query)
 
         # ── Static ──
@@ -3638,8 +3728,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self.send_response(404); self.end_headers()
 
+    def do_POST(self): self._dispatch('POST', self._route_POST)
+
     # ── POST ───────────────────────────────────────────────────────────────────
-    def do_POST(self):
+    def _route_POST(self):
         path = urlparse(self.path).path
         data = self.read_json()
 
@@ -5037,8 +5129,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self.send_response(404); self.end_headers()
 
+    def do_PUT(self): self._dispatch('PUT', self._route_PUT)
+
     # ── PUT ────────────────────────────────────────────────────────────────────
-    def do_PUT(self):
+    def _route_PUT(self):
         path = urlparse(self.path).path
         data = self.read_json()
 
@@ -5403,8 +5497,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self.send_response(404); self.end_headers()
 
+    def do_DELETE(self): self._dispatch('DELETE', self._route_DELETE)
+
     # ── DELETE ─────────────────────────────────────────────────────────────────
-    def do_DELETE(self):
+    def _route_DELETE(self):
         path = urlparse(self.path).path
 
         # Client portal: cancel a shift at their own site. A soft cancel
@@ -5539,12 +5635,12 @@ if __name__ == '__main__':
     try:
         run_db_backup()
     except Exception as e:
-        print(f'  BACKUP: startup snapshot failed: {e}')
+        logger.error('backup: startup snapshot failed', extra={'extra_fields': {'event': 'backup_startup_failed', 'error': str(e)}})
     threading.Thread(target=_backup_loop, daemon=True).start()
     try:
         db = get_db(); check_missed_clockins(db); db.close()
     except Exception as e:
-        print(f'  ESCALATION: startup missed clock-in check failed: {e}')
+        logger.error('escalation: startup missed clock-in check failed', extra={'extra_fields': {'event': 'escalation_startup_failed', 'error': str(e)}})
     threading.Thread(target=_escalation_loop, daemon=True).start()
     print(f"\n{'='*55}")
     print(f"  {COMPANY_NAME}")
