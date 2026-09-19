@@ -6,6 +6,7 @@ the session-scoped `server` fixture every other test file uses (that would
 disrupt whatever else is running in the same pytest session) — it manages
 its own throwaway server instead, only for the tests in this file.
 """
+import collections
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -45,6 +47,19 @@ def _call(base_url, method, path, body=None, token=None):
         return e.code, json.loads(e.read())
 
 
+def _drain_stdout(proc, buf):
+    """server.py logs structured JSON on every request now — if nothing
+    reads its stdout pipe, the OS pipe buffer fills up and the server
+    deadlocks the moment a request handler blocks on a write() call that
+    never drains. Keeps only the last `buf.maxlen` lines, just enough for a
+    startup-failure error message; nothing here is asserted on."""
+    try:
+        for line in proc.stdout:
+            buf.append(line.decode(errors="replace"))
+    except Exception:
+        pass
+
+
 def _launch(data_dir, port):
     env = os.environ.copy()
     env["DATA_DIR"] = data_dir
@@ -55,6 +70,8 @@ def _launch(data_dir, port):
         [sys.executable, "server.py"], cwd=REPO_ROOT, env=env,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
+    output_buf = collections.deque(maxlen=500)
+    threading.Thread(target=_drain_stdout, args=(proc, output_buf), daemon=True).start()
     base_url = f"http://localhost:{port}"
     for _ in range(60):
         if proc.poll() is not None:
@@ -64,9 +81,8 @@ def _launch(data_dir, port):
             return proc, base_url
         except Exception:
             time.sleep(0.5)
-    out = proc.stdout.read().decode(errors="replace") if proc.stdout else ""
     proc.terminate()
-    raise RuntimeError(f"server.py did not start on {base_url}:\n{out}")
+    raise RuntimeError(f"server.py did not start on {base_url}:\n{''.join(output_buf)}")
 
 
 @pytest.fixture
