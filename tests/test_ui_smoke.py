@@ -61,14 +61,18 @@ def test_guard_clock_in_out_cycle_via_ui(browser, server, api, admin_token, site
     page.click('button[onclick="guardDoLogin()"]')
     page.wait_for_timeout(1200)
 
-    dial = page.query_selector("#gh-dial-btn")
-    assert dial is not None, "expected the hold-to-clock-in dial on Home"
-    box = dial.bounding_box()
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    page.mouse.down()
-    page.wait_for_timeout(2200)
-    page.mouse.up()
+    # Login lands on the ID tab; the clock-in/out card lives on Shifts now.
+    page.click('[data-gtab="shifts"]')
     page.wait_for_timeout(1000)
+
+    # The slide-to-clock-on gesture needs a simulated drag; its always-present
+    # tap fallback ("Can't slide? Tap to clock in instead") exercises the same
+    # clockIn() call path without needing to fake pointer drag events.
+    page.on("dialog", lambda dialog: dialog.accept())
+    fallback = page.query_selector(".gid-slide-fallback")
+    assert fallback is not None, "expected the tap-to-clock-in fallback on the Shifts tab"
+    fallback.click()
+    page.wait_for_timeout(1500)
 
     assert "ON SHIFT" in page.inner_text("#gh-clock-card") or page.query_selector(".gh-in-elapsed") is not None
 

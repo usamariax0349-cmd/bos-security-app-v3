@@ -36,14 +36,39 @@ with each other even though they share one server and one DB.
   into another guard's shift even by calling the API directly), the panic
   alert flow, and incident reporting.
 - **`test_ui_smoke.py`** — two browser-driven tests: the admin dashboard
-  loads with no console errors, and a guard's hold-to-clock-in gesture
-  through to clock-out works end-to-end in a real page, checked against the
-  actual DB afterward (not just "no error was thrown").
+  loads with no console errors, and a guard's slide-to-clock-on gesture
+  (via its tap fallback, since simulating a pointer drag isn't worth the
+  flakiness) through to clock-out works end-to-end in a real page, checked
+  against the actual DB afterward (not just "no error was thrown").
+- **`test_mfa.py`** — TOTP enrollment/confirm (with an independent
+  RFC 6238 implementation, so this proves interop rather than the server
+  checking its own math), wrong-code rejection, `mfa_required` on login for
+  an enrolled account, pending 2FA sessions blocked from every other admin
+  route, backup-code login (and that a code is single-use), and that
+  regenerating backup codes or disabling MFA both require re-entering the
+  password.
+- **`test_session_persistence.py`** — kills and relaunches the actual
+  `server.py` process (its own throwaway server, not the shared session
+  fixture) to prove admin and guard sessions survive a restart — a Railway
+  deploy or crash — and that a session removed by `/api/logout` stays gone
+  after that restart rather than reappearing from a stale persisted row.
+- **`test_privacy.py`** — the public `/privacy` policy page, a guard's
+  self-service data export (`/api/guard/my-data`, and that it never leaks
+  `password_hash`/`salt`), superadmin-only gating on the data retention
+  tool, and the anonymize endpoint: rejecting an active guard, rejecting an
+  inactive guard who's within the 7-year Fair Work retention window, and on
+  an eligible guard clearing personal fields while keeping shift/pay history
+  intact for compliance.
+- **`test_messaging.py`** — a guard browsing the FAQ list (without seeing
+  the internal keyword-matching fields), submitting a support ticket, and
+  the reactive auto-reply that matches a free-text message against a FAQ
+  keyword.
 
 ## What's deliberately not covered
 
 This isn't full coverage — it's the golden paths that got hand-tested over
 and over during this app's development (clock in/out, panic, invoices,
-dashboard). Notification delivery (push/email), the offline IndexedDB
-queue, and every admin sub-tab are still manual-only. Worth extending this
-suite rather than re-testing those by hand next time they change.
+dashboard, MFA, retention). Notification delivery (push/email), the offline
+IndexedDB queue, and every admin sub-tab are still manual-only. Worth
+extending this suite rather than re-testing those by hand next time they
+change.
