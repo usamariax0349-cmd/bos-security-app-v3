@@ -1672,6 +1672,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         <button class="tab-dropdown-item" data-tab="policies" onclick="selectOrgTab('policies')">📋 Policies</button>
         <button class="tab-dropdown-item" data-tab="applicants" onclick="selectOrgTab('applicants')">📥 Applicants</button>
         <button class="tab-dropdown-item" data-tab="retention" onclick="selectOrgTab('retention')">🔒 Data Retention</button>
+        <button class="tab-dropdown-item" data-tab="flags" onclick="selectOrgTab('flags')">🚩 Feature Flags</button>
       </div>
     </div>
     <button class="tab-btn" id="tab-admins-btn" onclick="showTab('admins')" data-tab="admins" style="display:none">👥 Admins</button>
@@ -1971,6 +1972,31 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
         </div>
         <p id="ret-empty" class="hidden" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">
           No guards are currently eligible for data retention review.
+        </p>
+      </div>
+    </div>
+
+    <!-- FEATURE FLAGS -->
+    <div id="tab-flags" class="tab-content">
+      <div class="section">
+        <div class="section-head">
+          <span class="section-title">🚩 Feature Flags</span>
+          <button class="btn btn-primary btn-sm" onclick="openFlagModal()">+ Add Flag</button>
+        </div>
+        <p style="padding:0 20px 12px;font-size:13px;color:var(--muted)">
+          Gate a new feature behind a flag to ship it to a percentage of guards/admins before turning it
+          on for everyone. A given person always lands on the same side of a rollout — it's a stable hash
+          of the flag and their account, not a coin flip on every page load — so nobody's experience
+          flickers mid-rollout.
+        </p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Key</th><th>Status</th><th>Rollout</th><th>Description</th><th>Updated</th><th></th></tr></thead>
+            <tbody id="flags-tbody"></tbody>
+          </table>
+        </div>
+        <p id="flags-empty" class="hidden" style="padding:20px;text-align:center;color:var(--muted);font-size:13px">
+          No feature flags yet — add one to gate a rollout.
         </p>
       </div>
     </div>
@@ -2817,6 +2843,37 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('policy-modal')">Cancel</button>
       <button class="btn btn-primary" onclick="savePolicy()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feature flag modal -->
+<div id="flag-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="fm-title">Add Feature Flag</span><button class="modal-close" onclick="closeModal('flag-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Key *</label>
+        <input id="fm-key" class="form-control" placeholder="e.g. new_dashboard (lowercase_snake_case)">
+      </div>
+      <div class="form-group"><label class="form-label">Description</label>
+        <textarea id="fm-description" class="form-control" rows="2" placeholder="What this flag gates, for other admins"></textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:12px">
+        <input type="checkbox" id="fm-enabled"> Enabled
+      </label>
+      <div class="form-group">
+        <label class="form-label">Rollout: <span id="fm-pct-label">100</span>%</label>
+        <input type="range" id="fm-pct" min="0" max="100" value="100" style="width:100%" oninput="document.getElementById('fm-pct-label').textContent=this.value">
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">
+          Percentage of accounts this flag is on for, once Enabled is checked. Each account is bucketed
+          consistently — 50% means the same half of your guards/admins every time, not a random half per visit.
+        </div>
+      </div>
+      <div id="fm-err" style="color:var(--red);font-size:13px;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('flag-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFeatureFlag()">Save</button>
     </div>
   </div>
 </div>
@@ -4527,7 +4584,7 @@ function showTab(name){
   document.getElementById(`tab-${name}`)?.classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
   document.querySelector(`.tab-dropdown-item[data-tab="${name}"]`)?.classList.add('active');
-  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies'||name==='applicants'||name==='retention');
+  document.getElementById('org-trigger')?.classList.toggle('active', name==='guards'||name==='sites'||name==='botkb'||name==='ratings'||name==='policies'||name==='applicants'||name==='retention'||name==='flags');
   if(name==='guards'){ loadGuardsAdmin(); loadAvailability(); }
   else if(name==='sites')   loadSitesAdmin();
   else if(name==='botkb')  loadBotKb();
@@ -4535,6 +4592,7 @@ function showTab(name){
   else if(name==='policies') loadPoliciesTab();
   else if(name==='applicants') loadApplicantsTab();
   else if(name==='retention') loadRetentionTab();
+  else if(name==='flags') loadFeatureFlagsTab();
   else if(name==='invoices') showBillingSubtab(billingSubtab);
   else if(name==='reports'){ loadReportsTab(); loadActivity(); }
   else if(name==='reminders')loadRemindersTab();
@@ -6102,26 +6160,28 @@ function applyRoleRestrictions(role){
   const showBillTabs = ()=>{ billRatesBtn?.classList.remove('hidden'); billInvoicesBtn?.classList.remove('hidden'); };
   const hideBillTabs = ()=>{ billRatesBtn?.classList.add('hidden'); billInvoicesBtn?.classList.add('hidden'); billingSubtab='submissions'; };
   // Reset all tabs (and the Organization dropdown / billing sub-tabs) to visible first
-  ['dashboard','schedule','guards','sites','botkb','ratings','invoices','reminders','messages','incidents','admins','audit','retention']
+  ['dashboard','schedule','guards','sites','botkb','ratings','invoices','reminders','messages','incidents','admins','audit','retention','flags']
     .forEach(show);
   if(orgDropdown) orgDropdown.style.display = '';
   showBillTabs();
   if(role==='superadmin') return; // full access — nothing hidden
-  // Data retention (permanently de-identifying a guard's records) is one
-  // notch more sensitive than everything else "administrator" can already
-  // do, so it stays superadmin-only even though the rest of this nav matches.
-  if(role==='administrator'){ hide('retention'); return; }
+  // Data retention (permanently de-identifying a guard's records) and
+  // feature flags (toggling production behavior for real users) are both
+  // one notch more sensitive than everything else "administrator" can
+  // already do, so they stay superadmin-only even though the rest of this
+  // nav matches.
+  if(role==='administrator'){ hide('retention'); hide('flags'); return; }
   if(role==='manager'){
     // Manager: dashboard + submissions only (Rates/Invoices sub-tabs hidden within Invoices)
     hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
-    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention'); hide('flags');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
   if(role==='viewer'){
     // Viewer: submissions only (read-only, Rates/Invoices sub-tabs hidden within Invoices)
     hide('dashboard'); hide('schedule'); hide('guards'); hide('sites'); hide('botkb'); hide('ratings');
-    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention');
+    hide('reminders'); hide('messages'); hide('admins'); hide('audit'); hide('retention'); hide('flags');
     if(orgDropdown) orgDropdown.style.display='none';
     hideBillTabs(); return;
   }
@@ -8621,6 +8681,60 @@ async function anonymizeGuardData(id, name){
     toast('Guard record de-identified','success');
     loadRetentionTab();
   }catch(e){ toast(e.message,'error'); }
+}
+
+// ── Feature flags (admin) ───────────────────────────────────────────────────
+let featureFlagsData = [];
+async function loadFeatureFlagsTab(){
+  const tbody = document.getElementById('flags-tbody');
+  tbody.innerHTML = skelRows(6, 4);
+  try{
+    featureFlagsData = await apiFetch('/api/feature-flags');
+    document.getElementById('flags-empty').classList.toggle('hidden', featureFlagsData.length > 0);
+    tbody.innerHTML = featureFlagsData.map(f => `<tr>
+      <td><code>${escapeHtml(f.key)}</code></td>
+      <td>${f.enabled ? '<span class="badge badge-approved">On</span>' : '<span class="badge">Off</span>'}</td>
+      <td>${f.enabled ? f.rollout_pct + '%' : '—'}</td>
+      <td style="max-width:280px">${escapeHtml(f.description || '—')}</td>
+      <td style="font-size:12px;color:var(--muted)">${f.updated_by ? escapeHtml(f.updated_by) : '—'}${f.updated_at ? ', ' + fmtDate(f.updated_at) : ''}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick='openFlagModal(${jsonAttr(f)})'>Edit</button>
+        <button class="btn btn-red btn-sm" onclick="deleteFeatureFlag('${f.key}')">Delete</button>
+      </td>
+    </tr>`).join('');
+  }catch(e){ toast(e.message,'error'); tbody.innerHTML=''; }
+}
+function openFlagModal(flag){
+  document.getElementById('fm-title').textContent = flag ? 'Edit Feature Flag' : 'Add Feature Flag';
+  document.getElementById('fm-key').value = flag ? flag.key : '';
+  document.getElementById('fm-key').disabled = !!flag; // key is the primary key — not editable once created
+  document.getElementById('fm-description').value = flag ? (flag.description||'') : '';
+  document.getElementById('fm-enabled').checked = flag ? !!flag.enabled : false;
+  const pct = flag ? flag.rollout_pct : 100;
+  document.getElementById('fm-pct').value = pct;
+  document.getElementById('fm-pct-label').textContent = pct;
+  document.getElementById('fm-err').style.display = 'none';
+  openModal('flag-modal');
+}
+async function saveFeatureFlag(){
+  const key = document.getElementById('fm-key').value.trim();
+  const err = document.getElementById('fm-err');
+  if(!key){ err.textContent = 'Key required'; err.style.display='block'; return; }
+  const body = {
+    key,
+    description: document.getElementById('fm-description').value.trim(),
+    enabled: document.getElementById('fm-enabled').checked,
+    rollout_pct: parseInt(document.getElementById('fm-pct').value, 10),
+  };
+  try{
+    await apiFetch('/api/feature-flags', {method:'POST', body: JSON.stringify(body)});
+    toast('Feature flag saved','success'); closeModal('flag-modal'); loadFeatureFlagsTab();
+  }catch(e){ err.textContent = e.message; err.style.display='block'; }
+}
+async function deleteFeatureFlag(key){
+  if(!confirm(`Delete the "${key}" feature flag? Anything checking it will treat it as off.`)) return;
+  try{ await apiFetch(`/api/feature-flags/${key}`, {method:'DELETE'}); toast('Feature flag deleted','success'); loadFeatureFlagsTab(); }
+  catch(e){ toast(e.message,'error'); }
 }
 
 // ── Policies (admin) ────────────────────────────────────────────────────────
