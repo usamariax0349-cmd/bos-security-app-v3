@@ -9,7 +9,7 @@ import http.server, json, sqlite3, os, uuid, base64, re, io, csv, hashlib, secre
 import logging, sys
 import smtplib
 from email.mime.text import MIMEText
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, parse_qs, quote
 
 try:
@@ -45,7 +45,7 @@ except ImportError:
 class JsonLogFormatter(logging.Formatter):
     def format(self, record):
         payload = {
-            'ts': datetime.utcfromtimestamp(record.created).isoformat(timespec='milliseconds') + 'Z',
+            'ts': datetime.fromtimestamp(record.created, timezone.utc).replace(tzinfo=None).isoformat(timespec='milliseconds') + 'Z',
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
