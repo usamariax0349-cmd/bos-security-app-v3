@@ -1,5 +1,6 @@
-const CACHE = 'bos-v75';
-const STATIC = ['/', '/index.html', '/manifest.json', '/icon.svg', '/img/login-hero.jpg'];
+const CACHE = 'bos-v76';
+const SHELL = ['/', '/index.html'];
+const STATIC = [...SHELL, '/manifest.json', '/icon.svg', '/img/login-hero.jpg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC)));
@@ -16,6 +17,27 @@ self.addEventListener('fetch', e => {
   // Network-first for API and uploads
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') || url.pathname === '/logo') {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+  // Network-first for the app shell itself: any full-page navigation (this
+  // covers every SPA entry point server.py serves index.html for — /,
+  // /verify/<token>, /apply, /privacy — not just '/') plus '/index.html'
+  // directly. This is what actually changes on every deploy and isn't
+  // versioned/hashed the way a normal cache-busted bundle would be, so
+  // serving it cache-first meant an installed PWA could get stuck showing
+  // an old build indefinitely even after a newer service worker had
+  // already activated. Falls back to the cached shell only when genuinely
+  // offline.
+  if (e.request.mode === 'navigate' || SHELL.includes(url.pathname)) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(e.request).then(cached => cached || caches.match('/index.html')))
+    );
     return;
   }
   // Cache-first for static assets
