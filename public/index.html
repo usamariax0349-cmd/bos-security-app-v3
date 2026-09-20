@@ -9773,8 +9773,42 @@ async function uploadLogo(input){
 // ── Start ──────────────────────────────────────────────────────────────────────
 init();
 
-// PWA
-if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }
+// PWA — an installed/saved app can stay open for days without a normal
+// browser tab reload ever happening, which is usually what triggers a
+// check for a new sw.js. This registration actively checks on its own
+// (on load and whenever the app regains focus) and, once a new service
+// worker has taken over, reloads so the page actually runs the new
+// version instead of old JS talking to a fresh cache underneath it.
+if('serviceWorker' in navigator){
+  // sw.js calls clients.claim(), so a brand-new page's very first service
+  // worker also ends up "taking over" and firing controllerchange — that's
+  // just this page's own bootstrap, not an update, and reloading for it
+  // would just loop/interrupt a normal first login for no reason. The
+  // correct moment to tell the two apart is when a new worker STARTS
+  // installing (updatefound): if something was already controlling this
+  // page at that instant, the new one is a genuine replacement; if not,
+  // it's the first-ever install. This has to be checked fresh at each
+  // updatefound rather than once when the page loads, since a page that
+  // starts with no controller can still legitimately pick up a real update
+  // later in the same session, once its own first worker has activated.
+  let swUpdateIsReal = false;
+  let swRefreshing = false;
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange', () => {
+      if(document.visibilityState === 'visible') reg.update().catch(()=>{});
+    });
+    reg.addEventListener('updatefound', () => {
+      if(navigator.serviceWorker.controller) swUpdateIsReal = true;
+    });
+  }).catch(()=>{});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(!swUpdateIsReal || swRefreshing) return;
+    swRefreshing = true;
+    toast('Updating to the latest version…', 'info', 1200);
+    setTimeout(() => location.reload(), 500);
+  });
+}
 </script>
 </body>
 </html>
