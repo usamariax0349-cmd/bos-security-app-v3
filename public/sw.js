@@ -1,4 +1,4 @@
-const CACHE = 'bos-v76';
+const CACHE = 'bos-v77';
 const SHELL = ['/', '/index.html'];
 const STATIC = [...SHELL, '/manifest.json', '/icon.svg', '/img/login-hero.jpg'];
 

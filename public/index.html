@@ -2743,7 +2743,7 @@ button.stat-card:hover .stat-lbl{color:var(--navy)}
     <div class="modal-body">
       <div class="form-group" style="max-width:220px">
         <label class="form-label">Shift date *</label>
-        <input type="date" id="ocr-date" class="form-control">
+        <input type="date" id="ocr-date" class="form-control" onchange="refreshOcrDuplicateCheck()">
       </div>
       <div id="ocr-step-upload">
         <p style="font-size:13px;color:var(--muted);margin-bottom:10px">
@@ -7033,6 +7033,12 @@ async function runOcrExtraction(){
       site_match: fuzzyMatchRecord(r.site_raw, allSitesAdmin),
       guard_match: fuzzyMatchRecord(r.name_raw, allGuardsAdmin),
     }));
+    await markRowsAlreadyScheduled(
+      ocrParsedRows,
+      () => document.getElementById('ocr-date').value,
+      r => r.guard_match ? r.guard_match.id : null,
+      r => r.site_match ? r.site_match.id : null,
+    );
     renderOcrReviewTable();
     document.getElementById('ocr-step-upload').classList.add('hidden');
     document.getElementById('ocr-step-review').classList.remove('hidden');
@@ -7053,18 +7059,32 @@ function renderOcrReviewTable(){
       `<option value="${s.id}" ${r.site_match && r.site_match.id===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
     const guardOpts = `<option value="">— Select guard —</option>` + allGuardsAdmin.map(g =>
       `<option value="${g.id}" ${r.guard_match && r.guard_match.id===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('');
-    const confident = r.site_match && r.guard_match;
+    const confident = r.site_match && r.guard_match && !r.alreadyScheduled;
     return `<tr>
       <td><input type="checkbox" id="ocr-inc-${i}" ${confident?'checked':''}></td>
       <td><select id="ocr-site-${i}" class="form-control" style="font-size:12px">${siteOpts}</select>
         ${!r.site_match?`<div style="font-size:10px;color:#b45309">⚠ no confident match for "${escapeHtml(r.site_raw||'')}"</div>`:''}</td>
       <td><select id="ocr-guard-${i}" class="form-control" style="font-size:12px">${guardOpts}</select>
-        ${!r.guard_match?`<div style="font-size:10px;color:#b45309">⚠ no confident match for "${escapeHtml(r.name_raw)}"</div>`:''}</td>
+        ${!r.guard_match?`<div style="font-size:10px;color:#b45309">⚠ no confident match for "${escapeHtml(r.name_raw)}"</div>`:''}
+        ${r.alreadyScheduled?`<div style="font-size:10px;color:var(--muted)">Already scheduled this date</div>`:''}</td>
       <td><input type="time" id="ocr-start-${i}" class="form-control" style="font-size:12px" value="${r.start}"></td>
       <td><input type="time" id="ocr-end-${i}" class="form-control" style="font-size:12px" value="${r.end}"></td>
       <td style="font-size:11px;color:var(--muted)">${escapeHtml(r.site_raw||'')} · ${escapeHtml(r.name_raw)}</td>
     </tr>`;
   }).join('');
+}
+async function refreshOcrDuplicateCheck(){
+  // The shift date applies to every parsed row at once and is editable
+  // after extraction — if the admin changes it, re-check against that new
+  // date rather than leaving the stale "already scheduled" flags in place.
+  if(!ocrParsedRows || !ocrParsedRows.length) return;
+  await markRowsAlreadyScheduled(
+    ocrParsedRows,
+    () => document.getElementById('ocr-date').value,
+    r => r.guard_match ? r.guard_match.id : null,
+    r => r.site_match ? r.site_match.id : null,
+  );
+  renderOcrReviewTable();
 }
 async function submitOcrImport(){
   const shift_date = document.getElementById('ocr-date').value;
@@ -7134,6 +7154,7 @@ async function checkBulkAddShifts(){
     basRows.push({siteRaw, date, start, end: /^\d{1,2}:\d{2}$/.test(end) ? end : '', guardRaw, siteMatch, guardMatch});
   });
   if(errs.length){ toast(errs[0] + (errs.length>1 ? ` (+${errs.length-1} more)` : ''), 'error'); if(!basRows.length) return; }
+  await markRowsAlreadyScheduled(basRows, r => r.date, r => r.guardMatch ? r.guardMatch.id : null, r => r.siteMatch ? r.siteMatch.id : null);
   renderBulkAddShiftsReview();
   document.getElementById('bas-step-paste').classList.add('hidden');
   document.getElementById('bas-step-review').classList.remove('hidden');
@@ -7141,13 +7162,39 @@ async function checkBulkAddShifts(){
   document.getElementById('bas-check-btn').classList.add('hidden');
   document.getElementById('bas-create-btn').classList.remove('hidden');
 }
+// Re-uploading the same roster (even just to fix one row) used to silently
+// create a second, duplicate shift for every row that already existed —
+// POST /api/shifts has no dedup of its own, and neither bulk-import tool
+// checked before this. Shared by both: fetches shifts already scheduled
+// across the date(s) a batch of rows covers, then flags any row whose
+// matched guard+site+date+start already has one, same as "Already exists"
+// already does for duplicate guard names in Bulk Add Guards.
+async function markRowsAlreadyScheduled(rows, dateOf, guardIdOf, siteIdOf){
+  const dates = rows.map(dateOf).filter(Boolean);
+  if(!dates.length) return;
+  const minDate = dates.reduce((a,b) => a < b ? a : b);
+  const maxDate = dates.reduce((a,b) => a > b ? a : b);
+  let existing = [];
+  try{ existing = await apiFetch(`/api/shifts?date_from=${minDate}&date_to=${maxDate}`); }
+  catch(e){ return; } // best-effort — a failed check just means no warning, not a blocked import
+  for(const r of rows){
+    const guardId = guardIdOf(r);
+    const siteId = siteIdOf(r);
+    const date = dateOf(r);
+    const start = r.start;
+    r.alreadyScheduled = !!(guardId && siteId && date && start && existing.some(sh =>
+      sh.guard_id === guardId && sh.site_id === siteId && sh.shift_date === date &&
+      sh.start_time === start && !sh.cancelled
+    ));
+  }
+}
 function renderBulkAddShiftsReview(){
   const siteOptsFor = sel => `<option value="">— Select site —</option>` + allSitesAdmin.map(s =>
     `<option value="${s.id}" ${sel===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
   const guardOptsFor = sel => `<option value="">— Select guard —</option>` + allGuardsAdmin.map(g =>
     `<option value="${g.id}" ${sel===g.id?'selected':''}>${escapeHtml(g.name)}</option>`).join('');
   document.getElementById('bas-review-tbody').innerHTML = basRows.map((r,i) => {
-    const confident = r.siteMatch && r.guardMatch;
+    const confident = r.siteMatch && r.guardMatch && !r.alreadyScheduled;
     return `<tr>
       <td><input type="checkbox" id="bas-inc-${i}" ${confident?'checked':''}></td>
       <td><select id="bas-site-${i}" class="form-control" style="font-size:12px">${siteOptsFor(r.siteMatch?r.siteMatch.id:'')}</select>
@@ -7156,7 +7203,8 @@ function renderBulkAddShiftsReview(){
       <td><input type="time" id="bas-start-${i}" class="form-control" style="font-size:12px" value="${r.start}"></td>
       <td><input type="time" id="bas-end-${i}" class="form-control" style="font-size:12px" value="${r.end}"></td>
       <td><select id="bas-guard-${i}" class="form-control" style="font-size:12px">${guardOptsFor(r.guardMatch?r.guardMatch.id:'')}</select>
-        ${!r.guardMatch?`<div style="font-size:10px;color:#b45309">⚠ "${escapeHtml(r.guardRaw)}"</div>`:''}</td>
+        ${!r.guardMatch?`<div style="font-size:10px;color:#b45309">⚠ "${escapeHtml(r.guardRaw)}"</div>`:''}
+        ${r.alreadyScheduled?`<div style="font-size:10px;color:var(--muted)">Already scheduled</div>`:''}</td>
     </tr>`;
   }).join('');
 }

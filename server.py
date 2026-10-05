@@ -1973,6 +1973,19 @@ def availability_conflict(conn, guard_id, date, start_time):
         return f"guard said Free from {a['available_from']}, shift starts {start_time}"
     return None
 
+def duplicate_shift(conn, guard_id, site_id, date, start_time):
+    """True if this guard already has a non-cancelled shift at this site,
+    date and start time — the bulk-import tools (OCR screenshot import,
+    paste-a-roster) re-check the same thing client-side before create so a
+    re-uploaded roster shows already-scheduled rows instead of silently
+    duplicating them, but POST /api/shifts has no server-side memory of
+    that review, so this gives it one too (as a warning, not a block — the
+    single-shift Add Shift form deliberately keeps the freedom to
+    intentionally double-book a correction)."""
+    return conn.execute('''SELECT 1 FROM shifts WHERE guard_id=? AND site_id=? AND shift_date=?
+                            AND start_time=? AND cancelled=0''',
+                         (guard_id, site_id, date, start_time)).fetchone() is not None
+
 def client_eligible_guards(conn, site_id):
     """Guards a CLIENT (not admin) may assign to their own site: anyone
     who's actually worked there in the last 90 days, or whom an admin has
@@ -4880,6 +4893,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for f in ['guard_id','site_id','shift_date','start_time']:
                 if not data.get(f): self.err(f'{f} required'); return
             shid = str(uuid.uuid4()); db = get_db()
+            # Checked before the insert below adds this exact row, so it
+            # reflects whether one was ALREADY there, not this one matching
+            # itself.
+            dup = duplicate_shift(db, data['guard_id'], data['site_id'], data['shift_date'], data['start_time'])
             db.execute('''INSERT INTO shifts (id,guard_id,site_id,shift_date,start_time,end_time,
                           position,notes,created_by,published) VALUES (?,?,?,?,?,?,?,?,?,0)''',
                        (shid, data['guard_id'], data['site_id'], data['shift_date'],
@@ -4891,7 +4908,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             conflict = availability_conflict(db, data['guard_id'], data['shift_date'], data['start_time'])
             audit(db, s, 'SHIFT_CREATE',
                   f"{data['shift_date']} {data['start_time']}-{data.get('end_time') or 'Required'}"
-                  + (f" (⚠ {conflict})" if conflict else '')); db.commit()
+                  + (f" (⚠ {conflict})" if conflict else '')
+                  + (' (⚠ duplicate of an existing shift)' if dup else '')); db.commit()
             row = with_shift_status([R(db.execute('''SELECT sh.*, g.name as guard_name, s.name as site_name
                 FROM shifts sh JOIN guards g ON g.id=sh.guard_id JOIN sites s ON s.id=sh.site_id
                 WHERE sh.id=?''', (shid,)).fetchone())])[0]
