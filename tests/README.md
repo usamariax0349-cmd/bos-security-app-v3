@@ -69,6 +69,20 @@ with each other even though they share one server and one DB.
   being all-or-nothing, a partial rollout landing the same guard on the same
   side of it across five repeated calls (not a coin flip per request), and a
   deleted flag no longer appearing.
+- **`test_pwa_update.py`** — launches its own throwaway server (`PUBLIC_PATH`
+  pointed at an isolated copy of `public/`, so it can safely rewrite
+  `index.html`/`sw.js` on disk) to prove an installed/saved PWA actually
+  picks up a deploy: a content-only change shows up on the next reload, an
+  already-open page reloads itself once a real service-worker update lands,
+  and — the regression this guards against — a brand-new page's own
+  first-ever activation never triggers a spurious reload.
+- **`test_bulk_roster_dedup.py`** — re-uploading a roster (via either the
+  paste-a-roster tool or the OCR screenshot importer) used to silently
+  create a second, duplicate shift for every row that already existed.
+  Covers the server-side soft warning (a direct duplicate POST still
+  succeeds but the audit log flags it) and, at the browser level, that both
+  bulk-import tools default a re-uploaded, already-scheduled row to
+  unchecked instead of re-creating it.
 
 ## What's deliberately not covered
 
